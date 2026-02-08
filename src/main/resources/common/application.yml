@@ -1,0 +1,126 @@
+# LogAnalysis 应用配置
+spring:
+  application:
+    name: loganalysis
+
+  # 数据源配置
+  datasource:
+    url: jdbc:postgresql://localhost:5432/loganalysis
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      pool-name: LogAnalysisHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  # Redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: -1ms
+
+  # RabbitMQ配置
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+
+# Server配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Actuator配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Logging配置
+logging:
+  level:
+    root: INFO
+    com.evelin.loganalysis: DEBUG
+    org.springframework: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 应用自定义配置
+app:
+  # 采集配置
+  collection:
+    checkpoint-interval: 100
+    batch-size: 100
+    thread-pool-size: 4
+
+  # 分析配置
+  analysis:
+    timeout: 30000
+    retry-count: 3
+
+  # LLM配置
+  llm:
+    provider: openai
+    api-key: your-api-key
+    model: gpt-4
+    max-tokens: 2000
+    temperature: 0.3
+
+# Elasticsearch配置
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+
+# 文件上传配置
+file:
+  upload:
+    path: ./uploads
+    max-size: 100MB
+    allowed-types: log,txt
