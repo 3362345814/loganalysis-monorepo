@@ -28,7 +28,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "event_rule", indexes = {
+@Table(name = "event_rules", indexes = {
         @Index(name = "idx_event_rule_name", columnList = "name", unique = true),
         @Index(name = "idx_event_rule_enabled", columnList = "enabled")
 })

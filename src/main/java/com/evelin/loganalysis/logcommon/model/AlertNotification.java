@@ -29,7 +29,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "alert_notification", indexes = {
+@Table(name = "alert_notifications", indexes = {
         @Index(name = "idx_alert_notification_record_id", columnList = "record_id"),
         @Index(name = "idx_alert_notification_channel", columnList = "channel")
 })

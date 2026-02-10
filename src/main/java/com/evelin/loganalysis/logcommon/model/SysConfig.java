@@ -4,13 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import lombok.*;
 
 /**
  * 系统配置实体
@@ -23,7 +17,7 @@ import org.hibernate.type.SqlTypes;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "sys_config", indexes = {
+@Table(name = "system_configs", indexes = {
         @Index(name = "idx_sys_config_key", columnList = "config_key", unique = true)
 })
 public class SysConfig extends BaseEntity {

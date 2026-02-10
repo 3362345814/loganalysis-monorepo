@@ -1,13 +1,15 @@
-# LogAnalysis 应用配置
+# LogAnalysis 主配置文件
+# 按模块分离配置，使用 spring.config.import 导入
+
 spring:
   application:
     name: loganalysis
 
-  # 数据源配置
+  # 数据源配置（全局）
   datasource:
     url: jdbc:postgresql://localhost:5432/loganalysis
-    username: postgres
-    password: postgres
+    username: loganalysis
+    password: loganalysis_123456
     driver-class-name: org.postgresql.Driver
     hikari:
       minimum-idle: 5
@@ -17,7 +19,7 @@ spring:
       max-lifetime: 1800000
       connection-timeout: 30000
 
-  # JPA配置
+  # JPA配置（全局）
   jpa:
     hibernate:
       ddl-auto: update
@@ -31,13 +33,14 @@ spring:
         order_inserts: true
         order_updates: true
 
-  # Redis配置
+  # Redis配置（全局）
   data:
     redis:
       host: localhost
       port: 6379
       database: 0
       timeout: 10000ms
+      password: loganalysis_123456
       lettuce:
         pool:
           max-active: 20
@@ -45,28 +48,40 @@ spring:
           min-idle: 5
           max-wait: -1ms
 
-  # RabbitMQ配置
+  # RabbitMQ配置（全局）
   rabbitmq:
     host: localhost
     port: 5672
-    username: guest
-    password: guest
+    username: loganalysis
+    password: loganalysis_123456
     virtual-host: /
 
-  # Jackson配置
+  # Jackson配置（全局）
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
     serialization:
       write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
 
-# Server配置
+  # 配置导入（模块化配置）
+  config:
+    import:
+      - optional:file:./collector/application.yml
+      - optional:file:./processing/application.yml
+      - optional:file:./analysisai/application.yml
+      - optional:file:./api/application.yml
+      - optional:file:./admin/application.yml
+
+# Server配置（全局）
 server:
   port: 8080
   servlet:
     context-path: /
 
-# Actuator配置
+# Actuator配置（全局）
 management:
   endpoints:
     web:
@@ -80,7 +95,7 @@ management:
       prometheus:
         enabled: true
 
-# Logging配置
+# Logging配置（全局）
 logging:
   level:
     root: INFO
@@ -90,37 +105,3 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
-# 应用自定义配置
-app:
-  # 采集配置
-  collection:
-    checkpoint-interval: 100
-    batch-size: 100
-    thread-pool-size: 4
-
-  # 分析配置
-  analysis:
-    timeout: 30000
-    retry-count: 3
-
-  # LLM配置
-  llm:
-    provider: openai
-    api-key: your-api-key
-    model: gpt-4
-    max-tokens: 2000
-    temperature: 0.3
-
-# Elasticsearch配置
-elasticsearch:
-  host: localhost
-  port: 9200
-  scheme: http
-
-# 文件上传配置
-file:
-  upload:
-    path: ./uploads
-    max-size: 100MB
-    allowed-types: log,txt

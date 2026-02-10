@@ -1,0 +1,11 @@
+# Processing 模块配置
+
+# 处理模块自定义配置
+app:
+  processing:
+    # 批次大小
+    batch-size: 100
+    # 处理超时（毫秒）
+    timeout: 30000
+    # 重试次数
+    retry-count: 3

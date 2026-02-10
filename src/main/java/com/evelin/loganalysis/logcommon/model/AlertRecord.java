@@ -34,7 +34,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "alert_record", indexes = {
+@Table(name = "alert_records", indexes = {
         @Index(name = "idx_alert_record_alert_id", columnList = "alert_id", unique = true),
         @Index(name = "idx_alert_record_rule_id", columnList = "rule_id"),
         @Index(name = "idx_alert_record_status", columnList = "status"),

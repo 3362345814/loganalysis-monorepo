@@ -1,0 +1,11 @@
+# Collector 模块配置
+
+# 采集模块自定义配置
+app:
+  collection:
+    # 检查点保存间隔（行数）
+    checkpoint-interval: 100
+    # 批量处理大小
+    batch-size: 100
+    # 线程池大小
+    thread-pool-size: 4

@@ -32,7 +32,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "log_event", indexes = {
+@Table(name = "log_events", indexes = {
         @Index(name = "idx_log_event_source_id", columnList = "source_id"),
         @Index(name = "idx_log_event_log_time", columnList = "log_time"),
         @Index(name = "idx_log_event_level", columnList = "log_level"),

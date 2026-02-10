@@ -1,24 +1,11 @@
 package com.evelin.loganalysis.logcommon.model;
 
 import com.evelin.loganalysis.logcommon.enums.AlertLevel;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -32,7 +19,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "alert_rule", indexes = {
+@Table(name = "alert_rules", indexes = {
         @Index(name = "idx_alert_rule_name", columnList = "name", unique = true),
         @Index(name = "idx_alert_rule_enabled", columnList = "enabled")
 })

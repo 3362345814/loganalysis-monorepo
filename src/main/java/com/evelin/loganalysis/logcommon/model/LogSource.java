@@ -1,17 +1,8 @@
 package com.evelin.loganalysis.logcommon.model;
 
-import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -29,7 +20,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "log_source")
+@Table(name = "log_sources")
 public class LogSource extends BaseEntity {
 
     /**

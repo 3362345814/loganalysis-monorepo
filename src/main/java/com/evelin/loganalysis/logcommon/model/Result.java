@@ -142,4 +142,38 @@ public class Result<T> {
                 .timestamp(System.currentTimeMillis())
                 .build();
     }
+
+    /**
+     * 错误返回（便捷方法）
+     *
+     * @param message 错误消息
+     * @param <T>     数据类型
+     * @return 统一返回结果
+     */
+    public static <T> Result<T> error(String message) {
+        return Result.<T>builder()
+                .success(false)
+                .code(-1)
+                .message(message)
+                .timestamp(System.currentTimeMillis())
+                .build();
+    }
+
+    /**
+     * 错误返回（带数据）
+     *
+     * @param message 错误消息
+     * @param data    数据
+     * @param <T>     数据类型
+     * @return 统一返回结果
+     */
+    public static <T> Result<T> error(String message, T data) {
+        return Result.<T>builder()
+                .success(false)
+                .code(-1)
+                .message(message)
+                .data(data)
+                .timestamp(System.currentTimeMillis())
+                .build();
+    }
 }

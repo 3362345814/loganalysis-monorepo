@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "desensitize_rule", indexes = {
+@Table(name = "desensitization_rules", indexes = {
         @Index(name = "idx_desensitize_rule_name", columnList = "name", unique = true),
         @Index(name = "idx_desensitize_rule_enabled", columnList = "enabled")
 })

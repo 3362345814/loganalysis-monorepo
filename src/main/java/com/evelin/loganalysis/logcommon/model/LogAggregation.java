@@ -30,7 +30,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "log_aggregation", indexes = {
+@Table(name = "log_aggregation_groups", indexes = {
         @Index(name = "idx_log_aggregation_group_id", columnList = "group_id", unique = true),
         @Index(name = "idx_log_aggregation_source_id", columnList = "source_id"),
         @Index(name = "idx_log_aggregation_status", columnList = "status"),

@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "log_checkpoint")
+@Table(name = "checkpoints")
 public class LogCheckpoint extends BaseEntity {
 
     /**
