@@ -5,22 +5,29 @@ import com.evelin.loganalysis.logcollection.collector.LocalFileCollectorFactory;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
+import com.evelin.loganalysis.logcollection.dto.RawLogEventResponse;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
+import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.service.LogSourceService;
+import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
 import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcommon.model.PageResult;
 import com.evelin.loganalysis.logcommon.model.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Collectors;
 
 /**
  * 日志采集管理接口
@@ -34,6 +41,7 @@ import java.util.concurrent.BlockingQueue;
 public class LogCollectionController {
 
     private final LogSourceService logSourceService;
+    private final RawLogEventService rawLogEventService;
     private final LocalFileCollectorFactory collectorFactory;
 
     // ==================== 日志源管理 ====================
@@ -285,5 +293,138 @@ public class LogCollectionController {
                 .toList();
 
         return Result.success(statusList);
+    }
+
+    // ==================== 原始日志查询 ====================
+
+    /**
+     * 查询指定日志源的原始日志
+     *
+     * @param sourceId 日志源ID
+     * @param page    页码（从0开始）
+     * @param size    每页大小
+     * @return 分页的原始日志列表
+     */
+    @GetMapping("/logs/{sourceId}")
+    public Result<PageResult<RawLogEventResponse>> getLogsBySource(
+            @PathVariable UUID sourceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        // 验证日志源是否存在
+        if (logSourceService.findById(sourceId).isEmpty()) {
+            return Result.error("日志源不存在: " + sourceId);
+        }
+
+        Page<RawLogEventEntity> logPage = rawLogEventService.findBySourceId(sourceId, page, size);
+
+        List<RawLogEventResponse> content = logPage.getContent().stream()
+                .map(RawLogEventResponse::fromEntity)
+                .collect(Collectors.toList());
+
+        PageResult<RawLogEventResponse> result = PageResult.<RawLogEventResponse>builder()
+                .content(content)
+                .page(logPage.getNumber())
+                .size(logPage.getSize())
+                .total(logPage.getTotalElements())
+                .totalPages(logPage.getTotalPages())
+                .first(logPage.isFirst())
+                .last(logPage.isLast())
+                .build();
+
+        return Result.success(result);
+    }
+
+    /**
+     * 查询所有原始日志（支持分页和过滤）
+     *
+     * @param page      页码（从0开始）
+     * @param size      每页大小
+     * @param startTime 开始时间（可选）
+     * @param endTime   结束时间（可选）
+     * @param keyword   关键词搜索（可选）
+     * @return 分页的原始日志列表
+     */
+    @GetMapping("/logs")
+    public Result<PageResult<RawLogEventResponse>> getAllLogs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) LocalDateTime startTime,
+            @RequestParam(required = false) LocalDateTime endTime,
+            @RequestParam(required = false) String keyword) {
+
+        Page<RawLogEventEntity> logPage;
+
+        // 根据参数组合选择查询方式
+        if (keyword != null && !keyword.isEmpty()) {
+            // 模糊搜索
+            logPage = rawLogEventService.findByContentContaining(keyword, page, size);
+        } else if (startTime != null && endTime != null) {
+            // 时间范围查询
+            logPage = rawLogEventService.findByTimeRange(startTime, endTime, page, size);
+        } else {
+            // 查询所有（不带sourceId过滤）
+            logPage = rawLogEventService.findAll(page, size);
+        }
+
+        List<RawLogEventResponse> content = logPage.getContent().stream()
+                .map(RawLogEventResponse::fromEntity)
+                .collect(Collectors.toList());
+
+        PageResult<RawLogEventResponse> result = PageResult.<RawLogEventResponse>builder()
+                .content(content)
+                .page(logPage.getNumber())
+                .size(logPage.getSize())
+                .total(logPage.getTotalElements())
+                .totalPages(logPage.getTotalPages())
+                .first(logPage.isFirst())
+                .last(logPage.isLast())
+                .build();
+
+        return Result.success(result);
+    }
+
+    /**
+     * 根据ID查询单条原始日志
+     *
+     * @param logId 日志ID
+     * @return 原始日志详情
+     */
+    @GetMapping("/log/{logId}")
+    public Result<RawLogEventResponse> getLogById(@PathVariable UUID logId) {
+        Optional<RawLogEventEntity> logOpt = rawLogEventService.findById(logId);
+        return logOpt.map(log -> Result.success(RawLogEventResponse.fromEntity(log)))
+                .orElseGet(() -> Result.error("日志不存在: " + logId));
+    }
+
+    /**
+     * 统计指定日志源的日志数量
+     *
+     * @param sourceId 日志源ID
+     * @return 日志数量
+     */
+    @GetMapping("/logs/{sourceId}/count")
+    public Result<Map<String, Object>> countLogsBySource(@PathVariable UUID sourceId) {
+        long count = rawLogEventService.countBySourceId(sourceId);
+        Map<String, Object> result = new HashMap<>();
+        result.put("sourceId", sourceId);
+        result.put("count", count);
+        return Result.success(result);
+    }
+
+    /**
+     * 清理指定时间之前的日志
+     *
+     * @param days 天数（清理多少天之前的日志）
+     * @return 删除的日志数量
+     */
+    @DeleteMapping("/logs/cleanup")
+    public Result<Map<String, Object>> cleanupOldLogs(@RequestParam(defaultValue = "7") int days) {
+        long deletedCount = rawLogEventService.cleanupOldLogs(days);
+        Map<String, Object> result = new HashMap<>();
+        result.put("days", days);
+        result.put("deletedCount", deletedCount);
+        log.info("清理 {} 天前的原始日志: {} 条", days, deletedCount);
+        return Result.success(result);
     }
 }

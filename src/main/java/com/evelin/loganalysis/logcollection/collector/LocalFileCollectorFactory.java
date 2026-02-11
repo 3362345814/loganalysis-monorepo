@@ -2,6 +2,7 @@ package com.evelin.loganalysis.logcollection.collector;
 
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
+import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class LocalFileCollectorFactory {
 
     private final CheckpointManager checkpointManager;
     private final CollectionConfig collectionConfig;
+    private final RawLogEventService rawLogEventService;
 
     /**
      * 采集器缓存（用于管理已创建的采集器）
@@ -30,9 +32,11 @@ public class LocalFileCollectorFactory {
     private final Map<String, LocalFileCollector> collectorCache = new ConcurrentHashMap<>();
 
     public LocalFileCollectorFactory(CheckpointManager checkpointManager,
-                                     CollectionConfig collectionConfig) {
+                                     CollectionConfig collectionConfig,
+                                     RawLogEventService rawLogEventService) {
         this.checkpointManager = checkpointManager;
         this.collectionConfig = collectionConfig;
+        this.rawLogEventService = rawLogEventService;
     }
 
     /**
@@ -57,11 +61,12 @@ public class LocalFileCollectorFactory {
             return collectorCache.get(sourceId);
         }
 
-        // 创建采集器
+        // 创建采集器（注入 RawLogEventService 用于存储日志）
         LocalFileCollector collector = new LocalFileCollector(
                 logSource,
                 checkpointManager,
-                collectionConfig
+                collectionConfig,
+                rawLogEventService
         );
 
         // 缓存

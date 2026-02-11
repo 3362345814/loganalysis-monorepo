@@ -5,6 +5,7 @@ import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
+import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,8 @@ import java.nio.ByteBuffer;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -128,6 +131,16 @@ public class LocalFileCollector implements LogCollector {
     private ScheduledExecutorService checkpointScheduler;
 
     /**
+     * 日志存储服务
+     */
+    private final RawLogEventService rawLogEventService;
+
+    /**
+     * 存储消费者线程
+     */
+    private ExecutorService consumerExecutor;
+
+    /**
      * 文件监听服务
      */
     private WatchService watchService;
@@ -138,14 +151,17 @@ public class LocalFileCollector implements LogCollector {
      * @param logSource         日志源配置
      * @param checkpointManager 检查点管理器
      * @param config            采集配置
+     * @param rawLogEventService 日志存储服务
      */
     public LocalFileCollector(LogSource logSource,
                               CheckpointManager checkpointManager,
-                              CollectionConfig config) {
+                              CollectionConfig config,
+                              RawLogEventService rawLogEventService) {
         this.id = UUID.randomUUID().toString();
         this.logSource = logSource;
         this.checkpointManager = checkpointManager;
         this.config = config;
+        this.rawLogEventService = rawLogEventService;
         this.logQueue = new LinkedBlockingQueue<>(config.getQueueCapacity());
     }
 
@@ -183,10 +199,13 @@ public class LocalFileCollector implements LogCollector {
                 // 4. 启动文件监听
                 startFileWatcher();
 
-                // 5. 启动读取循环
+                // 5. 启动日志存储消费者（将日志存入数据库）
+                startConsumer();
+
+                // 6. 启动读取循环
                 startReadLoop();
 
-                // 6. 启动检查点定时保存
+                // 7. 启动检查点定时保存
                 startCheckpointScheduler();
 
                 state = CollectionState.RUNNING;
@@ -745,6 +764,17 @@ public class LocalFileCollector implements LogCollector {
             watcherExecutor.shutdownNow();
         }
 
+        if (consumerExecutor != null) {
+            consumerExecutor.shutdownNow();
+            try {
+                if (!consumerExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.warn("Consumer executor did not terminate in time");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         if (checkpointScheduler != null) {
             checkpointScheduler.shutdownNow();
             try {
@@ -754,6 +784,95 @@ public class LocalFileCollector implements LogCollector {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    /**
+     * 启动日志存储消费者
+     * <p>
+     * 消费者线程从队列中取出日志事件，并保存到数据库
+     */
+    private void startConsumer() {
+        consumerExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "log-consumer-" + getName());
+            t.setDaemon(true);
+            return t;
+        });
+
+        consumerExecutor.submit(this::consumeLoop);
+
+        log.info("Started log consumer: name={}", getName());
+    }
+
+    /**
+     * 消费循环
+     * <p>
+     * 从队列中取出日志事件，批量保存到数据库
+     */
+    private void consumeLoop() {
+        log.info("Consumer loop started: name={}", getName());
+
+        // 批量处理缓冲区
+        List<RawLogEvent> batchBuffer = new ArrayList<>();
+        long lastFlushTime = System.currentTimeMillis();
+        int batchSize = 100; // 批量保存大小
+        long flushIntervalMs = 5000; // 5秒强制刷新间隔
+
+        while (running.get() || !logQueue.isEmpty()) {
+            try {
+                // 从队列中取出日志（带超时）
+                RawLogEvent event = logQueue.poll(1, TimeUnit.SECONDS);
+
+                if (event != null) {
+                    batchBuffer.add(event);
+
+                    // 如果达到批量大小，保存到数据库
+                    if (batchBuffer.size() >= batchSize) {
+                        flushBuffer(batchBuffer);
+                        batchBuffer.clear();
+                        lastFlushTime = System.currentTimeMillis();
+                    }
+                }
+
+                // 检查是否需要强制刷新
+                if (!batchBuffer.isEmpty() &&
+                        System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
+                    flushBuffer(batchBuffer);
+                    batchBuffer.clear();
+                    lastFlushTime = System.currentTimeMillis();
+                }
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                log.error("Error in consumer loop", e);
+            }
+        }
+
+        // 最后刷新一次缓冲区
+        if (!batchBuffer.isEmpty()) {
+            flushBuffer(batchBuffer);
+        }
+
+        log.info("Consumer loop stopped: name={}", getName());
+    }
+
+    /**
+     * 刷新缓冲区（批量保存到数据库）
+     *
+     * @param buffer 日志事件缓冲区
+     */
+    private void flushBuffer(List<RawLogEvent> buffer) {
+        if (buffer.isEmpty()) {
+            return;
+        }
+
+        try {
+            rawLogEventService.saveAll(buffer);
+            log.debug("Flushed {} log events to database", buffer.size());
+        } catch (Exception e) {
+            log.error("Failed to flush {} log events to database", buffer.size(), e);
         }
     }
 
