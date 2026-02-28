@@ -427,4 +427,35 @@ public class LogCollectionController {
         log.info("清理 {} 天前的原始日志: {} 条", days, deletedCount);
         return Result.success(result);
     }
+
+    // ==================== 测试接口 ====================
+
+    /**
+     * 测试：向文件追加日志（用于测试采集功能）
+     *
+     * @param path    文件路径
+     * @param content 日志内容
+     * @return 结果
+     */
+    @PostMapping("/test/log")
+    public Result<Map<String, Object>> addTestLog(
+            @RequestParam("path") String path,
+            @RequestParam("content") String content) {
+        try {
+            java.nio.file.Path filePath = java.nio.file.Paths.get(path);
+            java.nio.file.Files.createDirectories(filePath.getParent());
+            java.nio.file.Files.writeString(filePath, content + System.lineSeparator(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("path", path);
+            result.put("content", content);
+            result.put("success", true);
+            
+            log.info("测试日志已写入: {}", path);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("写入测试日志失败: {}", path, e);
+            return Result.error("写入失败: " + e.getMessage());
+        }
+    }
 }

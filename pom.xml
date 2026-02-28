@@ -50,6 +50,13 @@
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
+        <!-- MinIO 对象存储 -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.7</version>
+        </dependency>
+
         <!-- Spring Boot Actuator (监控指标) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

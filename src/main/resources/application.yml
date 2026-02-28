@@ -105,3 +105,25 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# MinIO 对象存储配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: log-archive
+  region: us-east-1
+
+# 分级存储配置
+storage:
+  strategy:
+    enabled: true
+    cold-storage-type: minio        # 冷存储类型: local / minio
+    bucket: log-archive              # MinIO Bucket 名称
+    hot-data-retention-days: 7       # 热数据保留7天
+    warm-data-retention-days: 30     # 温数据保留30天
+    archive-path: ./logs/archive     # 归档目录（本地存储时使用）
+    archive-max-file-size-mb: 100    # 单个归档文件最大100MB
+    compress-archive: true           # 启用压缩
+    archive-schedule-hours: 24        # 每24小时执行一次归档
+    delete-after-archive: true       # 归档后删除原数据

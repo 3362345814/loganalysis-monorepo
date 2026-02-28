@@ -132,4 +132,12 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @return 删除的记录数
      */
     long deleteByCollectionTimeBefore(LocalDateTime beforeTime);
+
+    /**
+     * 查询指定时间之前的日志（用于归档）
+     *
+     * @param beforeTime 时间阈值
+     * @return 日志列表
+     */
+    List<RawLogEventEntity> findByCollectionTimeBefore(LocalDateTime beforeTime);
 }

@@ -17,7 +17,7 @@ public class IdGenerator {
      *
      * @return UUID字符串
      */
-    public String nextId() {
+    public static String nextId() {
         return java.util.UUID.randomUUID().toString().replace("-", "");
     }
 
