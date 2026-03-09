@@ -7,6 +7,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -119,4 +120,59 @@ public class LogSource extends BaseEntity {
      */
     @Column(name = "remark", length = 500)
     private String remark;
+
+    /**
+     * 是否启用脱敏
+     */
+    @Column(name = "desensitization_enabled", nullable = false)
+    @Builder.Default
+    private Boolean desensitizationEnabled = false;
+
+    /**
+     * 启用的脱敏规则ID列表
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "enabled_rule_ids", columnDefinition = "jsonb")
+    private List<String> enabledRuleIds;
+
+    /**
+     * 自定义脱敏规则（JSON格式）
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "custom_rules", columnDefinition = "jsonb")
+    private List<CustomDesensitizeRule> customRules;
+
+    /**
+     * 自定义脱敏规则
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CustomDesensitizeRule {
+        /**
+         * 规则ID
+         */
+        private String id;
+
+        /**
+         * 规则名称
+         */
+        private String name;
+
+        /**
+         * 正则表达式
+         */
+        private String pattern;
+
+        /**
+         * 脱敏类型：FULL/PARTIAL/HASH
+         */
+        private String maskType;
+
+        /**
+         * 替换内容
+         */
+        private String replacement;
+    }
 }

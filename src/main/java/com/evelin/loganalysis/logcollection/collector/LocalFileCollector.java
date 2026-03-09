@@ -1,6 +1,8 @@
 package com.evelin.loganalysis.logcollection.collector;
 
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
+import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
+import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
@@ -8,7 +10,9 @@ import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,7 +51,10 @@ public class LocalFileCollector implements LogCollector {
 
     /**
      * 日志源配置
+     * -- GETTER --
+     * 获取日志源配置
      */
+    @Getter
     private final LogSource logSource;
 
     /**
@@ -112,7 +119,12 @@ public class LocalFileCollector implements LogCollector {
 
     /**
      * 采集队列（生产者-消费者模式）
+     * -- GETTER --
+     * 获取采集队列（用于消费者消费）
+     *
+     * @return 采集队列
      */
+    @Getter
     private final BlockingQueue<RawLogEvent> logQueue;
 
     /**
@@ -146,22 +158,30 @@ public class LocalFileCollector implements LogCollector {
     private WatchService watchService;
 
     /**
+     * RabbitTemplate 用于发送消息到脱敏队列
+     */
+    private RabbitTemplate rabbitTemplate;
+
+    /**
      * 构造函数
      *
-     * @param logSource         日志源配置
-     * @param checkpointManager 检查点管理器
-     * @param config            采集配置
-     * @param rawLogEventService 日志存储服务
+     * @param logSource          日志源配置
+     * @param checkpointManager  检查点管理器
+     * @param config             采集配置
+     * @param rawLogEventService 日志存储服务（已废弃，使用RabbitMQ发送消息）
+     * @param rabbitTemplate    RabbitTemplate 用于发送消息到脱敏队列
      */
     public LocalFileCollector(LogSource logSource,
                               CheckpointManager checkpointManager,
                               CollectionConfig config,
-                              RawLogEventService rawLogEventService) {
+                              RawLogEventService rawLogEventService,
+                              RabbitTemplate rabbitTemplate) {
         this.id = UUID.randomUUID().toString();
         this.logSource = logSource;
         this.checkpointManager = checkpointManager;
         this.config = config;
         this.rawLogEventService = rawLogEventService;
+        this.rabbitTemplate = rabbitTemplate;
         this.logQueue = new LinkedBlockingQueue<>(config.getQueueCapacity());
     }
 
@@ -281,15 +301,6 @@ public class LocalFileCollector implements LogCollector {
     @Override
     public boolean isHealthy() {
         return state == CollectionState.RUNNING && !paused.get();
-    }
-
-    /**
-     * 获取采集队列（用于消费者消费）
-     *
-     * @return 采集队列
-     */
-    public BlockingQueue<RawLogEvent> getLogQueue() {
-        return logQueue;
     }
 
     /**
@@ -807,7 +818,7 @@ public class LocalFileCollector implements LogCollector {
     /**
      * 消费循环
      * <p>
-     * 从队列中取出日志事件，批量保存到数据库
+     * 从队列中取出日志事件，发送到 RabbitMQ 队列进行脱敏处理
      */
     private void consumeLoop() {
         log.info("Consumer loop started: name={}", getName());
@@ -815,7 +826,7 @@ public class LocalFileCollector implements LogCollector {
         // 批量处理缓冲区
         List<RawLogEvent> batchBuffer = new ArrayList<>();
         long lastFlushTime = System.currentTimeMillis();
-        int batchSize = 100; // 批量保存大小
+        int batchSize = 100; // 批量发送大小
         long flushIntervalMs = 5000; // 5秒强制刷新间隔
 
         while (running.get() || !logQueue.isEmpty()) {
@@ -826,9 +837,9 @@ public class LocalFileCollector implements LogCollector {
                 if (event != null) {
                     batchBuffer.add(event);
 
-                    // 如果达到批量大小，保存到数据库
+                    // 如果达到批量大小，发送到 RabbitMQ
                     if (batchBuffer.size() >= batchSize) {
-                        flushBuffer(batchBuffer);
+                        sendToRabbitMQ(batchBuffer);
                         batchBuffer.clear();
                         lastFlushTime = System.currentTimeMillis();
                     }
@@ -837,7 +848,7 @@ public class LocalFileCollector implements LogCollector {
                 // 检查是否需要强制刷新
                 if (!batchBuffer.isEmpty() &&
                         System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
-                    flushBuffer(batchBuffer);
+                    sendToRabbitMQ(batchBuffer);
                     batchBuffer.clear();
                     lastFlushTime = System.currentTimeMillis();
                 }
@@ -852,28 +863,76 @@ public class LocalFileCollector implements LogCollector {
 
         // 最后刷新一次缓冲区
         if (!batchBuffer.isEmpty()) {
-            flushBuffer(batchBuffer);
+            sendToRabbitMQ(batchBuffer);
         }
 
         log.info("Consumer loop stopped: name={}", getName());
     }
 
     /**
-     * 刷新缓冲区（批量保存到数据库）
+     * 发送消息到 RabbitMQ 队列
      *
-     * @param buffer 日志事件缓冲区
+     * @param events 日志事件列表
      */
-    private void flushBuffer(List<RawLogEvent> buffer) {
-        if (buffer.isEmpty()) {
+    private void sendToRabbitMQ(List<RawLogEvent> events) {
+        if (events == null || events.isEmpty()) {
             return;
         }
 
         try {
-            rawLogEventService.saveAll(buffer);
-            log.debug("Flushed {} log events to database", buffer.size());
+            for (RawLogEvent event : events) {
+                // 构建脱敏消息
+                LogDesensitizationMessage message = LogDesensitizationMessage.builder()
+                        .messageId(UUID.randomUUID())
+                        .sourceId(event.getSourceId())
+                        .sourceName(event.getSourceName())
+                        .filePath(event.getFilePath())
+                        .rawContent(event.getRawContent())
+                        .lineNumber(event.getLineNumber())
+                        .offset(event.getFileOffset())
+                        .collectionTime(event.getCollectionTime())
+                        .desensitizationConfig(buildDesensitizationConfig())
+                        .build();
+
+                // 发送到 RabbitMQ
+                String routingKey = "log.raw." + event.getSourceId();
+                rabbitTemplate.convertAndSend(RabbitMQConfig.LOG_EXCHANGE, routingKey, message);
+            }
+            log.debug("Sent {} log messages to RabbitMQ", events.size());
         } catch (Exception e) {
-            log.error("Failed to flush {} log events to database", buffer.size(), e);
+            log.error("Failed to send messages to RabbitMQ", e);
+            throw e;
         }
+    }
+
+    /**
+     * 构建脱敏配置
+     */
+    private LogDesensitizationMessage.DesensitizationConfig buildDesensitizationConfig() {
+        return LogDesensitizationMessage.DesensitizationConfig.builder()
+                .enabled(logSource.getDesensitizationEnabled())
+                .enabledRuleIds(logSource.getEnabledRuleIds())
+                .customRules(buildCustomRules())
+                .build();
+    }
+
+    /**
+     * 构建自定义规则
+     */
+    private List<LogDesensitizationMessage.DesensitizationConfig.CustomRule> buildCustomRules() {
+        if (logSource.getCustomRules() == null) {
+            return null;
+        }
+
+        return logSource.getCustomRules().stream()
+                .map(rule -> LogDesensitizationMessage.DesensitizationConfig.CustomRule.builder()
+                        .id(rule.getId())
+                        .name(rule.getName())
+                        .pattern(rule.getPattern())
+                        .maskType(rule.getMaskType())
+                        .replacement(rule.getReplacement())
+                        .build())
+                .toList();
     }
 
     /**
@@ -883,10 +942,4 @@ public class LocalFileCollector implements LogCollector {
         return LogSourceType.LOCAL_FILE;
     }
 
-    /**
-     * 获取日志源配置
-     */
-    public LogSource getLogSource() {
-        return logSource;
-    }
 }

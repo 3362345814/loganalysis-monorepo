@@ -104,6 +104,18 @@ public class RawLogEventEntity extends BaseEntity {
     private LocalDateTime fileMtime;
 
     /**
+     * 脱敏后的内容
+     */
+    @Column(name = "desensitized_content", columnDefinition = "TEXT")
+    private String desensitizedContent;
+
+    /**
+     * 是否已脱敏
+     */
+    @Column(name = "masked")
+    private Boolean masked;
+
+    /**
      * 从 RawLogEvent DTO 创建实体
      *
      * @param dto 原始日志事件DTO
@@ -122,6 +134,8 @@ public class RawLogEventEntity extends BaseEntity {
                 .collectionTime(dto.getCollectionTime())
                 .fileInode(dto.getFileInode())
                 .fileMtime(dto.getFileMtime())
+                .desensitizedContent(dto.getDesensitizedContent())
+                .masked(dto.getMasked())
                 .build();
     }
 }

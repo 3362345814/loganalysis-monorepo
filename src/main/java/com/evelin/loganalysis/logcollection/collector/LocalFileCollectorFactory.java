@@ -6,6 +6,7 @@ import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -25,6 +26,7 @@ public class LocalFileCollectorFactory {
     private final CheckpointManager checkpointManager;
     private final CollectionConfig collectionConfig;
     private final RawLogEventService rawLogEventService;
+    private final RabbitTemplate rabbitTemplate;
 
     /**
      * 采集器缓存（用于管理已创建的采集器）
@@ -33,10 +35,12 @@ public class LocalFileCollectorFactory {
 
     public LocalFileCollectorFactory(CheckpointManager checkpointManager,
                                      CollectionConfig collectionConfig,
-                                     RawLogEventService rawLogEventService) {
+                                     RawLogEventService rawLogEventService,
+                                     RabbitTemplate rabbitTemplate) {
         this.checkpointManager = checkpointManager;
         this.collectionConfig = collectionConfig;
         this.rawLogEventService = rawLogEventService;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     /**
@@ -61,12 +65,13 @@ public class LocalFileCollectorFactory {
             return collectorCache.get(sourceId);
         }
 
-        // 创建采集器（注入 RawLogEventService 用于存储日志）
+        // 创建采集器（通过 RabbitMQ 发送到脱敏队列）
         LocalFileCollector collector = new LocalFileCollector(
                 logSource,
                 checkpointManager,
                 collectionConfig,
-                rawLogEventService
+                rawLogEventService,
+                rabbitTemplate
         );
 
         // 缓存

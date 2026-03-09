@@ -77,6 +77,16 @@ public class RawLogEvent {
     private LocalDateTime fileMtime;
 
     /**
+     * 脱敏后的内容
+     */
+    private String desensitizedContent;
+
+    /**
+     * 是否已脱敏
+     */
+    private Boolean masked;
+
+    /**
      * 创建工厂方法
      */
     public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,

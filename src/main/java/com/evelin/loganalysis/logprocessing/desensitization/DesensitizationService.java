@@ -64,7 +64,7 @@ public class DesensitizationService {
     private String applyRule(String text, DesensitizeRule rule) {
         try {
             Pattern pattern = Pattern.compile(rule.getPattern(), Pattern.CASE_INSENSITIVE);
-            
+
             return switch (rule.getMaskType().toUpperCase()) {
                 case "FULL" -> pattern.matcher(text).replaceAll(rule.getReplacement());
                 case "PARTIAL" -> maskPartial(text, pattern, rule.getReplacement());
@@ -82,27 +82,28 @@ public class DesensitizationService {
      */
     private String maskPartial(String text, Pattern pattern, String replacement) {
         java.util.regex.Matcher matcher = pattern.matcher(text);
-        
-        // 如果有捕获组，使用 replacement；否则使用 maskString
-        if (matcher.groupCount() > 0) {
-            StringBuffer sb = new StringBuffer();
+        StringBuffer sb = new StringBuffer();
+
+        // 判断是否有捕获组
+        boolean hasCaptureGroup = pattern.matcher("").groupCount() > 0;
+
+        if (hasCaptureGroup) {
+            // 有捕获组，直接使用 replacement 字符串进行替换
             while (matcher.find()) {
-                String replacementStr = matcher.replaceAll(replacement);
-                matcher.appendReplacement(sb, Matcher.quoteReplacement(replacementStr));
+                matcher.appendReplacement(sb, replacement);
             }
             matcher.appendTail(sb);
-            return sb.toString();
         } else {
-            // 无捕获组，使用 maskString 方法
-            StringBuffer sb = new StringBuffer();
+            // 无捕获组，使用 maskString 方法对整个匹配进行脱敏
             while (matcher.find()) {
                 String match = matcher.group();
                 String masked = maskString(match);
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(masked));
             }
             matcher.appendTail(sb);
-            return sb.toString();
         }
+
+        return sb.toString();
     }
 
     /**
@@ -112,11 +113,11 @@ public class DesensitizationService {
         if (str == null || str.length() <= 2) {
             return "**";
         }
-        
+
         int visibleChars = Math.min(2, str.length() / 4);
-        return str.substring(0, visibleChars) + 
-               "*".repeat(str.length() - visibleChars * 2) + 
-               str.substring(str.length() - visibleChars);
+        return str.substring(0, visibleChars) +
+                "*".repeat(str.length() - visibleChars * 2) +
+                str.substring(str.length() - visibleChars);
     }
 
     /**
@@ -125,14 +126,14 @@ public class DesensitizationService {
     private String hashValue(String text, Pattern pattern) {
         java.util.regex.Matcher matcher = pattern.matcher(text);
         StringBuffer sb = new StringBuffer();
-        
+
         while (matcher.find()) {
             String match = matcher.group();
             String hashed = "HASH_" + String.valueOf(match.hashCode()).substring(0, 8);
             matcher.appendReplacement(sb, Matcher.quoteReplacement(hashed));
         }
         matcher.appendTail(sb);
-        
+
         return sb.toString();
     }
 
@@ -234,8 +235,8 @@ public class DesensitizationService {
         private final int priority;
         private final boolean enabled;
 
-        public DesensitizeRule(String id, String name, String pattern, String maskType, 
-                              String replacement, int priority, boolean enabled) {
+        public DesensitizeRule(String id, String name, String pattern, String maskType,
+                               String replacement, int priority, boolean enabled) {
             this.id = id;
             this.name = name;
             this.pattern = pattern;
@@ -245,12 +246,32 @@ public class DesensitizationService {
             this.enabled = enabled;
         }
 
-        public String getId() { return id; }
-        public String getName() { return name; }
-        public String getPattern() { return pattern; }
-        public String getMaskType() { return maskType; }
-        public String getReplacement() { return replacement; }
-        public int getPriority() { return priority; }
-        public boolean isEnabled() { return enabled; }
+        public String getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getPattern() {
+            return pattern;
+        }
+
+        public String getMaskType() {
+            return maskType;
+        }
+
+        public String getReplacement() {
+            return replacement;
+        }
+
+        public int getPriority() {
+            return priority;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
     }
 }
