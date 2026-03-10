@@ -10,8 +10,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 原始日志事件实体
@@ -116,6 +120,16 @@ public class RawLogEventEntity extends BaseEntity {
     private Boolean masked;
 
     /**
+     * 解析后的字段（JSON格式）
+     * 包含: logTime, logLevel, threadName, loggerName, className, message, 
+     *       exceptionType, exceptionMessage, stackTrace, traceId 等
+     */
+    @JsonProperty("parsedFields")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "parsed_fields", columnDefinition = "jsonb")
+    private Map<String, Object> parsedFields;
+
+    /**
      * 从 RawLogEvent DTO 创建实体
      *
      * @param dto 原始日志事件DTO
@@ -136,6 +150,7 @@ public class RawLogEventEntity extends BaseEntity {
                 .fileMtime(dto.getFileMtime())
                 .desensitizedContent(dto.getDesensitizedContent())
                 .masked(dto.getMasked())
+                .parsedFields(dto.getParsedFields())
                 .build();
     }
 }

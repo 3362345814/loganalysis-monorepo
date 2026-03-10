@@ -4,8 +4,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -85,6 +87,12 @@ public class RawLogEvent {
      * 是否已脱敏
      */
     private Boolean masked;
+
+    /**
+     * 解析后的字段（JSON格式）
+     */
+    @JsonProperty("parsedFields")
+    private Map<String, Object> parsedFields;
 
     /**
      * 创建工厂方法

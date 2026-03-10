@@ -4,15 +4,19 @@ import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
 import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
+import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 脱敏消费者服务
@@ -75,6 +79,19 @@ public class DesensitizationConsumerService {
         } catch (Exception e) {
             log.error("Failed to process log message: {}, error: {}", message.getMessageId(), e.getMessage(), e);
             // 不抛出异常，消息会被自动确认，避免重复消费
+        }
+    }
+
+    /**
+     * 定时刷新缓冲区（每5秒检查一次）
+     */
+    @Scheduled(fixedDelay = 5000)
+    public void scheduledFlush() {
+        synchronized (batchBuffer) {
+            if (!batchBuffer.isEmpty()) {
+                log.info("Scheduled flush: {} logs in buffer", batchBuffer.size());
+                flushBuffer();
+            }
         }
     }
 
@@ -194,6 +211,18 @@ public class DesensitizationConsumerService {
             List<RawLogEvent> toSave = new ArrayList<>(batchBuffer);
             batchBuffer.clear();
 
+            // 解析每条日志并提取字段
+            for (RawLogEvent event : toSave) {
+                try {
+                    ParsedLogEvent parsed = logParser.parse(event);
+                    if (parsed != null) {
+                        event.setParsedFields(convertToMap(parsed));
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse log event: {}", event.getEventId(), e);
+                }
+            }
+
             rawLogEventService.saveAll(toSave);
             log.info("Flushed {} desensitized log events to database", toSave.size());
         } catch (Exception e) {
@@ -201,6 +230,56 @@ public class DesensitizationConsumerService {
             // 将失败的消息重新放回缓冲区，等待重试
             // 注意：这里无法访问 toSave，消息可能会丢失，但避免缓冲区无限增长
         }
+    }
+
+    /**
+     * 将 ParsedLogEvent 转换为 Map
+     */
+    private Map<String, Object> convertToMap(ParsedLogEvent parsed) {
+        Map<String, Object> map = new HashMap<>();
+        if (parsed.getLogTime() != null) {
+            map.put("logTime", parsed.getLogTime().toString());
+        }
+        if (parsed.getLogLevel() != null) {
+            map.put("logLevel", parsed.getLogLevel());
+        }
+        if (parsed.getThreadName() != null) {
+            map.put("threadName", parsed.getThreadName());
+        }
+        if (parsed.getLoggerName() != null) {
+            map.put("loggerName", parsed.getLoggerName());
+        }
+        if (parsed.getClassName() != null) {
+            map.put("className", parsed.getClassName());
+        }
+        if (parsed.getMethodName() != null) {
+            map.put("methodName", parsed.getMethodName());
+        }
+        if (parsed.getMessage() != null) {
+            map.put("message", parsed.getMessage());
+        }
+        if (parsed.getExceptionType() != null) {
+            map.put("exceptionType", parsed.getExceptionType());
+        }
+        if (parsed.getExceptionMessage() != null) {
+            map.put("exceptionMessage", parsed.getExceptionMessage());
+        }
+        if (parsed.getStackTrace() != null) {
+            map.put("stackTrace", parsed.getStackTrace());
+        }
+        if (parsed.getTraceId() != null) {
+            map.put("traceId", parsed.getTraceId());
+        }
+        if (parsed.getCategory() != null) {
+            map.put("category", parsed.getCategory());
+        }
+        if (parsed.getTags() != null && !parsed.getTags().isEmpty()) {
+            map.put("tags", parsed.getTags());
+        }
+        if (parsed.getParsedFields() != null && !parsed.getParsedFields().isEmpty()) {
+            map.put("customFields", parsed.getParsedFields());
+        }
+        return map;
     }
 
     /**

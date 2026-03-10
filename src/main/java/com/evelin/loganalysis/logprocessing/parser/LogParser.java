@@ -1,8 +1,8 @@
 package com.evelin.loganalysis.logprocessing.parser;
 
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
-import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
 import com.evelin.loganalysis.logcommon.utils.IdGenerator;
+import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -38,8 +38,6 @@ public class LogParser {
         String content = rawLogEvent.getRawContent();
         ParseStrategy strategy = selectStrategy(content);
 
-        log.debug("Using parser: {} for content: {}", strategy.getFormatName(), 
-                content.substring(0, Math.min(50, content.length())));
 
         ParseResult result = strategy.parse(content);
 

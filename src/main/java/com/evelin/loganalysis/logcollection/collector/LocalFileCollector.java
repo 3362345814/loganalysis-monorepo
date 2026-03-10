@@ -18,7 +18,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
@@ -186,7 +185,7 @@ public class LocalFileCollector implements LogCollector {
      * @param checkpointManager  检查点管理器
      * @param config             采集配置
      * @param rawLogEventService 日志存储服务（已废弃，使用RabbitMQ发送消息）
-     * @param rabbitTemplate    RabbitTemplate 用于发送消息到脱敏队列
+     * @param rabbitTemplate     RabbitTemplate 用于发送消息到脱敏队列
      */
     public LocalFileCollector(LogSource logSource,
                               CheckpointManager checkpointManager,
@@ -397,7 +396,7 @@ public class LocalFileCollector implements LogCollector {
         String patternStr = getLogStartPattern(logFormat, logSource.getCustomPattern());
         if (patternStr != null) {
             this.logStartPattern = Pattern.compile(patternStr);
-            log.info("Initialized log start pattern for format: {}", logFormat);
+            log.info("Initialized log start pattern for format: {}, pattern: {}", logFormat, patternStr);
         }
     }
 
@@ -405,28 +404,27 @@ public class LocalFileCollector implements LogCollector {
      * 获取日志开始行的正则表达式
      */
     private String getLogStartPattern(LogFormat format, String customPattern) {
-        switch (format) {
-            case SPRING_BOOT:
-                // Spring Boot 日志通常以日期时间开头: 2026-03-10 11:37:02.316
-                // 支持带毫秒和不带毫秒的格式
-                return "^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?";
-            case LOG4J:
+        return switch (format) {
+            case SPRING_BOOT ->
+                // Spring Boot 日志通常以日期时间开头: 2026-03-10 15:11:48.301
+                // 使用显式空格匹配，避免 \s 的问题
+                    "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?";
+            case LOG4J ->
                 // Log4j 日志: 2026-03-10 11:37:02
-                return "^\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}";
-            case NGINX:
+                    "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}";
+            case NGINX ->
                 // Nginx 日志: 127.0.0.1 - -
-                return "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s+-\\s+-";
-            case JSON:
+                    "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s+-\\s+-";
+            case JSON ->
                 // JSON 日志以 { 开头
-                return "^\\{";
-            case CUSTOM:
+                    "^\\{";
+            case CUSTOM ->
                 // 自定义正则
-                return customPattern;
-            case PLAIN_TEXT:
-            default:
+                    customPattern;
+            default ->
                 // 普通文本不做多行合并
-                return null;
-        }
+                    null;
+        };
     }
 
     /**
@@ -437,7 +435,7 @@ public class LocalFileCollector implements LogCollector {
             // 如果没有配置模式，默认都是新日志行
             return true;
         }
-        return logStartPattern.matcher(line).find();
+        return logStartPattern.matcher(line).find(0);
     }
 
     /**
@@ -608,6 +606,7 @@ public class LocalFileCollector implements LogCollector {
 
     /**
      * 检查文件轮转
+     * 注意：只有当文件大小变小时才认为是轮转，这是最可靠的标志
      */
     private void checkFileRotation() {
         Path filePath = Paths.get(logSource.getPath());
@@ -619,10 +618,9 @@ public class LocalFileCollector implements LogCollector {
         try {
             // 检查文件大小是否缩小（轮转的标志）
             long newSize = Files.size(filePath);
-            long newMtime = Files.getLastModifiedTime(filePath).toMillis();
 
-            // 如果新文件大小小于当前指针位置，说明文件被轮转
-            if (newSize < filePointer || (newMtime > currentFileMtime && newSize == filePointer)) {
+            // 只有当文件大小变小时才认为是轮转
+            if (newSize < filePointer) {
                 log.info("File rotation detected: path={}, oldSize={}, newSize={}",
                         filePath, filePointer, newSize);
 
@@ -676,7 +674,6 @@ public class LocalFileCollector implements LogCollector {
     private void readLoop() {
         log.info("Read loop started: path={}", logSource.getPath());
 
-        ByteBuffer buffer = ByteBuffer.allocate(config.getReadBufferSize());
         StringBuilder lineBuilder = new StringBuilder();
         long lastCheckpointTime = System.currentTimeMillis();
         long linesSinceCheckpoint = 0;
@@ -693,8 +690,7 @@ public class LocalFileCollector implements LogCollector {
                 }
 
                 // 读取数据
-                buffer.clear();
-                byte[] readBuffer = new byte[buffer.capacity()];
+                byte[] readBuffer = new byte[config.getReadBufferSize()];
                 int bytesRead = file.read(readBuffer, 0, readBuffer.length);
 
                 if (bytesRead == -1) {
@@ -710,6 +706,9 @@ public class LocalFileCollector implements LogCollector {
                     readBuffer = trimmedBuffer;
                 }
 
+                // 更新文件指针到下一次读取的位置
+                filePointer += bytesRead;
+
                 // 按行分割
                 String content = new String(readBuffer, logSource.getEncoding());
                 lineBuilder.append(content);
@@ -720,17 +719,19 @@ public class LocalFileCollector implements LogCollector {
                     lineBuilder.delete(0, lineIndex + 1);
 
                     if (!line.isEmpty()) {
+                        // 获取当前行的物理行号
+                        long currentLineNumber = collectedLines.incrementAndGet();
+
                         // 处理多行日志
-                        processMultiLineLog(line);
+                        processMultiLineLog(line, currentLineNumber);
 
                         linesSinceCheckpoint++;
-                        filePointer += line.getBytes().length + 1; // +1 for newline
 
                         // 定期保存检查点
                         if (linesSinceCheckpoint >= config.getCheckpointInterval()
                                 || System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
-                            // 保存检查点前，先处理缓冲区中的多行日志
-                            flushMultiLineBuffer();
+                            // 注意：不在此处 flush 多行缓冲区，以保证多行日志的完整性
+                            // 多行日志会在遇到新的日志开始行时自动 flush
                             saveCheckpointAsync();
                             linesSinceCheckpoint = 0;
                             lastCheckpointTime = System.currentTimeMillis();
@@ -756,65 +757,42 @@ public class LocalFileCollector implements LogCollector {
 
     /**
      * 处理多行日志
+     * 注意：此方法不负责行号递增，由调用者统一管理
+     *
+     * @param line       当前读取的行
+     * @param lineNumber 当前行的物理行号
      */
-    private void processMultiLineLog(String line) {
-        boolean isStart = isLogStart(line);
+    private void processMultiLineLog(String line, long lineNumber) {
+        boolean isLogStart = isLogStart(line);
 
-        if (isStart) {
-            // 如果是新的日志开始，先处理缓冲区中的内容
-            if (multiLineBuffer.length() > 0) {
+        if (isLogStart) {
+            // 如果是新的日志开始，先处理缓冲区中的内容（之前的完整多行日志）
+            if (!multiLineBuffer.isEmpty()) {
                 flushMultiLineBuffer();
             }
-            // 记录新的日志开始行号并直接处理这一行
-            multiLineStartLineNumber = collectedLines.incrementAndGet();
-            processLine(line, multiLineStartLineNumber);
+            // 记录新的日志开始行号
+            multiLineStartLineNumber = lineNumber;
+            // 将新日志开始行也加入缓冲区，等待后续行合并
+            multiLineBuffer.append(line);
         } else {
             // 如果不是新日志开始，则追加到缓冲区
-            collectedLines.incrementAndGet();
-            if (multiLineBuffer.length() > 0) {
+            if (!multiLineBuffer.isEmpty()) {
                 multiLineBuffer.append("\n");
             }
             multiLineBuffer.append(line);
-
-            // 如果缓冲区中还没有开始行号，设置它
-            if (multiLineStartLineNumber == 0 && multiLineBuffer.length() > 0) {
-                // 缓冲区第一行的行号 = 当前行号 - 缓冲区中的行数 + 1
-                int bufferLineCount = 1 + countNewlines(multiLineBuffer.toString());
-                multiLineStartLineNumber = collectedLines.get() - bufferLineCount + 1;
-            }
         }
-    }
-
-    /**
-     * 统计字符串中换行符的数量
-     */
-    private int countNewlines(String str) {
-        int count = 0;
-        for (int i = 0; i < str.length(); i++) {
-            if (str.charAt(i) == '\n') {
-                count++;
-            }
-        }
-        return count;
     }
 
     /**
      * 刷新多行日志缓冲区
      */
     private void flushMultiLineBuffer() {
-        if (multiLineBuffer.length() > 0) {
+        if (!multiLineBuffer.isEmpty()) {
             String logContent = multiLineBuffer.toString();
             processLine(logContent, multiLineStartLineNumber);
             multiLineBuffer.setLength(0);
             multiLineStartLineNumber = 0;
         }
-    }
-
-    /**
-     * 处理一行日志
-     */
-    private void processLine(String line) {
-        processLine(line, collectedLines.incrementAndGet());
     }
 
     /**
@@ -838,7 +816,9 @@ public class LocalFileCollector implements LogCollector {
             boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
 
             if (!offered) {
-                log.warn("Log queue is full, line dropped: lineNumber={}", event.getLineNumber());
+                log.warn("Log queue is full, line dropped: lineNumber={}, queueSize={}", event.getLineNumber(), logQueue.size());
+            } else {
+                log.debug("Line added to queue: lineNumber={}, queueSize={}", lineNumber, logQueue.size());
             }
 
         } catch (Exception e) {
@@ -973,6 +953,9 @@ public class LocalFileCollector implements LogCollector {
         int batchSize = 100; // 批量发送大小
         long flushIntervalMs = 5000; // 5秒强制刷新间隔
 
+        log.info("Consumer config: batchSize={}, flushIntervalMs={}, queueCapacity={}",
+                batchSize, flushIntervalMs, logQueue.size());
+
         while (running.get() || !logQueue.isEmpty()) {
             try {
                 // 从队列中取出日志（带超时）
@@ -986,6 +969,11 @@ public class LocalFileCollector implements LogCollector {
                         sendToRabbitMQ(batchBuffer);
                         batchBuffer.clear();
                         lastFlushTime = System.currentTimeMillis();
+                    }
+                } else {
+                    // 队列为空，记录一下（避免一直安静）
+                    if (batchBuffer.isEmpty() && running.get()) {
+                        log.debug("Queue is empty, waiting for logs... queueSize={}", logQueue.size());
                     }
                 }
 
@@ -1044,7 +1032,7 @@ public class LocalFileCollector implements LogCollector {
                 String routingKey = "log.raw." + event.getSourceId();
                 rabbitTemplate.convertAndSend(RabbitMQConfig.LOG_EXCHANGE, routingKey, message);
             }
-            log.debug("Sent {} log messages to RabbitMQ", events.size());
+            log.info("Sent {} log messages to RabbitMQ, queue remaining size: {}", events.size(), logQueue.size());
         } catch (Exception e) {
             log.error("Failed to send messages to RabbitMQ", e);
             throw e;
