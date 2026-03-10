@@ -45,6 +45,11 @@ public class RawLogEventResponse {
     private String filePath;
 
     /**
+     * 日志内容（rawContent的别名，供前端使用）
+     */
+    private String message;
+
+    /**
      * 原始日志内容
      */
     private String rawContent;
@@ -80,6 +85,7 @@ public class RawLogEventResponse {
                 .sourceId(entity.getSourceId() != null ? entity.getSourceId().toString() : null)
                 .sourceName(entity.getSourceName())
                 .filePath(entity.getFilePath())
+                .message(entity.getRawContent())
                 .rawContent(entity.getRawContent())
                 .lineNumber(entity.getLineNumber())
                 .collectionTime(entity.getCollectionTime())

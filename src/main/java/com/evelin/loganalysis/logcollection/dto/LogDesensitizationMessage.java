@@ -65,6 +65,16 @@ public class LogDesensitizationMessage implements Serializable {
     private LocalDateTime collectionTime;
 
     /**
+     * 日志格式
+     */
+    private String logFormat;
+
+    /**
+     * 自定义日志格式正则表达式
+     */
+    private String customPattern;
+
+    /**
      * 脱敏配置
      */
     private DesensitizationConfig desensitizationConfig;

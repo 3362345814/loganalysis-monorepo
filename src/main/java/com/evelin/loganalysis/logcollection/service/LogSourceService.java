@@ -55,8 +55,17 @@ public class LogSourceService {
         logSource.setEnabled(request.getEnabled() != null ? request.getEnabled() : true);
         logSource.setSourceType(LogSourceType.valueOf(request.getSourceType() != null ? request.getSourceType() : "LOCAL_FILE"));
         logSource.setStatus(CollectionStatus.STOPPED);
+        // 处理日志格式
+        if (request.getLogFormat() != null) {
+            logSource.setLogFormat(com.evelin.loganalysis.logcommon.enums.LogFormat.valueOf(request.getLogFormat()));
+        }
+        logSource.setCustomPattern(request.getCustomPattern());
         logSource.setConfig(request.getConfig());
         logSource.setRemark(request.getRemark());
+        // 处理脱敏配置
+        logSource.setDesensitizationEnabled(request.getDesensitizationEnabled() != null ? request.getDesensitizationEnabled() : false);
+        logSource.setEnabledRuleIds(request.getEnabledRuleIds());
+        logSource.setCustomRules(convertToCustomRules(request.getCustomRules()));
 
         LogSource saved = logSourceRepository.save(logSource);
         log.info("创建日志源成功: {} - {}", saved.getId(), saved.getName());
@@ -166,6 +175,23 @@ public class LogSourceService {
             if (request.getRemark() != null) {
                 existing.setRemark(request.getRemark());
             }
+            // 处理日志格式
+            if (request.getLogFormat() != null) {
+                existing.setLogFormat(com.evelin.loganalysis.logcommon.enums.LogFormat.valueOf(request.getLogFormat()));
+            }
+            if (request.getCustomPattern() != null) {
+                existing.setCustomPattern(request.getCustomPattern());
+            }
+            // 处理脱敏配置
+            if (request.getDesensitizationEnabled() != null) {
+                existing.setDesensitizationEnabled(request.getDesensitizationEnabled());
+            }
+            if (request.getEnabledRuleIds() != null) {
+                existing.setEnabledRuleIds(request.getEnabledRuleIds());
+            }
+            if (request.getCustomRules() != null) {
+                existing.setCustomRules(convertToCustomRules(request.getCustomRules()));
+            }
 
             LogSource saved = logSourceRepository.save(existing);
             log.info("更新日志源成功: {} - {}", saved.getId(), saved.getName());
@@ -238,12 +264,58 @@ public class LogSourceService {
      * @param logSource 实体
      * @return 响应DTO
      */
+    /**
+     * 将请求中的自定义规则转换为实体中的自定义规则
+     */
+    private List<LogSource.CustomDesensitizeRule> convertToCustomRules(List<LogSourceCreateRequest.CustomRule> customRules) {
+        if (customRules == null) {
+            return null;
+        }
+        return customRules.stream()
+                .map(rule -> new LogSource.CustomDesensitizeRule(
+                        rule.getId(),
+                        rule.getName(),
+                        rule.getPattern(),
+                        rule.getMaskType(),
+                        rule.getReplacement()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 将实体中的自定义规则转换为响应DTO中的自定义规则
+     */
+    private List<LogSourceCreateRequest.CustomRule> convertFromCustomRules(List<LogSource.CustomDesensitizeRule> customRules) {
+        if (customRules == null) {
+            return null;
+        }
+        return customRules.stream()
+                .map(rule -> {
+                    LogSourceCreateRequest.CustomRule result = new LogSourceCreateRequest.CustomRule();
+                    result.setId(rule.getId());
+                    result.setName(rule.getName());
+                    result.setPattern(rule.getPattern());
+                    result.setMaskType(rule.getMaskType());
+                    result.setReplacement(rule.getReplacement());
+                    return result;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 转换为响应DTO
+     *
+     * @param logSource 实体
+     * @return 响应DTO
+     */
     private LogSourceResponse toResponse(LogSource logSource) {
         LogSourceResponse response = new LogSourceResponse();
         response.setId(logSource.getId());
         response.setName(logSource.getName());
         response.setDescription(logSource.getDescription());
         response.setSourceType(logSource.getSourceType() != null ? logSource.getSourceType().name() : null);
+        response.setLogFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
+        response.setCustomPattern(logSource.getCustomPattern());
         response.setPath(logSource.getPath());
         response.setHost(logSource.getHost());
         response.setPort(logSource.getPort());
@@ -255,6 +327,10 @@ public class LogSourceService {
         response.setCreatedAt(logSource.getCreatedAt());
         response.setUpdatedAt(logSource.getUpdatedAt());
         response.setRemark(logSource.getRemark());
+        // 脱敏配置
+        response.setDesensitizationEnabled(logSource.getDesensitizationEnabled());
+        response.setEnabledRuleIds(logSource.getEnabledRuleIds());
+        response.setCustomRules(convertFromCustomRules(logSource.getCustomRules()));
         return response;
     }
 }

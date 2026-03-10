@@ -8,6 +8,7 @@ import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
+import com.evelin.loganalysis.logcommon.enums.LogFormat;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import lombok.Getter;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 /**
  * 本地文件日志采集器
@@ -86,6 +88,21 @@ public class LocalFileCollector implements LogCollector {
      * 已采集行数
      */
     private final AtomicLong collectedLines = new AtomicLong(0);
+
+    /**
+     * 多行日志缓冲区
+     */
+    private final StringBuilder multiLineBuffer = new StringBuilder();
+
+    /**
+     * 多行日志开始行号
+     */
+    private long multiLineStartLineNumber = 0;
+
+    /**
+     * 日志格式检测模式
+     */
+    private Pattern logStartPattern;
 
     /**
      * 文件通道
@@ -362,6 +379,65 @@ public class LocalFileCollector implements LogCollector {
 
         log.info("Opened log file: path={}, offset={}, size={}",
                 logSource.getPath(), filePointer, currentFileSize);
+
+        // 初始化日志格式检测模式
+        initLogStartPattern();
+    }
+
+    /**
+     * 初始化日志开始行检测模式
+     */
+    private void initLogStartPattern() {
+        LogFormat logFormat = logSource.getLogFormat();
+        if (logFormat == null) {
+            // 默认使用 Spring Boot 格式检测
+            logFormat = LogFormat.SPRING_BOOT;
+        }
+
+        String patternStr = getLogStartPattern(logFormat, logSource.getCustomPattern());
+        if (patternStr != null) {
+            this.logStartPattern = Pattern.compile(patternStr);
+            log.info("Initialized log start pattern for format: {}", logFormat);
+        }
+    }
+
+    /**
+     * 获取日志开始行的正则表达式
+     */
+    private String getLogStartPattern(LogFormat format, String customPattern) {
+        switch (format) {
+            case SPRING_BOOT:
+                // Spring Boot 日志通常以日期时间开头: 2026-03-10 11:37:02.316
+                // 支持带毫秒和不带毫秒的格式
+                return "^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?";
+            case LOG4J:
+                // Log4j 日志: 2026-03-10 11:37:02
+                return "^\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}";
+            case NGINX:
+                // Nginx 日志: 127.0.0.1 - -
+                return "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s+-\\s+-";
+            case JSON:
+                // JSON 日志以 { 开头
+                return "^\\{";
+            case CUSTOM:
+                // 自定义正则
+                return customPattern;
+            case PLAIN_TEXT:
+            default:
+                // 普通文本不做多行合并
+                return null;
+        }
+    }
+
+    /**
+     * 检测是否为日志开始行
+     */
+    private boolean isLogStart(String line) {
+        if (logStartPattern == null) {
+            // 如果没有配置模式，默认都是新日志行
+            return true;
+        }
+        return logStartPattern.matcher(line).find();
     }
 
     /**
@@ -644,8 +720,8 @@ public class LocalFileCollector implements LogCollector {
                     lineBuilder.delete(0, lineIndex + 1);
 
                     if (!line.isEmpty()) {
-                        // 处理行
-                        processLine(line);
+                        // 处理多行日志
+                        processMultiLineLog(line);
 
                         linesSinceCheckpoint++;
                         filePointer += line.getBytes().length + 1; // +1 for newline
@@ -653,6 +729,8 @@ public class LocalFileCollector implements LogCollector {
                         // 定期保存检查点
                         if (linesSinceCheckpoint >= config.getCheckpointInterval()
                                 || System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
+                            // 保存检查点前，先处理缓冲区中的多行日志
+                            flushMultiLineBuffer();
                             saveCheckpointAsync();
                             linesSinceCheckpoint = 0;
                             lastCheckpointTime = System.currentTimeMillis();
@@ -670,20 +748,86 @@ public class LocalFileCollector implements LogCollector {
             }
         }
 
+        // 最后处理缓冲区中的多行日志
+        flushMultiLineBuffer();
+
         log.info("Read loop stopped: path={}", logSource.getPath());
+    }
+
+    /**
+     * 处理多行日志
+     */
+    private void processMultiLineLog(String line) {
+        boolean isStart = isLogStart(line);
+
+        if (isStart) {
+            // 如果是新的日志开始，先处理缓冲区中的内容
+            if (multiLineBuffer.length() > 0) {
+                flushMultiLineBuffer();
+            }
+            // 记录新的日志开始行号并直接处理这一行
+            multiLineStartLineNumber = collectedLines.incrementAndGet();
+            processLine(line, multiLineStartLineNumber);
+        } else {
+            // 如果不是新日志开始，则追加到缓冲区
+            collectedLines.incrementAndGet();
+            if (multiLineBuffer.length() > 0) {
+                multiLineBuffer.append("\n");
+            }
+            multiLineBuffer.append(line);
+
+            // 如果缓冲区中还没有开始行号，设置它
+            if (multiLineStartLineNumber == 0 && multiLineBuffer.length() > 0) {
+                // 缓冲区第一行的行号 = 当前行号 - 缓冲区中的行数 + 1
+                int bufferLineCount = 1 + countNewlines(multiLineBuffer.toString());
+                multiLineStartLineNumber = collectedLines.get() - bufferLineCount + 1;
+            }
+        }
+    }
+
+    /**
+     * 统计字符串中换行符的数量
+     */
+    private int countNewlines(String str) {
+        int count = 0;
+        for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) == '\n') {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 刷新多行日志缓冲区
+     */
+    private void flushMultiLineBuffer() {
+        if (multiLineBuffer.length() > 0) {
+            String logContent = multiLineBuffer.toString();
+            processLine(logContent, multiLineStartLineNumber);
+            multiLineBuffer.setLength(0);
+            multiLineStartLineNumber = 0;
+        }
     }
 
     /**
      * 处理一行日志
      */
     private void processLine(String line) {
+        processLine(line, collectedLines.incrementAndGet());
+    }
+
+    /**
+     * 处理一行日志（指定行号）
+     */
+    private void processLine(String line, long lineNumber) {
         try {
             RawLogEvent event = RawLogEvent.create(
                     logSource.getId(),
                     logSource.getName(),
                     logSource.getPath(),
                     line,
-                    collectedLines.incrementAndGet(),
+                    lineNumber,
                     filePointer,
                     line.getBytes(logSource.getEncoding()).length,
                     currentInode,
@@ -891,6 +1035,8 @@ public class LocalFileCollector implements LogCollector {
                         .lineNumber(event.getLineNumber())
                         .offset(event.getFileOffset())
                         .collectionTime(event.getCollectionTime())
+                        .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
+                        .customPattern(logSource.getCustomPattern())
                         .desensitizationConfig(buildDesensitizationConfig())
                         .build();
 

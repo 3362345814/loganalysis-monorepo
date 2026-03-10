@@ -2,6 +2,7 @@ package com.evelin.loganalysis.logcollection.dto;
 
 import lombok.Data;
 
+import java.util.List;
 import java.util.Map;
 
 
@@ -26,6 +27,16 @@ public class LogSourceCreateRequest {
      * 日志源类型
      */
     private String sourceType;
+
+    /**
+     * 日志格式
+     */
+    private String logFormat;
+
+    /**
+     * 自定义日志格式正则表达式
+     */
+    private String customPattern;
 
     /**
      * 日志路径
@@ -63,6 +74,21 @@ public class LogSourceCreateRequest {
     private Boolean enabled;
 
     /**
+     * 是否启用脱敏
+     */
+    private Boolean desensitizationEnabled;
+
+    /**
+     * 启用的脱敏规则ID列表
+     */
+    private List<String> enabledRuleIds;
+
+    /**
+     * 自定义脱敏规则
+     */
+    private List<CustomRule> customRules;
+
+    /**
      * 额外配置
      */
     private Map<String, Object> config;
@@ -71,4 +97,16 @@ public class LogSourceCreateRequest {
      * 备注
      */
     private String remark;
+
+    /**
+     * 自定义脱敏规则
+     */
+    @Data
+    public static class CustomRule {
+        private String id;
+        private String name;
+        private String pattern;
+        private String maskType;
+        private String replacement;
+    }
 }

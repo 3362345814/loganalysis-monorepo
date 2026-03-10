@@ -309,14 +309,23 @@ public class LogCollectionController {
     public Result<PageResult<RawLogEventResponse>> getLogsBySource(
             @PathVariable UUID sourceId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) LocalDateTime startTime,
+            @RequestParam(required = false) LocalDateTime endTime) {
 
         // 验证日志源是否存在
         if (logSourceService.findById(sourceId).isEmpty()) {
             return Result.error("日志源不存在: " + sourceId);
         }
 
-        Page<RawLogEventEntity> logPage = rawLogEventService.findBySourceId(sourceId, page, size);
+        Page<RawLogEventEntity> logPage;
+        if (startTime != null && endTime != null) {
+            // 时间范围查询
+            logPage = rawLogEventService.findBySourceIdAndTimeRange(sourceId, startTime, endTime, page, size);
+        } else {
+            // 查询所有（不带时间过滤）
+            logPage = rawLogEventService.findBySourceId(sourceId, page, size);
+        }
 
         List<RawLogEventResponse> content = logPage.getContent().stream()
                 .map(RawLogEventResponse::fromEntity)

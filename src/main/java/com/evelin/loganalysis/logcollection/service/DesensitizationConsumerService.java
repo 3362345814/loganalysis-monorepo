@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
 import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
+import com.evelin.loganalysis.logprocessing.parser.LogParser;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,7 @@ public class DesensitizationConsumerService {
 
     private final DesensitizationService desensitizationService;
     private final RawLogEventService rawLogEventService;
+    private final LogParser logParser;
 
     /**
      * 批量处理大小
@@ -69,8 +71,6 @@ public class DesensitizationConsumerService {
                     flushBuffer();
                 }
             }
-
-            log.debug("Log message processed successfully: messageId={}", message.getMessageId());
 
         } catch (Exception e) {
             log.error("Failed to process log message: {}, error: {}", message.getMessageId(), e.getMessage(), e);

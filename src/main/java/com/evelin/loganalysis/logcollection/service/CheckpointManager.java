@@ -62,6 +62,10 @@ public class CheckpointManager {
             Object redisCheckpoint = redisTemplate.opsForValue().get(cacheKey);
             if (redisCheckpoint != null) {
                 log.debug("Loaded checkpoint from Redis: sourceId={}, filePath={}", sourceId, filePath);
+                if (redisCheckpoint instanceof CollectionCheckpoint) {
+                    return (CollectionCheckpoint) redisCheckpoint;
+                }
+                // 兼容旧格式的 LogCheckpoint
                 return convertToCollectionCheckpoint((LogCheckpoint) redisCheckpoint);
             }
         } catch (Exception e) {
@@ -207,7 +211,8 @@ public class CheckpointManager {
      */
     private void syncToRedis(String cacheKey, LogCheckpoint checkpoint) {
         try {
-            redisTemplate.opsForValue().set(cacheKey, checkpoint,
+            CollectionCheckpoint collectionCheckpoint = convertToCollectionCheckpoint(checkpoint);
+            redisTemplate.opsForValue().set(cacheKey, collectionCheckpoint,
                     Duration.ofSeconds(config.getRedisCheckpointTtlSeconds()));
         } catch (Exception e) {
             log.warn("Failed to sync checkpoint to Redis: {}", e.getMessage());
@@ -219,7 +224,8 @@ public class CheckpointManager {
      */
     private void syncToRedisAsync(String cacheKey, LogCheckpoint checkpoint) {
         try {
-            redisTemplate.opsForValue().set(cacheKey, checkpoint,
+            CollectionCheckpoint collectionCheckpoint = convertToCollectionCheckpoint(checkpoint);
+            redisTemplate.opsForValue().set(cacheKey, collectionCheckpoint,
                     Duration.ofSeconds(config.getRedisCheckpointTtlSeconds()));
         } catch (Exception e) {
             log.warn("Failed to async sync checkpoint to Redis: {}", e.getMessage());

@@ -1,5 +1,6 @@
 package com.evelin.loganalysis.logcommon.model;
 
+import com.evelin.loganalysis.logcommon.enums.LogFormat;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -42,6 +43,19 @@ public class LogSource extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", nullable = false, length = 50)
     private LogSourceType sourceType;
+
+    /**
+     * 日志格式
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "log_format", length = 50)
+    private LogFormat logFormat;
+
+    /**
+     * 自定义日志格式正则表达式（当 logFormat 为 CUSTOM 时使用）
+     */
+    @Column(name = "custom_pattern", length = 500)
+    private String customPattern;
 
     /**
      * 日志路径（文件路径、URL等）

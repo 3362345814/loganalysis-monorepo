@@ -3,6 +3,7 @@ package com.evelin.loganalysis.logcollection.dto;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 
@@ -34,6 +35,16 @@ public class LogSourceResponse {
     private String sourceType;
 
     /**
+     * 日志格式
+     */
+    private String logFormat;
+
+    /**
+     * 自定义日志格式正则表达式
+     */
+    private String customPattern;
+
+    /**
      * 日志路径
      */
     private String path;
@@ -57,6 +68,21 @@ public class LogSourceResponse {
      * 是否启用
      */
     private Boolean enabled;
+
+    /**
+     * 是否启用脱敏
+     */
+    private Boolean desensitizationEnabled;
+
+    /**
+     * 启用的脱敏规则ID列表
+     */
+    private List<String> enabledRuleIds;
+
+    /**
+     * 自定义脱敏规则
+     */
+    private List<LogSourceCreateRequest.CustomRule> customRules;
 
     /**
      * 采集状态
