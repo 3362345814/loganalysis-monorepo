@@ -970,11 +970,6 @@ public class LocalFileCollector implements LogCollector {
                         batchBuffer.clear();
                         lastFlushTime = System.currentTimeMillis();
                     }
-                } else {
-                    // 队列为空，记录一下（避免一直安静）
-                    if (batchBuffer.isEmpty() && running.get()) {
-                        log.debug("Queue is empty, waiting for logs... queueSize={}", logQueue.size());
-                    }
                 }
 
                 // 检查是否需要强制刷新

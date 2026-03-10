@@ -8,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 日志解析器主类
@@ -86,6 +88,13 @@ public class LogParser {
      * @return 解析后的日志事件
      */
     private ParsedLogEvent buildParsedLogEvent(RawLogEvent rawLogEvent, ParseResult parseResult) {
+        Map<String, Object> fields = parseResult.getFields();
+        if (fields == null) {
+            fields = new HashMap<>();
+        }
+        fields.put("packageName", parseResult.getFileName());
+        fields.put("simpleClassName", parseResult.getMethodName());
+
         return ParsedLogEvent.builder()
                 .id(IdGenerator.nextId())
                 .sourceId(rawLogEvent.getSourceId() != null ? rawLogEvent.getSourceId().toString() : null)
@@ -100,7 +109,7 @@ public class LogParser {
                 .lineNumber(parseResult.getLineNumber())
                 .message(parseResult.getMessage())
                 .rawContent(rawLogEvent.getRawContent())
-                .parsedFields(parseResult.getFields())
+                .parsedFields(fields)
                 .stackTrace(parseResult.getStackTrace())
                 .exceptionType(parseResult.getExceptionType())
                 .exceptionMessage(parseResult.getExceptionMessage())
