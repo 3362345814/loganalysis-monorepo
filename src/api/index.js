@@ -92,3 +92,21 @@ export const testLogApi = {
     params: { path, content }
   })
 }
+
+// ==================== 日志处理 API ====================
+
+// 日志解析测试
+export const logProcessingApi = {
+  // 测试日志解析
+  testParse: (content, format) => service.get('/processing/parse/test', {
+    params: { content, format }
+  }),
+  
+  // 测试脱敏
+  testDesensitize: (content) => service.get('/processing/desensitize/test', {
+    params: { content }
+  }),
+  
+  // 获取处理状态
+  getStatus: () => service.get('/processing/status')
+}
