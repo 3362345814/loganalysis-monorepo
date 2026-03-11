@@ -110,3 +110,84 @@ export const logProcessingApi = {
   // 获取处理状态
   getStatus: () => service.get('/processing/status')
 }
+
+// 聚合组相关
+export const aggregationApi = {
+  // 获取统计摘要
+  getSummary: () => service.get('/processing/aggregation/summary'),
+  
+  // 获取活跃聚合组
+  getActive: () => service.get('/processing/aggregation/active'),
+  
+  // 获取未分析的聚合组
+  getUnanalyzed: () => service.get('/processing/aggregation/unanalyzed'),
+  
+  // 分页查询聚合组
+  getAll: (params) => service.get('/processing/aggregation', { params }),
+  
+  // 根据ID查询聚合组
+  getById: (id) => service.get(`/processing/aggregation/${id}`),
+  
+  // 根据groupId查询聚合组
+  getByGroupId: (groupId) => service.get(`/processing/aggregation/group/${groupId}`),
+  
+  // 根据日志源查询聚合组
+  getBySourceId: (sourceId) => service.get(`/processing/aggregation/source/${sourceId}`),
+  
+  // 删除聚合组
+  delete: (id) => service.delete(`/processing/aggregation/${id}`),
+  
+  // 清理过期聚合组
+  cleanup: (timeoutMinutes) => service.post('/processing/aggregation/cleanup', null, {
+    params: { timeoutMinutes }
+  })
+}
+
+// ==================== AI 分析 API ====================
+
+// AI 分析相关
+export const analysisApi = {
+  // 触发分析
+  trigger: (data) => service.post('/analysis', data),
+  
+  // 获取分析结果
+  getResult: (aggregationId) => service.get(`/analysis/${aggregationId}`),
+  
+  // 获取所有分析结果
+  getAll: () => service.get('/analysis'),
+  
+  // 获取最近的分析结果
+  getRecent: (limit = 10) => service.get('/analysis/recent', { params: { limit } })
+}
+
+// ==================== LLM 配置 API ====================
+
+// LLM 配置相关
+export const llmConfigApi = {
+  // 获取所有配置
+  getAll: () => service.get('/llm-config'),
+  
+  // 获取启用的配置
+  getEnabled: () => service.get('/llm-config/enabled'),
+  
+  // 获取默认配置
+  getDefault: () => service.get('/llm-config/default'),
+  
+  // 获取当前活跃配置
+  getActive: () => service.get('/llm-config/active'),
+  
+  // 获取单个配置
+  getById: (id) => service.get(`/llm-config/${id}`),
+  
+  // 创建配置
+  create: (data) => service.post('/llm-config', data),
+  
+  // 更新配置
+  update: (id, data) => service.put(`/llm-config/${id}`, data),
+  
+  // 删除配置
+  delete: (id) => service.delete(`/llm-config/${id}`),
+  
+  // 验证 API Key
+  validate: (id) => service.post(`/llm-config/${id}/validate`)
+}

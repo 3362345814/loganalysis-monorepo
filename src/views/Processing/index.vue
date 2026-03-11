@@ -1,310 +1,321 @@
 <template>
   <div class="processing-page">
     <el-tabs v-model="activeTab" type="border-card">
-      <!-- 日志解析测试 -->
-      <el-tab-pane label="日志解析测试" name="parse">
+      <!-- 日志聚合组 -->
+      <el-tab-pane label="聚合组" name="aggregation">
         <el-card class="tool-card">
           <template #header>
             <div class="card-header">
-              <span>日志解析测试</span>
+              <span>日志聚合组</span>
+              <div>
+                <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
+              </div>
             </div>
           </template>
-          
-          <el-form :model="parseForm" label-width="100px">
-            <el-form-item label="日志格式">
-              <el-select v-model="parseForm.format" placeholder="选择日志格式">
-                <el-option label="默认格式" value="DEFAULT" />
-                <el-option label="Spring Boot" value="SPRING_BOOT" />
-                <el-option label="JSON" value="JSON" />
+
+          <!-- 统计卡片 -->
+          <el-row :gutter="20" style="margin-bottom: 20px">
+            <el-col :span="6">
+              <el-statistic title="总聚合组" :value="aggSummary.total || 0" />
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="活跃" :value="aggSummary.active || 0">
+                <template #suffix>
+                  <el-tag type="success" size="small">ACTIVE</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="已过期" :value="aggSummary.expired || 0">
+                <template #suffix>
+                  <el-tag type="info" size="small">EXPIRED</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="已分析" :value="aggSummary.analyzed || 0">
+                <template #suffix>
+                  <el-tag type="warning" size="small">ANALYZED</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+          </el-row>
+
+          <!-- 严重程度统计 -->
+          <el-row :gutter="20" style="margin-bottom: 20px">
+            <el-col :span="6">
+              <el-statistic title="严重" :value="aggSummary.severityCounts?.CRITICAL || 0">
+                <template #suffix>
+                  <el-tag type="danger" size="small">CRITICAL</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="错误" :value="aggSummary.severityCounts?.ERROR || 0">
+                <template #suffix>
+                  <el-tag type="danger" size="small">ERROR</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="警告" :value="aggSummary.severityCounts?.WARNING || 0">
+                <template #suffix>
+                  <el-tag type="warning" size="small">WARNING</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="信息" :value="aggSummary.severityCounts?.INFO || 0">
+                <template #suffix>
+                  <el-tag type="info" size="small">INFO</el-tag>
+                </template>
+              </el-statistic>
+            </el-col>
+          </el-row>
+
+          <!-- 筛选 -->
+          <el-form inline style="margin-bottom: 10px">
+            <el-form-item label="状态">
+              <el-select v-model="aggQuery.status" placeholder="全部" clearable style="width: 120px">
+                <el-option label="活跃" value="ACTIVE" />
+                <el-option label="已过期" value="EXPIRED" />
+                <el-option label="已分析" value="ANALYZED" />
               </el-select>
             </el-form-item>
-            <el-form-item label="日志内容">
-              <el-input
-                v-model="parseForm.content"
-                type="textarea"
-                :rows="8"
-                placeholder="请输入日志内容进行解析测试"
-              />
+            <el-form-item label="严重程度">
+              <el-select v-model="aggQuery.severity" placeholder="全部" clearable style="width: 120px">
+                <el-option label="严重" value="CRITICAL" />
+                <el-option label="错误" value="ERROR" />
+                <el-option label="警告" value="WARNING" />
+                <el-option label="信息" value="INFO" />
+              </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="handleParse" :loading="parseLoading">解析</el-button>
-              <el-button @click="parseForm.content = ''">清空</el-button>
-              <el-button @click="loadParseSample">加载示例</el-button>
+              <el-button type="primary" @click="loadAggregationGroups">查询</el-button>
             </el-form-item>
           </el-form>
-          
-          <!-- 解析结果 -->
-          <el-divider v-if="parseResult" content-position="left">解析结果</el-divider>
-          <el-card v-if="parseResult" class="result-card">
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="时间">{{ parseResult.logTime }}</el-descriptions-item>
-              <el-descriptions-item label="级别">
-                <el-tag :type="getLevelType(parseResult.logLevel)">{{ parseResult.logLevel }}</el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="线程">{{ parseResult.threadName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="类名">{{ parseResult.className || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="方法">{{ parseResult.methodName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="行号">{{ parseResult.lineNumber || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="日志消息" :span="2">
-                <pre class="message-content">{{ parseResult.message }}</pre>
-              </el-descriptions-item>
-              <el-descriptions-item v-if="parseResult.exceptionType" label="异常类型" :span="2">
-                {{ parseResult.exceptionType }}
-              </el-descriptions-item>
-              <el-descriptions-item v-if="parseResult.stackTrace" label="堆栈跟踪" :span="2">
-                <pre class="stack-trace">{{ parseResult.stackTrace }}</pre>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-        </el-card>
-      </el-tab-pane>
 
-      <!-- 敏感信息脱敏测试 -->
-      <el-tab-pane label="脱敏测试" name="desensitize">
-        <el-card class="tool-card">
-          <template #header>
-            <div class="card-header">
-              <span>敏感信息脱敏测试</span>
-            </div>
-          </template>
-          
-          <el-form :model="desensitizeForm" label-width="100px">
-            <el-form-item label="待脱敏内容">
-              <el-input
-                v-model="desensitizeForm.content"
-                type="textarea"
-                :rows="8"
-                placeholder="请输入需要脱敏的内容，支持测试：手机号、邮箱、密码、Token、身份证等"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleDesensitize" :loading="desensitizeLoading">脱敏</el-button>
-              <el-button @click="desensitizeForm.content = ''">清空</el-button>
-              <el-button @click="loadDesensitizeSample">加载示例</el-button>
-            </el-form-item>
-          </el-form>
-          
-          <!-- 脱敏结果 -->
-          <el-divider v-if="desensitizeResult" content-position="left">脱敏结果</el-divider>
-          <el-card v-if="desensitizeResult" class="result-card">
-            <el-form label-width="100px">
-              <el-form-item label="脱敏后">
-                <el-input
-                  v-model="desensitizeResult"
-                  type="textarea"
-                  :rows="8"
-                  readonly
-                />
-              </el-form-item>
-            </el-form>
-          </el-card>
-        </el-card>
-      </el-tab-pane>
+          <!-- 聚合组列表 -->
+          <el-table :data="aggGroups" v-loading="aggLoading" stripe>
+            <el-table-column prop="groupId" label="聚合组ID" width="180" />
+            <el-table-column prop="representativeLog" label="代表性日志" min-width="250" show-overflow-tooltip />
+            <el-table-column prop="eventCount" label="事件数" width="100" />
+            <el-table-column prop="severity" label="严重程度" width="100">
+              <template #default="{ row }">
+                <el-tag :type="getSeverityType(row.severity)">{{ row.severity }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="sourceName" label="日志源" width="120" />
+            <el-table-column prop="firstEventTime" label="首次发生" width="160">
+              <template #default="{ row }">
+                {{ formatTime(row.firstEventTime) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastEventTime" label="最后发生" width="160">
+              <template #default="{ row }">
+                {{ formatTime(row.lastEventTime) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="primary" text @click="viewDetail(row)">详情</el-button>
+                <el-button 
+                  size="small" 
+                  type="success" 
+                  text 
+                  @click="triggerAnalysis(row)"
+                  :disabled="row.isAnalyzed || !canAnalysis(row)"
+                >
+                  {{ row.isAnalyzed ? '已分析' : (canAnalysis(row) ? '分析' : '级别不足') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <!-- 处理管道状态 -->
-      <el-tab-pane label="管道状态" name="status">
-        <el-card class="tool-card">
-          <template #header>
-            <div class="card-header">
-              <span>处理管道状态</span>
-              <el-button :icon="Refresh" @click="loadStatus" :loading="statusLoading">刷新</el-button>
-            </div>
-          </template>
-          
-          <el-descriptions :column="2" border v-if="statusData">
-            <el-descriptions-item label="模块">{{ statusData.module }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <el-tag :type="statusData.status === 'RUNNING' ? 'success' : 'danger'">
-                {{ statusData.status }}
-              </el-tag>
-            </el-descriptions-item>
-          </el-descriptions>
-        </el-card>
-      </el-tab-pane>
-
-      <!-- 处理规则说明 -->
-      <el-tab-pane label="规则说明" name="rules">
-        <el-card class="tool-card">
-          <template #header>
-            <div class="card-header">
-              <span>处理规则说明</span>
-            </div>
-          </template>
-          
-          <el-collapse v-model="activeCollapse">
-            <el-collapse-item title="日志解析" name="parse">
-              <p>系统支持多种日志格式的自动解析：</p>
-              <ul>
-                <li><strong>Spring Boot 格式</strong>：标准 Spring Boot 日志格式</li>
-                <li><strong>JSON 格式</strong>：JSON 格式的结构化日志</li>
-                <li><strong>默认格式</strong>：其他通用日志格式</li>
-              </ul>
-            </el-collapse-item>
-            
-            <el-collapse-item title="事件识别规则" name="event">
-              <p>系统内置以下事件识别规则：</p>
-              <el-table :data="eventRules" size="small">
-                <el-table-column prop="name" label="规则名称" />
-                <el-table-column prop="ruleType" label="类型" />
-                <el-table-column prop="pattern" label="匹配模式" />
-                <el-table-column prop="eventLevel" label="事件级别">
-                  <template #default="{ row }">
-                    <el-tag :type="getLevelType(row.eventLevel)">{{ row.eventLevel }}</el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-collapse-item>
-            
-            <el-collapse-item title="敏感信息脱敏" name="desensitize">
-              <p>系统支持以下敏感信息脱敏：</p>
-              <ul>
-                <li><strong>手机号</strong>：138****1234</li>
-                <li><strong>邮箱</strong>：te***@example.com</li>
-                <li><strong>身份证号</strong>：330***********1234</li>
-                <li><strong>密码</strong>：password=******</li>
-                <li><strong>Token</strong>：token=******</li>
-                <li><strong>IP地址</strong>：192.168.*.*</li>
-              </ul>
-            </el-collapse-item>
-            
-            <el-collapse-item title="日志聚合" name="aggregation">
-              <p>日志聚合功能：</p>
-              <ul>
-                <li>基于模板相似度进行聚合</li>
-                <li>相似度阈值默认 0.85</li>
-                <li>聚合组超时时间默认 60 分钟</li>
-                <li>支持自动识别异常严重程度</li>
-              </ul>
-            </el-collapse-item>
-          </el-collapse>
+          <!-- 分页 -->
+          <el-pagination
+            v-model:current-page="aggQuery.page"
+            v-model:page-size="aggQuery.size"
+            :total="aggTotal"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            style="margin-top: 20px; justify-content: flex-end"
+            @size-change="loadAggregationGroups"
+            @current-change="loadAggregationGroups"
+          />
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 聚合组详情对话框 -->
+    <el-dialog v-model="detailVisible" title="聚合组详情" width="800px">
+      <el-descriptions :column="2" border v-if="currentGroup">
+        <el-descriptions-item label="聚合组ID">{{ currentGroup.groupId }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="getStatusType(currentGroup.status)">{{ currentGroup.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="日志源">{{ currentGroup.sourceName }}</el-descriptions-item>
+        <el-descriptions-item label="严重程度">
+          <el-tag :type="getSeverityType(currentGroup.severity)">{{ currentGroup.severity }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="事件数">{{ currentGroup.eventCount }}</el-descriptions-item>
+        <el-descriptions-item label="相似度">{{ currentGroup.similarityScore?.toFixed(2) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="首次发生" :span="2">
+          {{ formatTime(currentGroup.firstEventTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="最后发生" :span="2">
+          {{ formatTime(currentGroup.lastEventTime) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="代表性日志" :span="2">
+          <pre class="log-content">{{ currentGroup.representativeLog }}</pre>
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ currentGroup.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
+
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button 
+          type="primary" 
+          @click="triggerAnalysis(currentGroup)"
+          :disabled="currentGroup?.isAnalyzed || !canAnalysis(currentGroup)"
+        >
+          {{ currentGroup?.isAnalyzed ? '已分析' : (canAnalysis(currentGroup) ? '触发AI分析' : '级别不足') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { logProcessingApi } from '@/api'
+import { aggregationApi, analysisApi } from '@/api'
 import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
 
-const activeTab = ref('parse')
-const activeCollapse = ref(['parse', 'event', 'desensitize', 'aggregation'])
+const activeTab = ref('aggregation')
 
-// 解析表单
-const parseForm = reactive({
-  format: 'SPRING_BOOT',
-  content: ''
+// 聚合组数据
+const aggLoading = ref(false)
+const aggGroups = ref([])
+const aggTotal = ref(0)
+const aggSummary = ref({})
+const aggQuery = reactive({
+  page: 0,
+  size: 20,
+  status: '',
+  severity: ''
 })
-const parseLoading = ref(false)
-const parseResult = ref(null)
 
-// 脱敏表单
-const desensitizeForm = reactive({
-  content: ''
-})
-const desensitizeLoading = ref(false)
-const desensitizeResult = ref(null)
+// 详情对话框
+const detailVisible = ref(false)
+const currentGroup = ref(null)
 
-// 状态数据
-const statusLoading = ref(false)
-const statusData = ref(null)
+// 加载聚合组数据
+const loadAggregationGroups = async () => {
+  aggLoading.value = true
+  try {
+    const params = {
+      page: aggQuery.page,
+      size: aggQuery.size
+    }
+    if (aggQuery.status) params.status = aggQuery.status
+    if (aggQuery.severity) params.severity = aggQuery.severity
 
-// 事件规则
-const eventRules = ref([
-  { name: '致命错误', ruleType: 'LEVEL', pattern: 'FATAL', eventLevel: 'FATAL' },
-  { name: '错误日志', ruleType: 'LEVEL', pattern: 'ERROR', eventLevel: 'ERROR' },
-  { name: '异常检测', ruleType: 'KEYWORD', pattern: 'Exception', eventLevel: 'ERROR' },
-  { name: '空指针异常', ruleType: 'KEYWORD', pattern: 'NullPointerException', eventLevel: 'ERROR' }
-])
+    const res = await aggregationApi.getAll(params)
+    aggGroups.value = res.data.content || []
+    aggTotal.value = res.data.total || 0
+  } catch (error) {
+    console.error('加载聚合组失败:', error)
+  } finally {
+    aggLoading.value = false
+  }
+}
 
-// 获取日志级别类型
-const getLevelType = (level) => {
+// 加载聚合组统计摘要
+const loadAggSummary = async () => {
+  try {
+    const res = await aggregationApi.getSummary()
+    aggSummary.value = res.data || {}
+  } catch (error) {
+    console.error('加载聚合组摘要失败:', error)
+  }
+}
+
+// 获取严重程度类型
+const getSeverityType = (severity) => {
   const typeMap = {
-    'TRACE': 'info',
-    'DEBUG': 'info',
-    'INFO': 'success',
-    'WARN': 'warning',
-    'WARNING': 'warning',
+    'CRITICAL': 'danger',
     'ERROR': 'danger',
-    'FATAL': 'danger'
+    'WARNING': 'warning',
+    'INFO': 'success'
   }
-  return typeMap[level] || 'info'
+  return typeMap[severity] || 'info'
 }
 
-// 解析日志
-const handleParse = async () => {
-  if (!parseForm.content) {
-    ElMessage.warning('请输入日志内容')
+// 获取状态类型
+const getStatusType = (status) => {
+  const typeMap = {
+    'ACTIVE': 'success',
+    'EXPIRED': 'info',
+    'ANALYZED': 'warning'
+  }
+  return typeMap[status] || 'info'
+}
+
+// 格式化时间
+const formatTime = (time) => {
+  return time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
+}
+
+// 检查是否允许触发分析（ERROR 及以上级别）
+const canAnalysis = (row) => {
+  const severity = row.severity || 'INFO'
+  const severityPriority = { 'CRITICAL': 3, 'ERROR': 2, 'WARNING': 1, 'INFO': 0 }
+  return (severityPriority[severity] || 0) >= 2
+}
+
+// 查看详情
+const viewDetail = async (row) => {
+  currentGroup.value = row
+  detailVisible.value = true
+}
+
+// 触发AI分析
+const triggerAnalysis = async (row) => {
+  // 检查严重程度，只有 ERROR 及以上级别才能触发分析
+  const severity = row.severity || 'INFO'
+  const severityPriority = { 'CRITICAL': 3, 'ERROR': 2, 'WARNING': 1, 'INFO': 0 }
+  if ((severityPriority[severity] || 0) < 2) {
+    ElMessage.warning('只有 ERROR 及以上级别才能触发 AI 分析')
     return
   }
   
-  parseLoading.value = true
-  parseResult.value = null
   try {
-    const res = await logProcessingApi.testParse(parseForm.content, parseForm.format)
-    parseResult.value = res.data
-    ElMessage.success('解析成功')
+    await analysisApi.trigger({
+      aggregationId: row.id || row.groupId,
+      groupId: row.groupId,
+      severity: severity
+    })
+    ElMessage.success('已触发AI分析，请稍后查看结果')
+    detailVisible.value = false
+    // 刷新列表
+    loadAggregationGroups()
+    loadAggSummary()
   } catch (error) {
-    console.error('解析失败:', error)
-  } finally {
-    parseLoading.value = false
-  }
-}
-
-// 脱敏
-const handleDesensitize = async () => {
-  if (!desensitizeForm.content) {
-    ElMessage.warning('请输入待脱敏内容')
-    return
-  }
-  
-  desensitizeLoading.value = true
-  desensitizeResult.value = null
-  
-  try {
-    const res = await logProcessingApi.testDesensitize(desensitizeForm.content)
-    desensitizeResult.value = res.data
-    ElMessage.success('脱敏成功')
-  } catch (error) {
-    console.error('脱敏失败:', error)
-  } finally {
-    desensitizeLoading.value = false
-  }
-}
-
-// 加载解析示例
-const loadParseSample = () => {
-  parseForm.content = '2026-01-15 10:30:00.123 [INFO] [http-nio-8080-exec-1] [com.example.controller.UserController:45] User login successful'
-}
-
-// 加载脱敏示例
-const loadDesensitizeSample = () => {
-  desensitizeForm.content = `用户信息：
-手机号：13812345678
-邮箱：testuser@example.com
-密码：password=mysecret123
-Token：token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ
-身份证：330101199001011234
-IP地址：192.168.1.100`
-}
-
-// 加载状态
-const loadStatus = async () => {
-  statusLoading.value = true
-  try {
-    const res = await logProcessingApi.getStatus()
-    statusData.value = res.data
-  } catch (error) {
-    console.error('加载状态失败:', error)
-  } finally {
-    statusLoading.value = false
+    console.error('触发分析失败:', error)
+    ElMessage.error('触发分析失败: ' + (error.message || '未知错误'))
   }
 }
 
 onMounted(() => {
-  loadStatus()
+  loadAggSummary()
+  loadAggregationGroups()
 })
 </script>
 
@@ -323,12 +334,7 @@ onMounted(() => {
   align-items: center;
 }
 
-.result-card {
-  margin-top: 20px;
-}
-
-.message-content,
-.stack-trace {
+.log-content {
   margin: 0;
   padding: 10px;
   background-color: #f5f7fa;
@@ -339,9 +345,5 @@ onMounted(() => {
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
-}
-
-.el-collapse {
-  margin-top: 10px;
 }
 </style>
