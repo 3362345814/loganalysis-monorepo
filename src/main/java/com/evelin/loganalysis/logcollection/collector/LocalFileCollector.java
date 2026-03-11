@@ -396,7 +396,6 @@ public class LocalFileCollector implements LogCollector {
         String patternStr = getLogStartPattern(logFormat, logSource.getCustomPattern());
         if (patternStr != null) {
             this.logStartPattern = Pattern.compile(patternStr);
-            log.info("Initialized log start pattern for format: {}, pattern: {}", logFormat, patternStr);
         }
     }
 
@@ -552,7 +551,6 @@ public class LocalFileCollector implements LogCollector {
                     if (changedPath.getFileName().toString().equals(
                             Paths.get(logSource.getPath()).getFileName().toString())) {
 
-                        log.debug("File change detected: kind={}, path={}", kind, changedPath);
 
                         if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
                             // 文件被创建（可能是轮转后的新文件）
@@ -594,7 +592,6 @@ public class LocalFileCollector implements LogCollector {
      * 处理文件修改事件
      */
     private void handleFileModified(Path changedPath) {
-        log.debug("File modified: path={}", changedPath);
 
         // 检查文件是否被轮转
         Path currentPath = Paths.get(logSource.getPath());
@@ -817,8 +814,6 @@ public class LocalFileCollector implements LogCollector {
 
             if (!offered) {
                 log.warn("Log queue is full, line dropped: lineNumber={}, queueSize={}", event.getLineNumber(), logQueue.size());
-            } else {
-                log.debug("Line added to queue: lineNumber={}, queueSize={}", lineNumber, logQueue.size());
             }
 
         } catch (Exception e) {
@@ -1027,7 +1022,6 @@ public class LocalFileCollector implements LogCollector {
                 String routingKey = "log.raw." + event.getSourceId();
                 rabbitTemplate.convertAndSend(RabbitMQConfig.LOG_EXCHANGE, routingKey, message);
             }
-            log.info("Sent {} log messages to RabbitMQ, queue remaining size: {}", events.size(), logQueue.size());
         } catch (Exception e) {
             log.error("Failed to send messages to RabbitMQ", e);
             throw e;

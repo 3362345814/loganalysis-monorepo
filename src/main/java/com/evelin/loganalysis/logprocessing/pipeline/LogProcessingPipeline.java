@@ -8,6 +8,7 @@ import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationServi
 import com.evelin.loganalysis.logprocessing.dto.*;
 import com.evelin.loganalysis.logprocessing.event.EventDetector;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
+import com.evelin.loganalysis.logprocessing.service.AutoAnalysisTrigger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,6 +34,7 @@ public class LogProcessingPipeline {
     private final LogAggregator logAggregator;
     private final DesensitizationService desensitizationService;
     private final Executor processingExecutor;
+    private final AutoAnalysisTrigger autoAnalysisTrigger;
 
     public LogProcessingPipeline(
             ProcessingConfig processingConfig,
@@ -41,6 +43,7 @@ public class LogProcessingPipeline {
             ContextExtractor contextExtractor,
             LogAggregator logAggregator,
             DesensitizationService desensitizationService,
+            AutoAnalysisTrigger autoAnalysisTrigger,
             @Qualifier("processingExecutor") Executor processingExecutor) {
         this.processingConfig = processingConfig;
         this.logParser = logParser;
@@ -48,6 +51,7 @@ public class LogProcessingPipeline {
         this.contextExtractor = contextExtractor;
         this.logAggregator = logAggregator;
         this.desensitizationService = desensitizationService;
+        this.autoAnalysisTrigger = autoAnalysisTrigger;
         this.processingExecutor = processingExecutor;
     }
 
@@ -108,9 +112,19 @@ public class LogProcessingPipeline {
 
             // 步骤5: 日志聚合
             if (processingConfig.isAggregationEnabled()) {
-                AggregationResult aggregationResult = logAggregator.aggregate(parsedEvent);
+                // 直接从 parsedEvent 获取日志源信息
+                AggregationResult aggregationResult = logAggregator.aggregate(
+                        parsedEvent,
+                        parsedEvent.getSourceId(),
+                        parsedEvent.getSourceName()
+                );
                 result.setAggregationResult(aggregationResult);
                 result.setStage("AGGREGATED");
+
+                // 步骤6: 自动触发 AI 分析（仅对 ERROR 及以上级别的日志）
+                if (aggregationResult.isNewGroup()) {
+                    autoAnalysisTrigger.triggerAutoAnalysis(aggregationResult);
+                }
             }
 
             result.setProcessTimeMs(System.currentTimeMillis() - startTime);

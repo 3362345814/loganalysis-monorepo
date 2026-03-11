@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcommon.utils.IdGenerator;
 import com.evelin.loganalysis.logprocessing.config.ProcessingConfig;
 import com.evelin.loganalysis.logprocessing.dto.AggregationResult;
 import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
+import com.evelin.loganalysis.logprocessing.service.AggregationGroupService;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LogAggregator {
 
     private final ProcessingConfig processingConfig;
+    private final AggregationGroupService aggregationGroupService;
 
     /**
      * 活跃的聚合组缓存
@@ -37,6 +39,18 @@ public class LogAggregator {
      * @return 聚合结果
      */
     public AggregationResult aggregate(ParsedLogEvent event) {
+        return aggregate(event, event.getSourceId(), event.getSourceName());
+    }
+
+    /**
+     * 聚合日志事件（带日志源信息）
+     *
+     * @param event      日志事件
+     * @param sourceId   日志源ID
+     * @param sourceName 日志源名称
+     * @return 聚合结果
+     */
+    public AggregationResult aggregate(ParsedLogEvent event, String sourceId, String sourceName) {
         if (event == null) {
             return null;
         }
@@ -47,6 +61,25 @@ public class LogAggregator {
             if (group != null && isSimilarEnough(event, group)) {
                 // 添加到现有组
                 group.addEvent(event);
+
+                // 持久化更新
+                try {
+                    aggregationGroupService.saveOrUpdate(
+                            AggregationResult.builder()
+                                    .groupId(group.getGroupId())
+                                    .aggregationId(group.getId())
+                                    .representativeLog(group.getRepresentativeLog())
+                                    .eventCount(group.getEventCount())
+                                    .severity(determineSeverity(group))
+                                    .aggregatedAt(LocalDateTime.now())
+                                    .build(),
+                            sourceId,
+                            sourceName
+                    );
+                } catch (Exception e) {
+                    log.warn("持久化聚合组失败: {}", e.getMessage());
+                }
+
                 return AggregationResult.builder()
                         .groupId(group.getGroupId())
                         .aggregationId(group.getId())
@@ -65,7 +98,8 @@ public class LogAggregator {
         AggregationGroup newGroup = new AggregationGroup(groupId, event);
         activeGroups.put(groupId, newGroup);
 
-        return AggregationResult.builder()
+        // 持久化新聚合组
+        AggregationResult result = AggregationResult.builder()
                 .groupId(groupId)
                 .aggregationId(newGroup.getId())
                 .isNewGroup(true)
@@ -76,6 +110,14 @@ public class LogAggregator {
                 .severity(determineSeverity(event))
                 .aggregatedAt(LocalDateTime.now())
                 .build();
+
+        try {
+            aggregationGroupService.saveOrUpdate(result, sourceId, sourceName);
+        } catch (Exception e) {
+            log.warn("持久化新聚合组失败: {}", e.getMessage());
+        }
+
+        return result;
     }
 
     /**

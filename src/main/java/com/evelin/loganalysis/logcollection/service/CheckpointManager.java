@@ -12,13 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
  * 检查点管理器
- *
+ * <p>
  * 负责检查点的加载、保存和管理
  * 采用Redis + 数据库双写策略，确保断点续采的可靠性
  *
@@ -38,8 +39,8 @@ public class CheckpointManager {
     private final ConcurrentMap<String, LogCheckpoint> memoryCache = new ConcurrentHashMap<>();
 
     public CheckpointManager(CheckpointRepository checkpointRepository,
-                            RedisTemplate<String, Object> redisTemplate,
-                            CollectionConfig config) {
+                             RedisTemplate<String, Object> redisTemplate,
+                             CollectionConfig config) {
         this.checkpointRepository = checkpointRepository;
         this.redisTemplate = redisTemplate;
         this.config = config;
@@ -47,7 +48,7 @@ public class CheckpointManager {
 
     /**
      * 加载检查点
-     *
+     * <p>
      * 优先从Redis加载，失败则从数据库加载
      *
      * @param sourceId 日志源ID
@@ -64,6 +65,12 @@ public class CheckpointManager {
                 log.debug("Loaded checkpoint from Redis: sourceId={}, filePath={}", sourceId, filePath);
                 if (redisCheckpoint instanceof CollectionCheckpoint) {
                     return (CollectionCheckpoint) redisCheckpoint;
+                }
+                // 处理 LinkedHashMap 反序列化问题
+                if (redisCheckpoint instanceof java.util.Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> map = (Map<String, Object>) redisCheckpoint;
+                    return convertMapToCollectionCheckpoint(map);
                 }
                 // 兼容旧格式的 LogCheckpoint
                 return convertToCollectionCheckpoint((LogCheckpoint) redisCheckpoint);
@@ -100,13 +107,13 @@ public class CheckpointManager {
 
     /**
      * 保存检查点
-     *
+     * <p>
      * 采用双写策略：Redis（快速）+ 数据库（持久化）
      *
-     * @param sourceId 日志源ID
-     * @param filePath 文件路径
-     * @param offset 文件偏移量
-     * @param fileSize 文件大小
+     * @param sourceId  日志源ID
+     * @param filePath  文件路径
+     * @param offset    文件偏移量
+     * @param fileSize  文件大小
      * @param fileInode 文件inode
      * @param fileMtime 文件修改时间
      */
@@ -144,7 +151,6 @@ public class CheckpointManager {
             // 4. 异步同步到Redis（不阻塞主流程）
             syncToRedisAsync(cacheKey, checkpoint);
 
-            log.debug("Saved checkpoint: sourceId={}, filePath={}, offset={}", sourceId, filePath, offset);
         } catch (Exception e) {
             log.error("Failed to save checkpoint: sourceId={}, filePath={}, error={}",
                     sourceId, filePath, e.getMessage());
@@ -244,5 +250,26 @@ public class CheckpointManager {
                 checkpoint.getFileInode(),
                 checkpoint.getFileMtime()
         );
+    }
+
+    /**
+     * 将Map转换为CollectionCheckpoint
+     */
+    private CollectionCheckpoint convertMapToCollectionCheckpoint(Map<String, Object> map) {
+        String sourceId = (String) map.get("sourceId");
+        String filePath = (String) map.get("filePath");
+        Long offset = map.get("fileOffset") != null ? ((Number) map.get("fileOffset")).longValue() : 0L;
+        Long fileSize = map.get("fileSize") != null ? ((Number) map.get("fileSize")).longValue() : 0L;
+        String fileInode = (String) map.get("fileInode");
+        Object fileMtimeObj = map.get("fileMtime");
+        LocalDateTime fileMtime = null;
+        if (fileMtimeObj != null) {
+            if (fileMtimeObj instanceof String) {
+                fileMtime = LocalDateTime.parse((String) fileMtimeObj);
+            } else if (fileMtimeObj instanceof Long) {
+                fileMtime = LocalDateTime.ofEpochSecond((Long) fileMtimeObj / 1000, 0, java.time.ZoneOffset.UTC);
+            }
+        }
+        return CollectionCheckpoint.of(sourceId, filePath, offset, fileSize, fileInode, fileMtime);
     }
 }

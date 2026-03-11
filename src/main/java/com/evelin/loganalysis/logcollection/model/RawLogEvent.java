@@ -95,6 +95,11 @@ public class RawLogEvent {
     private Map<String, Object> parsedFields;
 
     /**
+     * 关联的聚合组ID
+     */
+    private String aggregationGroupId;
+
+    /**
      * 创建工厂方法
      */
     public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,

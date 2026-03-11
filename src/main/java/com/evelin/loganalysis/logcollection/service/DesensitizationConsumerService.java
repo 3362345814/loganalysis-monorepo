@@ -5,6 +5,7 @@ import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
 import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
+import com.evelin.loganalysis.logprocessing.pipeline.LogProcessingPipeline;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class DesensitizationConsumerService {
     private final DesensitizationService desensitizationService;
     private final RawLogEventService rawLogEventService;
     private final LogParser logParser;
+    private final LogProcessingPipeline logProcessingPipeline;
 
     /**
      * 批量处理大小
@@ -211,24 +213,37 @@ public class DesensitizationConsumerService {
             List<RawLogEvent> toSave = new ArrayList<>(batchBuffer);
             batchBuffer.clear();
 
-            // 解析每条日志并提取字段
+            // 处理每条日志：解析、脱敏、事件检测、聚合、自动分析
             for (RawLogEvent event : toSave) {
                 try {
-                    ParsedLogEvent parsed = logParser.parse(event);
-                    if (parsed != null) {
+                    // 调用完整的处理管道
+                    var processingResult = logProcessingPipeline.process(event);
+                    
+                    if (processingResult.isSuccess() && processingResult.getParsedEvent() != null) {
+                        // 解析成功，提取字段
+                        ParsedLogEvent parsed = processingResult.getParsedEvent();
                         event.setParsedFields(convertToMap(parsed));
+                        
+                        // 如果有聚合结果，更新聚合组ID
+                        if (processingResult.getAggregationResult() != null) {
+                            event.setAggregationGroupId(processingResult.getAggregationResult().getGroupId());
+                        }
+                        
+                        log.debug("Log processed successfully, groupId: {}", 
+                                processingResult.getAggregationResult() != null ? 
+                                processingResult.getAggregationResult().getGroupId() : "N/A");
                     }
                 } catch (Exception e) {
-                    log.warn("Failed to parse log event: {}", event.getEventId(), e);
+                    log.warn("Failed to process log event: {}", event.getEventId(), e);
                 }
             }
 
+            // 保存到数据库
             rawLogEventService.saveAll(toSave);
-            log.info("Flushed {} desensitized log events to database", toSave.size());
+            log.info("Saved {} log events to database", toSave.size());
+            
         } catch (Exception e) {
             log.error("Failed to flush batch to database, retrying...", e);
-            // 将失败的消息重新放回缓冲区，等待重试
-            // 注意：这里无法访问 toSave，消息可能会丢失，但避免缓冲区无限增长
         }
     }
 
