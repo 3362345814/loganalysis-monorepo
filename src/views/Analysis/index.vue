@@ -59,7 +59,12 @@
     <!-- 工具栏 -->
     <el-card class="toolbar-card">
       <el-row :gutter="20" align="middle">
-        <el-col :span="8">
+        <el-col :span="4">
+          <el-select v-model="query.projectId" placeholder="选择项目" clearable @change="handleProjectChange" style="width: 100%">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="4">
           <el-button type="primary" @click="handleRefresh">
             <el-icon><Refresh /></el-icon>
             刷新
@@ -221,7 +226,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, CircleCheck, Warning, Timer, Refresh, Search } from '@element-plus/icons-vue'
-import { analysisApi } from '@/api'
+import { analysisApi, projectApi } from '@/api'
 
 // 状态
 const loading = ref(false)
@@ -232,6 +237,25 @@ const pageSize = ref(10)
 const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentDetail = ref(null)
+const projects = ref([])
+
+const query = ref({
+  projectId: null
+})
+
+const handleProjectChange = () => {
+  currentPage.value = 1
+  handleRefresh()
+}
+
+const loadProjects = async () => {
+  try {
+    const res = await projectApi.getEnabled()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('加载项目失败:', error)
+  }
+}
 
 // 统计数据
 const stats = ref({
@@ -316,8 +340,14 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await analysisApi.getRecent(100)
-    analysisList.value = res.data || []
-    total.value = analysisList.value.length
+    let list = res.data || []
+    
+    if (query.value.projectId) {
+      list = list.filter(item => item.projectId === query.value.projectId)
+    }
+    
+    analysisList.value = list
+    total.value = list.length
     calculateStats()
   } catch (error) {
     console.error('加载分析结果失败:', error)
@@ -368,6 +398,7 @@ const handleCurrentChange = (val) => {
 
 // 初始化
 onMounted(() => {
+  loadProjects()
   loadData()
 })
 </script>

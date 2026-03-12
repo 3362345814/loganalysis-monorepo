@@ -8,6 +8,12 @@ const routes = [
     meta: { title: '首页' }
   },
   {
+    path: '/project',
+    name: 'Project',
+    component: () => import('@/views/Project/index.vue'),
+    meta: { title: '项目管理' }
+  },
+  {
     path: '/collection',
     name: 'Collection',
     component: () => import('@/views/Collection/index.vue'),

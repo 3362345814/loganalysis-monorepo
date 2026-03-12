@@ -43,6 +43,27 @@ export default service
 
 // ==================== 日志采集 API ====================
 
+// 项目相关
+export const projectApi = {
+  // 获取所有项目
+  getAll: () => service.get('/projects'),
+
+  // 获取所有启用的项目
+  getEnabled: () => service.get('/projects/enabled'),
+
+  // 获取单个项目
+  getById: (id) => service.get(`/projects/${id}`),
+
+  // 创建项目
+  create: (data) => service.post('/projects', data),
+
+  // 更新项目
+  update: (id, data) => service.put(`/projects/${id}`, data),
+
+  // 删除项目
+  delete: (id) => service.delete(`/projects/${id}`)
+}
+
 // 日志源相关
 export const logSourceApi = {
   // 获取所有日志源

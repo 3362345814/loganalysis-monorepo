@@ -75,6 +75,11 @@
 
           <!-- 筛选 -->
           <el-form inline style="margin-bottom: 10px">
+            <el-form-item label="项目">
+              <el-select v-model="aggQuery.projectId" placeholder="全部" clearable style="width: 150px" @change="handleProjectChange">
+                <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="aggQuery.status" placeholder="全部" clearable style="width: 120px">
                 <el-option label="活跃" value="ACTIVE" />
@@ -194,7 +199,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { aggregationApi, analysisApi } from '@/api'
+import { aggregationApi, analysisApi, projectApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 
@@ -205,12 +210,30 @@ const aggLoading = ref(false)
 const aggGroups = ref([])
 const aggTotal = ref(0)
 const aggSummary = ref({})
+
+const projects = ref([])
+
 const aggQuery = reactive({
+  projectId: null,
   page: 0,
   size: 20,
   status: '',
   severity: ''
 })
+
+const handleProjectChange = () => {
+  aggQuery.page = 0
+  loadAggregationGroups()
+}
+
+const loadProjects = async () => {
+  try {
+    const res = await projectApi.getEnabled()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('加载项目失败:', error)
+  }
+}
 
 // 详情对话框
 const detailVisible = ref(false)
@@ -226,6 +249,7 @@ const loadAggregationGroups = async () => {
     }
     if (aggQuery.status) params.status = aggQuery.status
     if (aggQuery.severity) params.severity = aggQuery.severity
+    if (aggQuery.projectId) params.projectId = aggQuery.projectId
 
     const res = await aggregationApi.getAll(params)
     aggGroups.value = res.data.content || []
@@ -314,6 +338,7 @@ const triggerAnalysis = async (row) => {
 }
 
 onMounted(() => {
+  loadProjects()
   loadAggSummary()
   loadAggregationGroups()
 })

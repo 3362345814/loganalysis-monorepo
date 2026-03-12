@@ -4,7 +4,8 @@
     <el-card class="toolbar-card">
       <el-row :gutter="20" align="middle">
         <el-col :span="18">
-          <el-button type="primary" :icon="Plus" @click="handleCreate">新建采集源</el-button>
+          <el-button type="primary" :icon="Plus" @click="handleCreateProject">新建项目</el-button>
+          <el-button v-if="currentProject" type="success" :icon="Plus" @click="handleCreateSource">新建采集源</el-button>
           <el-button :icon="Refresh" @click="loadSources">刷新</el-button>
         </el-col>
         <el-col :span="6" style="text-align: right">
@@ -13,11 +14,32 @@
       </el-row>
     </el-card>
 
+    <!-- 当前项目提示 -->
+    <el-card class="project-info-card" v-if="currentProject">
+      <div class="project-info">
+        <el-icon><FolderOpened /></el-icon>
+        <span class="project-name">{{ currentProject.name }}</span>
+        <el-button type="info" link @click="showProjectSelector">切换项目</el-button>
+      </div>
+    </el-card>
+    <el-card class="project-info-card" v-else>
+      <div class="project-info-empty">
+        <el-icon><WarningFilled /></el-icon>
+        <span>请先选择一个项目，或创建新项目</span>
+        <el-button type="primary" size="small" style="margin-left: 15px" @click="showProjectSelector">选择项目</el-button>
+      </div>
+    </el-card>
+
     <!-- 日志源列表 -->
     <el-card class="table-card">
       <el-table :data="sources" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="sourceType" label="类型" width="120">
+        <el-table-column prop="projectName" label="所属项目" width="120">
+          <template #default="{ row }">
+            <el-tag type="info">{{ row.projectName || '-' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sourceType" label="类型" width="100">
           <template #default="{ row }">
             <el-tag>{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
           </template>
@@ -45,28 +67,30 @@
             {{ formatTime(row.lastCollectionTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button 
-              v-if="row.status !== 'COLLECTING'" 
-              type="primary" 
-              size="small" 
-              :icon="VideoPlay" 
-              @click="handleStart(row)"
-            >
-              启动
-            </el-button>
-            <el-button 
-              v-else 
-              type="warning" 
-              size="small" 
-              :icon="VideoPause" 
-              @click="handleStop(row)"
-            >
-              停止
-            </el-button>
-            <el-button size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button 
+                v-if="row.status !== 'RUNNING'" 
+                type="primary" 
+                size="small" 
+                :icon="VideoPlay" 
+                @click="handleStart(row)"
+              >
+                启动
+              </el-button>
+              <el-button 
+                v-else 
+                type="warning" 
+                size="small" 
+                :icon="VideoPause" 
+                @click="handleStop(row)"
+              >
+                停止
+              </el-button>
+              <el-button size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+              <el-button size="small" type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -84,15 +108,35 @@
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入采集源名称" />
         </el-form-item>
+        <el-form-item label="所属项目" prop="projectId">
+          <el-tag type="success">{{ currentProject?.name || '未选择' }}</el-tag>
+          <span class="form-tip" style="margin-left: 10px">采集源将绑定到此项目</span>
+        </el-form-item>
         <el-form-item label="类型" prop="sourceType">
           <el-select v-model="form.sourceType" placeholder="请选择类型">
             <el-option label="本地文件" value="LOCAL_FILE" />
-            <el-option label="远程日志" value="REMOTE" />
-            <el-option label="数据库" value="DATABASE" />
+            <el-option label="SSH远程" value="SSH" />
           </el-select>
         </el-form-item>
+        
+        <!-- SSH配置 -->
+        <template v-if="form.sourceType === 'SSH'">
+          <el-form-item label="主机地址" prop="host">
+            <el-input v-model="form.host" placeholder="SSH服务器地址，如 192.168.1.100" />
+          </el-form-item>
+          <el-form-item label="端口" prop="port">
+            <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="SSH端口，默认22" />
+          </el-form-item>
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="form.username" placeholder="SSH用户名" />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="form.password" type="password" placeholder="SSH密码" show-password />
+          </el-form-item>
+        </template>
+        
         <el-form-item label="路径" prop="path">
-          <el-input v-model="form.path" placeholder="日志文件路径，如 /var/log/app.log" />
+          <el-input v-model="form.path" :placeholder="form.sourceType === 'SSH' ? '远程日志文件绝对路径，如 /var/log/app.log' : '日志文件路径，如 /var/log/app.log'" />
         </el-form-item>
         <el-form-item label="编码" prop="encoding">
           <el-select v-model="form.encoding" placeholder="选择编码">
@@ -208,17 +252,87 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 新建项目对话框 -->
+    <el-dialog v-model="projectDialogVisible" :title="isProjectEdit ? '编辑项目' : '新建项目'" width="600px">
+      <el-form :model="projectForm" :rules="projectRules" ref="projectFormRef" label-width="100px">
+        <el-form-item label="项目名称" prop="name">
+          <el-input v-model="projectForm.name" placeholder="请输入项目名称" />
+        </el-form-item>
+        <el-form-item label="项目代码" prop="code">
+          <el-input v-model="projectForm.code" placeholder="用于关联日志中的项目标识" />
+        </el-form-item>
+        <el-form-item label="描述" prop="description">
+          <el-input v-model="projectForm.description" type="textarea" :rows="2" placeholder="项目描述" />
+        </el-form-item>
+        <el-form-item label="负责人" prop="owner">
+          <el-input v-model="projectForm.owner" placeholder="项目负责人" />
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="projectForm.email" placeholder="联系人邮箱" />
+        </el-form-item>
+        <el-form-item label="启用" prop="enabled">
+          <el-switch v-model="projectForm.enabled" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleProjectSubmit" :loading="projectSubmitting">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 项目选择对话框 -->
+    <el-dialog v-model="projectSelectDialogVisible" title="选择项目" width="500px">
+      <div class="project-select-wrapper">
+        <el-input
+          v-model="projectSearchText"
+          placeholder="搜索项目名称"
+          :prefix-icon="Search"
+          clearable
+          style="margin-bottom: 15px"
+        />
+        <div class="project-list">
+          <div
+            v-for="project in filteredProjects"
+            :key="project.id"
+            class="project-item"
+            :class="{ active: currentProject?.id === project.id }"
+            @click="selectProject(project)"
+          >
+            <div class="project-item-icon">
+              <el-icon><Folder /></el-icon>
+            </div>
+            <div class="project-item-info">
+              <div class="project-item-name">{{ project.name }}</div>
+              <div class="project-item-code">{{ project.code }}</div>
+            </div>
+            <div class="project-item-check" v-if="currentProject?.id === project.id">
+              <el-icon><Check /></el-icon>
+            </div>
+          </div>
+          <el-empty v-if="filteredProjects.length === 0" description="暂无项目，请先创建" />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="projectSelectDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleCreateProject">新建项目</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Plus, Refresh, Edit, Delete, VideoPlay, VideoPause } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { Plus, Refresh, Edit, Delete, VideoPlay, VideoPause, FolderOpened, WarningFilled, Search, Folder, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
-import { logSourceApi } from '@/api'
+import { logSourceApi, projectApi } from '@/api'
+
+const router = useRouter()
 
 const sources = ref([])
+const projects = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -226,10 +340,48 @@ const submitting = ref(false)
 const formRef = ref(null)
 const activeTab = ref('basic')
 
+const currentProject = ref(null)
+const projectDialogVisible = ref(false)
+const projectFormRef = ref(null)
+const isProjectEdit = ref(false)
+const projectSubmitting = ref(false)
+const projectSelectDialogVisible = ref(false)
+const projectSearchText = ref('')
+
+const filteredProjects = computed(() => {
+  if (!projectSearchText.value) {
+    return projects.value
+  }
+  const search = projectSearchText.value.toLowerCase()
+  return projects.value.filter(p => 
+    p.name.toLowerCase().includes(search) || 
+    p.code.toLowerCase().includes(search)
+  )
+})
+
+const projectForm = reactive({
+  name: '',
+  code: '',
+  description: '',
+  owner: '',
+  email: '',
+  enabled: true
+})
+
+const projectRules = {
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
+  code: [{ required: true, message: '请输入项目代码', trigger: 'blur' }]
+}
+
 const form = ref({
   id: null,
   name: '',
+  projectId: null,
   sourceType: 'LOCAL_FILE',
+  host: '',
+  port: 22,
+  username: '',
+  password: '',
   path: '',
   encoding: 'UTF-8',
   logFormat: 'SPRING_BOOT',
@@ -240,13 +392,16 @@ const form = ref({
 const rules = {
   name: [{ required: true, message: '请输入采集源名称', trigger: 'blur' }],
   path: [{ required: true, message: '请输入日志文件路径', trigger: 'blur' }],
-  sourceType: [{ required: true, message: '请选择类型', trigger: 'change' }]
+  sourceType: [{ required: true, message: '请选择类型', trigger: 'change' }],
+  host: [{ required: true, message: '请输入SSH主机地址', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入SSH用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入SSH密码', trigger: 'blur' }]
 }
 
 const getStatusType = (status) => {
   const map = {
     'STOPPED': 'info',
-    'COLLECTING': 'success',
+    'RUNNING': 'success',
     'ERROR': 'danger'
   }
   return map[status] || 'info'
@@ -267,7 +422,7 @@ const getLogFormatText = (format) => {
 const getStatusText = (status) => {
   const map = {
     'STOPPED': '已停止',
-    'COLLECTING': '采集中',
+    'RUNNING': '运行中',
     'ERROR': '错误'
   }
   return map[status] || '未知'
@@ -296,12 +451,59 @@ const loadSources = async () => {
   }
 }
 
-const handleCreate = () => {
+const loadProjects = async () => {
+  try {
+    const res = await projectApi.getEnabled()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('加载项目失败:', error)
+  }
+}
+
+const handleCreateProject = () => {
+  isProjectEdit.value = false
+  Object.assign(projectForm, { name: '', code: '', description: '', owner: '', email: '', enabled: true })
+  projectDialogVisible.value = true
+}
+
+const handleProjectSubmit = async () => {
+  await projectFormRef.value.validate()
+  projectSubmitting.value = true
+  try {
+    if (isProjectEdit.value) {
+      await projectApi.update(projectForm.id, projectForm)
+      ElMessage.success('更新成功')
+    } else {
+      const res = await projectApi.create(projectForm)
+      ElMessage.success('创建成功')
+      currentProject.value = res.data
+      localStorage.setItem('currentProjectId', currentProject.value.id)
+      localStorage.setItem('currentProjectName', currentProject.value.name)
+    }
+    projectDialogVisible.value = false
+    loadProjects()
+  } catch (error) {
+    console.error('操作失败:', error)
+  } finally {
+    projectSubmitting.value = false
+  }
+}
+
+const handleCreateSource = () => {
+  if (!currentProject.value) {
+    ElMessage.warning('请先选择项目')
+    return
+  }
   isEdit.value = false
   form.value = {
     id: null,
     name: '',
+    projectId: currentProject.value.id,
     sourceType: 'LOCAL_FILE',
+    host: '',
+    port: 22,
+    username: '',
+    password: '',
     path: '',
     encoding: 'UTF-8',
     logFormat: 'SPRING_BOOT',
@@ -312,6 +514,28 @@ const handleCreate = () => {
     customRules: []
   }
   dialogVisible.value = true
+}
+
+const clearProject = () => {
+  currentProject.value = null
+  localStorage.removeItem('currentProjectId')
+  localStorage.removeItem('currentProjectName')
+  loadSources()
+}
+
+const showProjectSelector = async () => {
+  await loadProjects()
+  projectSearchText.value = ''
+  projectSelectDialogVisible.value = true
+}
+
+const selectProject = (project) => {
+  currentProject.value = project
+  localStorage.setItem('currentProjectId', project.id)
+  localStorage.setItem('currentProjectName', project.name)
+  projectSelectDialogVisible.value = false
+  loadSources()
+  ElMessage.success(`已选择项目: ${project.name}`)
 }
 
 const handleEdit = (row) => {
@@ -373,6 +597,7 @@ const handleStart = async (row) => {
     loadSources()
   } catch (error) {
     console.error('启动失败:', error)
+    ElMessage.error(error.response?.data?.message || '启动失败')
   }
 }
 
@@ -383,6 +608,7 @@ const handleStop = async (row) => {
     loadSources()
   } catch (error) {
     console.error('停止失败:', error)
+    ElMessage.error(error.response?.data?.message || '停止失败')
   }
 }
 
@@ -404,6 +630,12 @@ const handleDelete = async (row) => {
 }
 
 onMounted(() => {
+  const savedProjectId = localStorage.getItem('currentProjectId')
+  const savedProjectName = localStorage.getItem('currentProjectName')
+  if (savedProjectId && savedProjectName) {
+    currentProject.value = { id: savedProjectId, name: savedProjectName }
+  }
+  loadProjects()
   loadSources()
 })
 </script>
@@ -417,14 +649,116 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.project-info-card {
+  margin-bottom: 20px;
+}
+
+.project-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-info .el-icon {
+  font-size: 20px;
+  color: #67c23a;
+}
+
+.project-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.project-info-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #909399;
+}
+
+.project-info-empty .el-icon {
+  font-size: 18px;
+}
+
+.project-select-wrapper {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 12px;
+}
+
+.project-item:hover {
+  background-color: #f5f7fa;
+  border-color: #409eff;
+}
+
+.project-item.active {
+  background-color: #ecf5ff;
+  border-color: #409eff;
+}
+
+.project-item-icon {
+  font-size: 24px;
+  color: #409eff;
+}
+
+.project-item-info {
+  flex: 1;
+}
+
+.project-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.project-item-code {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.project-item-check {
+  color: #409eff;
+  font-size: 18px;
+}
+
 .table-card {
   min-height: 500px;
 }
 
-.form-tip {
-  margin-left: 10px;
-  color: #909399;
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+
+.action-buttons .el-button {
+  padding: 5px 8px;
   font-size: 12px;
+}
+
+.form-tip {
+  display: block;
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
 }
 
 .custom-rules {

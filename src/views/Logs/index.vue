@@ -3,13 +3,18 @@
     <!-- 筛选栏 -->
     <el-card class="filter-card">
       <el-form :inline="true" :model="filter">
+        <el-form-item label="项目">
+          <el-select v-model="filter.projectId" placeholder="请选择项目" clearable @change="handleProjectChange" style="width: 180px">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="日志源">
-          <el-select v-model="filter.sourceId" placeholder="请选择日志源" clearable @change="handleSourceChange">
-            <el-option v-for="source in sources" :key="source.id" :label="source.name" :value="source.id" />
+          <el-select v-model="filter.sourceId" placeholder="请选择日志源" clearable @change="handleSourceChange" style="width: 180px">
+            <el-option v-for="source in filteredSources" :key="source.id" :label="source.name" :value="source.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="日志级别">
-          <el-select v-model="filter.logLevel" placeholder="请选择日志级别" clearable>
+          <el-select v-model="filter.logLevel" placeholder="请选择日志级别" clearable style="width: 120px">
             <el-option label="ERROR" value="ERROR" />
             <el-option label="WARN" value="WARN" />
             <el-option label="INFO" value="INFO" />
@@ -143,11 +148,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { logSourceApi, rawLogApi } from '@/api'
+import { logSourceApi, projectApi, rawLogApi } from '@/api'
 
+const projects = ref([])
 const sources = ref([])
 const logs = ref([])
 const loading = ref(false)
@@ -156,12 +162,29 @@ const detailVisible = ref(false)
 const currentLog = ref(null)
 
 const filter = ref({
+  projectId: null,
   sourceId: null,
   logLevel: null,
   dateRange: null,
   page: 1,
   pageSize: 20
 })
+
+const filteredSources = computed(() => {
+  if (!filter.value.projectId) {
+    return sources.value
+  }
+  return sources.value.filter(s => s.projectId === filter.value.projectId)
+})
+
+const loadProjects = async () => {
+  try {
+    const res = await projectApi.getEnabled()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('加载项目失败:', error)
+  }
+}
 
 const loadSources = async () => {
   try {
@@ -170,6 +193,11 @@ const loadSources = async () => {
   } catch (error) {
     console.error('加载日志源失败:', error)
   }
+}
+
+const handleProjectChange = () => {
+  filter.value.sourceId = null
+  filter.value.page = 1
 }
 
 const loadLogs = async () => {
@@ -219,6 +247,7 @@ const handleSearch = () => {
 
 const handleReset = () => {
   filter.value = {
+    projectId: null,
     sourceId: null,
     logLevel: null,
     dateRange: null,
@@ -281,6 +310,7 @@ const getLogLevelType = (level) => {
 }
 
 onMounted(() => {
+  loadProjects()
   loadSources()
 })
 </script>
