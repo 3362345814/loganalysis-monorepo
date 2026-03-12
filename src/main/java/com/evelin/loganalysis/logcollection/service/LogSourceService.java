@@ -4,9 +4,11 @@ import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
 import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
+import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
 import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcommon.model.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 public class LogSourceService {
 
     private final LogSourceRepository logSourceRepository;
+    private final ProjectRepository projectRepository;
 
     /**
      * 创建日志源
@@ -66,6 +69,15 @@ public class LogSourceService {
         logSource.setDesensitizationEnabled(request.getDesensitizationEnabled() != null ? request.getDesensitizationEnabled() : false);
         logSource.setEnabledRuleIds(request.getEnabledRuleIds());
         logSource.setCustomRules(convertToCustomRules(request.getCustomRules()));
+        // 处理项目关联
+        if (request.getProjectId() != null) {
+            // 验证项目是否存在
+            Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
+            if (projectOpt.isEmpty()) {
+                throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
+            }
+            logSource.setProjectId(request.getProjectId());
+        }
 
         LogSource saved = logSourceRepository.save(logSource);
         log.info("创建日志源成功: {} - {}", saved.getId(), saved.getName());
@@ -191,6 +203,18 @@ public class LogSourceService {
             }
             if (request.getCustomRules() != null) {
                 existing.setCustomRules(convertToCustomRules(request.getCustomRules()));
+            }
+            // 处理项目关联
+            if (request.getProjectId() != null) {
+                // 验证项目是否存在
+                Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
+                if (projectOpt.isEmpty()) {
+                    throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
+                }
+                existing.setProjectId(request.getProjectId());
+            } else {
+                // 如果传入null，则清除项目关联
+                existing.setProjectId(null);
             }
 
             LogSource saved = logSourceRepository.save(existing);
@@ -331,6 +355,12 @@ public class LogSourceService {
         response.setDesensitizationEnabled(logSource.getDesensitizationEnabled());
         response.setEnabledRuleIds(logSource.getEnabledRuleIds());
         response.setCustomRules(convertFromCustomRules(logSource.getCustomRules()));
+        // 项目关联
+        response.setProjectId(logSource.getProjectId());
+        if (logSource.getProjectId() != null) {
+            Optional<Project> projectOpt = projectRepository.findById(logSource.getProjectId());
+            projectOpt.ifPresent(project -> response.setProjectName(project.getName()));
+        }
         return response;
     }
 }

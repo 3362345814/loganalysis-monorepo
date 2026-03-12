@@ -1,7 +1,7 @@
 package com.evelin.loganalysis.logcollection.controller;
 
-import com.evelin.loganalysis.logcollection.collector.LocalFileCollector;
-import com.evelin.loganalysis.logcollection.collector.LocalFileCollectorFactory;
+import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
+import com.evelin.loganalysis.logcollection.collector.LogCollector;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
@@ -42,7 +42,7 @@ public class LogCollectionController {
 
     private final LogSourceService logSourceService;
     private final RawLogEventService rawLogEventService;
-    private final LocalFileCollectorFactory collectorFactory;
+    private final CollectorFactory collectorFactory;
 
     // ==================== 日志源管理 ====================
 
@@ -145,7 +145,7 @@ public class LogCollectionController {
         }
 
         // 3. 创建并启动采集器
-        LocalFileCollector collector = collectorFactory.create(source);
+        LogCollector collector = collectorFactory.create(source);
         collector.start();
 
         // 4. 更新数据库状态
@@ -177,7 +177,7 @@ public class LogCollectionController {
         LogSource source = sourceOpt.get();
 
         // 2. 停止采集器
-        LocalFileCollector collector = collectorFactory.get(source);
+        LogCollector collector = collectorFactory.get(source);
         if (collector != null) {
             collector.stop();
             collectorFactory.remove(source);
@@ -210,7 +210,7 @@ public class LogCollectionController {
         LogSource source = sourceOpt.get();
 
         // 2. 获取采集器状态
-        LocalFileCollector collector = collectorFactory.get(source);
+        LogCollector collector = collectorFactory.get(source);
 
         Map<String, Object> status = new HashMap<>();
         status.put("sourceId", sourceId);
@@ -244,7 +244,7 @@ public class LogCollectionController {
         }
 
         LogSource source = sourceOpt.get();
-        LocalFileCollector collector = collectorFactory.get(source);
+        LogCollector collector = collectorFactory.get(source);
 
         Map<String, Object> result = new HashMap<>();
         result.put("sourceId", sourceId);
@@ -272,7 +272,7 @@ public class LogCollectionController {
 
         List<Map<String, Object>> statusList = runningSources.stream()
                 .map(source -> {
-                    LocalFileCollector collector = collectorFactory.get(source);
+                    LogCollector collector = collectorFactory.get(source);
                     Map<String, Object> status = new HashMap<>();
                     status.put("sourceId", source.getId());
                     status.put("sourceName", source.getName());
@@ -311,19 +311,22 @@ public class LogCollectionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) LocalDateTime startTime,
-            @RequestParam(required = false) LocalDateTime endTime) {
+            @RequestParam(required = false) LocalDateTime endTime,
+            @RequestParam(required = false) String logLevel) {
 
-        // 验证日志源是否存在
         if (logSourceService.findById(sourceId).isEmpty()) {
             return Result.error("日志源不存在: " + sourceId);
         }
 
         Page<RawLogEventEntity> logPage;
-        if (startTime != null && endTime != null) {
-            // 时间范围查询
+        
+        if (logLevel != null && !logLevel.isEmpty() && startTime != null && endTime != null) {
+            logPage = rawLogEventService.findBySourceIdAndLogLevelAndTimeRange(sourceId, logLevel, startTime, endTime, page, size);
+        } else if (logLevel != null && !logLevel.isEmpty()) {
+            logPage = rawLogEventService.findBySourceIdAndLogLevel(sourceId, logLevel, page, size);
+        } else if (startTime != null && endTime != null) {
             logPage = rawLogEventService.findBySourceIdAndTimeRange(sourceId, startTime, endTime, page, size);
         } else {
-            // 查询所有（不带时间过滤）
             logPage = rawLogEventService.findBySourceId(sourceId, page, size);
         }
 

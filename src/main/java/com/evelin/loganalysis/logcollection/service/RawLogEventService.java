@@ -157,6 +157,18 @@ public class RawLogEventService {
                 sourceId, startTime, endTime, pageable);
     }
 
+    public Page<RawLogEventEntity> findBySourceIdAndLogLevel(UUID sourceId, String logLevel, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return rawLogEventRepository.findBySourceIdAndLogLevelOrderByCollectionTimeDesc(sourceId, logLevel, pageable);
+    }
+
+    public Page<RawLogEventEntity> findBySourceIdAndLogLevelAndTimeRange(
+            UUID sourceId, String logLevel, LocalDateTime startTime, LocalDateTime endTime, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return rawLogEventRepository.findBySourceIdAndLogLevelAndCollectionTimeBetweenOrderByCollectionTimeDesc(
+                sourceId, logLevel, startTime, endTime, pageable);
+    }
+
     /**
      * 根据内容模糊查询
      *

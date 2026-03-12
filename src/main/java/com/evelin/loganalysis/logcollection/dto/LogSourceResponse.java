@@ -113,4 +113,14 @@ public class LogSourceResponse {
      * 备注
      */
     private String remark;
+
+    /**
+     * 所属项目ID
+     */
+    private UUID projectId;
+
+    /**
+     * 所属项目名称
+     */
+    private String projectName;
 }

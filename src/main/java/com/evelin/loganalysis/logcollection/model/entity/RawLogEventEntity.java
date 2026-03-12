@@ -36,7 +36,9 @@ import java.util.Map;
         @Index(name = "idx_raw_event_id", columnList = "event_id"),
         @Index(name = "idx_raw_source_id", columnList = "source_id"),
         @Index(name = "idx_raw_collection_time", columnList = "collection_time"),
-        @Index(name = "idx_raw_file_path", columnList = "file_path")
+        @Index(name = "idx_raw_file_path", columnList = "file_path"),
+        @Index(name = "idx_raw_log_level", columnList = "log_level"),
+        @Index(name = "idx_raw_log_time", columnList = "log_time")
     }
 )
 public class RawLogEventEntity extends BaseEntity {
@@ -120,6 +122,18 @@ public class RawLogEventEntity extends BaseEntity {
     private Boolean masked;
 
     /**
+     * 日志级别（从解析字段中提取，方便查询）
+     */
+    @Column(name = "log_level", length = 20)
+    private String logLevel;
+
+    /**
+     * 日志时间（从解析字段中提取，方便查询）
+     */
+    @Column(name = "log_time")
+    private LocalDateTime logTime;
+
+    /**
      * 解析后的字段（JSON格式）
      * 包含: logTime, logLevel, threadName, loggerName, className, message, 
      *       exceptionType, exceptionMessage, stackTrace, traceId 等
@@ -136,6 +150,26 @@ public class RawLogEventEntity extends BaseEntity {
      * @return 实体
      */
     public static RawLogEventEntity from(com.evelin.loganalysis.logcollection.model.RawLogEvent dto) {
+        Map<String, Object> parsedFields = dto.getParsedFields();
+        String logLevel = null;
+        LocalDateTime logTime = null;
+        
+        if (parsedFields != null) {
+            Object level = parsedFields.get("logLevel");
+            if (level != null) {
+                logLevel = level.toString();
+            }
+            Object time = parsedFields.get("logTime");
+            if (time instanceof String) {
+                try {
+                    logTime = LocalDateTime.parse((String) time);
+                } catch (Exception e) {
+                }
+            } else if (time instanceof LocalDateTime) {
+                logTime = (LocalDateTime) time;
+            }
+        }
+        
         return RawLogEventEntity.builder()
                 .eventId(dto.getEventId())
                 .sourceId(dto.getSourceId())
@@ -150,7 +184,9 @@ public class RawLogEventEntity extends BaseEntity {
                 .fileMtime(dto.getFileMtime())
                 .desensitizedContent(dto.getDesensitizedContent())
                 .masked(dto.getMasked())
-                .parsedFields(dto.getParsedFields())
+                .logLevel(logLevel)
+                .logTime(logTime)
+                .parsedFields(parsedFields)
                 .build();
     }
 }

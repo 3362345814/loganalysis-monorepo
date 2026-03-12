@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 
 /**
@@ -92,4 +93,9 @@ public class LogSourceUpdateRequest {
      * 备注
      */
     private String remark;
+
+    /**
+     * 所属项目ID
+     */
+    private UUID projectId;
 }

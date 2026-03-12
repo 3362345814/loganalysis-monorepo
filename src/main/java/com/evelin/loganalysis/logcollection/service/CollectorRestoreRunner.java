@@ -1,7 +1,7 @@
 package com.evelin.loganalysis.logcollection.service;
 
-import com.evelin.loganalysis.logcollection.collector.LocalFileCollector;
-import com.evelin.loganalysis.logcollection.collector.LocalFileCollectorFactory;
+import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
+import com.evelin.loganalysis.logcollection.collector.LogCollector;
 import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,7 @@ import java.util.List;
 public class CollectorRestoreRunner implements ApplicationRunner {
 
     private final LogSourceService logSourceService;
-    private final LocalFileCollectorFactory collectorFactory;
+    private final CollectorFactory collectorFactory;
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -49,12 +49,6 @@ public class CollectorRestoreRunner implements ApplicationRunner {
                     continue;
                 }
 
-                // 检查是否已经是 LOCAL_FILE 类型
-                if (source.getSourceType() != com.evelin.loganalysis.logcommon.enums.LogSourceType.LOCAL_FILE) {
-                    log.info("Skipping non-LOCAL_FILE source: {} - {}", source.getId(), source.getName());
-                    continue;
-                }
-
                 // 检查是否已存在运行中的采集器
                 if (collectorFactory.get(source) != null && collectorFactory.get(source).isRunning()) {
                     log.info("Collector already running: {} - {}", source.getId(), source.getName());
@@ -62,7 +56,7 @@ public class CollectorRestoreRunner implements ApplicationRunner {
                 }
 
                 // 创建并启动采集器
-                LocalFileCollector collector = collectorFactory.create(source);
+                LogCollector collector = collectorFactory.create(source);
                 collector.start();
 
                 log.info("Successfully restored collector: {} - {}", source.getId(), source.getName());

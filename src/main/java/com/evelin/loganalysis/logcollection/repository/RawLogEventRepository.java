@@ -87,6 +87,18 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
             UUID sourceId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
 
     /**
+     * 根据日志源ID和日志级别查询
+     */
+    Page<RawLogEventEntity> findBySourceIdAndLogLevelOrderByCollectionTimeDesc(
+            UUID sourceId, String logLevel, Pageable pageable);
+
+    /**
+     * 根据日志源ID、日志级别和时间范围查询
+     */
+    Page<RawLogEventEntity> findBySourceIdAndLogLevelAndCollectionTimeBetweenOrderByCollectionTimeDesc(
+            UUID sourceId, String logLevel, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+
+    /**
      * 根据内容模糊查询
      *
      * @param content   模糊内容

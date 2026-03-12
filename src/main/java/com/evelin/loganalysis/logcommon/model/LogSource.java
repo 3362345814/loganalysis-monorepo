@@ -10,6 +10,7 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 日志源实体
@@ -134,6 +135,12 @@ public class LogSource extends BaseEntity {
      */
     @Column(name = "remark", length = 500)
     private String remark;
+
+    /**
+     * 所属项目ID
+     */
+    @Column(name = "project_id")
+    private UUID projectId;
 
     /**
      * 是否启用脱敏

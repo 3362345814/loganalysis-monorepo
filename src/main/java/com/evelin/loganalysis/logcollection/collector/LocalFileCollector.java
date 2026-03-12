@@ -760,6 +760,10 @@ public class LocalFileCollector implements LogCollector {
      * @param lineNumber 当前行的物理行号
      */
     private void processMultiLineLog(String line, long lineNumber) {
+        if (!running.get()) {
+            return;
+        }
+
         boolean isLogStart = isLogStart(line);
 
         if (isLogStart) {
@@ -784,6 +788,9 @@ public class LocalFileCollector implements LogCollector {
      * 刷新多行日志缓冲区
      */
     private void flushMultiLineBuffer() {
+        if (!running.get()) {
+            return;
+        }
         if (!multiLineBuffer.isEmpty()) {
             String logContent = multiLineBuffer.toString();
             processLine(logContent, multiLineStartLineNumber);
@@ -797,6 +804,11 @@ public class LocalFileCollector implements LogCollector {
      */
     private void processLine(String line, long lineNumber) {
         try {
+            // 检查是否已停止，如果是则不处理
+            if (!running.get()) {
+                return;
+            }
+
             RawLogEvent event = RawLogEvent.create(
                     logSource.getId(),
                     logSource.getName(),
@@ -816,8 +828,13 @@ public class LocalFileCollector implements LogCollector {
                 log.warn("Log queue is full, line dropped: lineNumber={}, queueSize={}", event.getLineNumber(), logQueue.size());
             }
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.info("Collector interrupted, stopping: name={}", getName());
         } catch (Exception e) {
-            log.error("Failed to process line: content={}", line, e);
+            if (running.get()) {
+                log.error("Failed to process line: content={}", line, e);
+            }
         }
     }
 

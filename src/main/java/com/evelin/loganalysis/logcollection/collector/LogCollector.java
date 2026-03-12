@@ -1,6 +1,9 @@
 package com.evelin.loganalysis.logcollection.collector;
 
 import com.evelin.loganalysis.logcollection.model.CollectionState;
+import com.evelin.loganalysis.logcollection.model.RawLogEvent;
+
+import java.util.concurrent.BlockingQueue;
 
 /**
  * 日志采集器接口
@@ -80,4 +83,11 @@ public interface LogCollector {
      * @return 健康状态，true表示健康
      */
     boolean isHealthy();
+
+    /**
+     * 获取日志队列
+     *
+     * @return 日志事件阻塞队列
+     */
+    BlockingQueue<RawLogEvent> getLogQueue();
 }
