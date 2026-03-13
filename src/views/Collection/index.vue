@@ -44,7 +44,11 @@
             <el-tag>{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="path" label="路径" min-width="180" show-overflow-tooltip />
+        <el-table-column label="路径" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatPaths(row.paths) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="logFormat" label="格式" width="100">
           <template #default="{ row }">
             <el-tag type="info">{{ getLogFormatText(row.logFormat) }}</el-tag>
@@ -135,9 +139,32 @@
           </el-form-item>
         </template>
         
-        <el-form-item label="路径" prop="path">
-          <el-input v-model="form.path" :placeholder="form.sourceType === 'SSH' ? '远程日志文件绝对路径，如 /var/log/app.log' : '日志文件路径，如 /var/log/app.log'" />
+        <el-form-item label="日志格式" prop="logFormat">
+          <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
+            <el-option label="Spring Boot" value="SPRING_BOOT" />
+            <el-option label="Nginx" value="NGINX" />
+          </el-select>
+          <span class="form-tip">选择日志格式以支持多行日志（如Java堆栈）合并</span>
         </el-form-item>
+
+        <!-- Spring Boot Log 配置 -->
+        <template v-if="form.logFormat === 'SPRING_BOOT'">
+          <el-form-item label="日志路径" prop="paths">
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/application.log" />
+            <span class="form-tip">Spring Boot日志只支持单个文件路径，不支持通配符</span>
+          </el-form-item>
+        </template>
+
+        <!-- Nginx Log 配置 -->
+        <template v-if="form.logFormat === 'NGINX'">
+          <el-form-item label="Access日志" prop="paths">
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/nginx/access.log" />
+          </el-form-item>
+          <el-form-item label="Error日志" prop="paths">
+            <el-input v-model="form.paths[1]" placeholder="如: /var/log/nginx/error.log" />
+          </el-form-item>
+        </template>
+        
         <el-form-item label="编码" prop="encoding">
           <el-select v-model="form.encoding" placeholder="选择编码">
             <el-option label="UTF-8" value="UTF-8" />
@@ -145,17 +172,7 @@
             <el-option label="GB2312" value="GB2312" />
           </el-select>
         </el-form-item>
-        <el-form-item label="日志格式" prop="logFormat">
-          <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
-            <el-option label="Spring Boot" value="SPRING_BOOT" />
-            <el-option label="Log4j" value="LOG4J" />
-            <el-option label="Nginx" value="NGINX" />
-            <el-option label="JSON" value="JSON" />
-            <el-option label="普通文本" value="PLAIN_TEXT" />
-            <el-option label="自定义正则" value="CUSTOM" />
-          </el-select>
-          <span class="form-tip">选择日志格式以支持多行日志（如Java堆栈）合并</span>
-        </el-form-item>
+        
         <el-form-item label="自定义正则" v-if="form.logFormat === 'CUSTOM'">
           <el-input v-model="form.customPattern" placeholder="请输入自定义正则表达式，如 ^\\d{4}-\\d{2}-\\d{2}" />
           <span class="form-tip">用于匹配日志开始行，正则需匹配日志行首</span>
@@ -382,20 +399,38 @@ const form = ref({
   port: 22,
   username: '',
   password: '',
-  path: '',
+  paths: [],
   encoding: 'UTF-8',
   logFormat: 'SPRING_BOOT',
+  logFormatPattern: '',
   customPattern: '',
-  description: ''
+  description: '',
+  config: {
+    accessLogPath: '',
+    errorLogPath: ''
+  }
 })
 
 const rules = {
   name: [{ required: true, message: '请输入采集源名称', trigger: 'blur' }],
-  path: [{ required: true, message: '请输入日志文件路径', trigger: 'blur' }],
+  paths: [{ 
+    validator: (rule, value, callback) => {
+      if (!value || value.length === 0) {
+        callback(new Error('请输入日志文件路径'))
+      } else if (form.value.logFormat === 'SPRING_BOOT' && value.length > 1) {
+        callback(new Error('Spring Boot日志只支持单个文件路径'))
+      } else if (form.value.logFormat === 'NGINX' && value.length !== 2) {
+        callback(new Error('Nginx日志需要两个文件路径（access.log和error.log）'))
+      } else {
+        callback()
+      }
+    }, 
+    trigger: 'blur' 
+  }],
   sourceType: [{ required: true, message: '请选择类型', trigger: 'change' }],
   host: [{ required: true, message: '请输入SSH主机地址', trigger: 'blur' }],
   username: [{ required: true, message: '请输入SSH用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入SSH密码', trigger: 'blur' }]
+  password: [{ required: true, message: '请输入SSH密码', trigger: 'blur' }],
 }
 
 const getStatusType = (status) => {
@@ -410,11 +445,7 @@ const getStatusType = (status) => {
 const getLogFormatText = (format) => {
   const map = {
     'SPRING_BOOT': 'Spring Boot',
-    'LOG4J': 'Log4j',
-    'NGINX': 'Nginx',
-    'JSON': 'JSON',
-    'PLAIN_TEXT': '文本',
-    'CUSTOM': '自定义'
+    'NGINX': 'Nginx'
   }
   return map[format] || 'Spring Boot'
 }
@@ -432,18 +463,35 @@ const formatTime = (time) => {
   return time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
 }
 
+const formatPaths = (paths) => {
+  if (!paths || !Array.isArray(paths)) {
+    return '-'
+  }
+  return paths.join(', ')
+}
+
 // 日志格式变更处理
 const handleLogFormatChange = (value) => {
   if (value !== 'CUSTOM') {
     form.value.customPattern = ''
+  }
+  if (value === 'SPRING_BOOT') {
+    form.value.paths = ['']
+  } else if (value === 'NGINX') {
+    form.value.paths = ['', '']
   }
 }
 
 const loadSources = async () => {
   loading.value = true
   try {
-    const res = await logSourceApi.getAll()
-    sources.value = res.data || []
+    if (currentProject.value && currentProject.value.id) {
+      const res = await logSourceApi.getByProjectId(currentProject.value.id)
+      sources.value = res.data || []
+    } else {
+      const res = await logSourceApi.getAll()
+      sources.value = res.data || []
+    }
   } catch (error) {
     console.error('加载采集源失败:', error)
   } finally {
@@ -504,14 +552,19 @@ const handleCreateSource = () => {
     port: 22,
     username: '',
     password: '',
-    path: '',
+    paths: [],
     encoding: 'UTF-8',
     logFormat: 'SPRING_BOOT',
+    logFormatPattern: '',
     customPattern: '',
     description: '',
     desensitizationEnabled: false,
     enabledRuleIds: [],
-    customRules: []
+    customRules: [],
+    config: {
+      accessLogPath: '',
+      errorLogPath: ''
+    }
   }
   dialogVisible.value = true
 }
@@ -540,11 +593,29 @@ const selectProject = (project) => {
 
 const handleEdit = (row) => {
   isEdit.value = true
+  
+  let parsedPaths = []
+  if (row.paths && Array.isArray(row.paths)) {
+    parsedPaths = row.paths
+  } else if (row.path) {
+    parsedPaths = [row.path]
+    if (row.filePattern) {
+      const patterns = row.filePattern.split(',').map(p => p.trim()).filter(p => p)
+      parsedPaths = [...parsedPaths, ...patterns]
+    }
+  }
+  
   form.value = { 
     ...row,
+    paths: parsedPaths,
     desensitizationEnabled: row.desensitizationEnabled || false,
     enabledRuleIds: row.enabledRuleIds || [],
-    customRules: row.customRules || []
+    customRules: row.customRules || [],
+    logFormatPattern: row.logFormatPattern || '',
+    config: row.config || {
+      accessLogPath: '',
+      errorLogPath: ''
+    }
   }
   dialogVisible.value = true
 }
@@ -574,17 +645,30 @@ const handleSubmit = async () => {
 
   submitting.value = true
   try {
+    const submitData = { ...form.value }
+    
+    if (submitData.logFormat === 'NGINX') {
+      if (submitData.paths && submitData.paths.length >= 2) {
+        submitData.config = {
+          ...submitData.config,
+          accessLogPath: submitData.paths[0],
+          errorLogPath: submitData.paths[1]
+        }
+      }
+    }
+    
     if (isEdit.value) {
-      await logSourceApi.update(form.value.id, form.value)
+      await logSourceApi.update(form.value.id, submitData)
       ElMessage.success('更新成功')
     } else {
-      await logSourceApi.create(form.value)
+      await logSourceApi.create(submitData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
     loadSources()
   } catch (error) {
     console.error('保存失败:', error)
+    ElMessage.error(error.response?.data?.message || '保存失败')
   } finally {
     submitting.value = false
   }

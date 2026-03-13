@@ -69,6 +69,9 @@ export const logSourceApi = {
   // 获取所有日志源
   getAll: () => service.get('/collection/sources'),
   
+  // 根据项目ID获取日志源
+  getByProjectId: (projectId) => service.get(`/collection/sources/project/${projectId}`),
+  
   // 获取单个日志源
   getById: (id) => service.get(`/collection/sources/${id}`),
   
