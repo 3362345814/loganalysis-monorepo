@@ -40,14 +40,24 @@ public class LogSourceResponse {
     private String logFormat;
 
     /**
+     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
+     */
+    private String logFormatPattern;
+
+    /**
      * 自定义日志格式正则表达式
      */
     private String customPattern;
 
     /**
-     * 日志路径
+     * 额外配置（JSON格式）
      */
-    private String path;
+    private java.util.Map<String, Object> config;
+
+    /**
+     * 日志路径列表（JSON格式）
+     */
+    private List<String> paths;
 
     /**
      * 主机地址

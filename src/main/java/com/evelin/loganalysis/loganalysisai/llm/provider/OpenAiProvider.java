@@ -11,9 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -38,8 +35,6 @@ public class OpenAiProvider implements LlmProvider {
     private static final String DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
     private static final String OPENAI_CHAT_COMPLETION_API = "/v1/chat/completions";
     private static final String ARK_CHAT_COMPLETION_API = "/chat/completions";
-
-    private static final String DEBUG_LOG_PATH = "/Users/cityseason/Documents/graduation_project/project/.cursor/debug-eac913.log";
     
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
@@ -117,19 +112,6 @@ public class OpenAiProvider implements LlmProvider {
             
             log.info("调用 LLM API, 提供商: {}, 模型: {}", provider, model);
 
-            debugNdjson("pre-request", Map.of(
-                    "provider", provider,
-                    "model", model,
-                    "baseUrl", baseUrl,
-                    "path", apiPath,
-                    "fullUrl", fullUrl,
-                    "timeoutSec", timeout,
-                    "maxTokens", maxTokens,
-                    "temperature", temperature,
-                    "promptLen", request.getPrompt() != null ? request.getPrompt().length() : 0,
-                    "systemPromptLen", request.getSystemPrompt() != null ? request.getSystemPrompt().length() : 0
-            ));
-            
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
                     .header("Content-Type", "application/json")
@@ -144,19 +126,6 @@ public class OpenAiProvider implements LlmProvider {
             long responseTime = System.currentTimeMillis() - startTime;
 
             String body = response.body();
-            int bodyLen = body != null ? body.length() : 0;
-            String bodyHead = body == null ? "" : body.substring(0, Math.min(300, body.length()));
-            debugNdjson("post-response", Map.of(
-                    "provider", provider,
-                    "model", model,
-                    "baseUrl", baseUrl,
-                    "path", apiPath,
-                    "fullUrl", fullUrl,
-                    "statusCode", response.statusCode(),
-                    "responseTimeMs", responseTime,
-                    "bodyLen", bodyLen,
-                    "bodyHead", bodyHead
-            ));
             
             // 解析响应
             if (response.statusCode() == 200) {
@@ -174,10 +143,6 @@ public class OpenAiProvider implements LlmProvider {
             
         } catch (Exception e) {
             log.error("OpenAI API 调用失败: {}", e.getMessage(), e);
-            debugNdjson("exception", Map.of(
-                    "errorClass", e.getClass().getName(),
-                    "message", String.valueOf(e.getMessage())
-            ));
             LlmResponse errorResponse = new LlmResponse();
             errorResponse.setStatus("error");
             errorResponse.setErrorMessage(e.getMessage());
@@ -321,25 +286,6 @@ public class OpenAiProvider implements LlmProvider {
         return response;
     }
 
-    private void debugNdjson(String stage, Map<String, Object> data) {
-        try {
-            long ts = System.currentTimeMillis();
-            String payload = objectMapper.writeValueAsString(Map.of(
-                    "sessionId", "eac913",
-                    "runId", "llm-http",
-                    "hypothesisId", "LLM_HTTP",
-                    "timestamp", ts,
-                    "location", "OpenAiProvider.java",
-                    "message", stage,
-                    "data", data
-            ));
-            Files.writeString(Path.of(DEBUG_LOG_PATH), payload + "\n",
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (Exception ignore) {
-            // ignore
-        }
-    }
-    
     /**
      * 获取默认系统提示
      */

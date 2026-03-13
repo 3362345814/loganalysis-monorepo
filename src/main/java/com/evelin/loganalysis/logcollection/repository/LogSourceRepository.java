@@ -96,4 +96,12 @@ public interface LogSourceRepository extends JpaRepository<LogSource, UUID> {
      * @return 是否存在
      */
     boolean existsByName(String name);
+
+    /**
+     * 根据项目ID查找日志源
+     *
+     * @param projectId 项目ID
+     * @return 日志源列表
+     */
+    List<LogSource> findByProjectId(UUID projectId);
 }

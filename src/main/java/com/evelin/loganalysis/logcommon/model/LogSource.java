@@ -53,16 +53,53 @@ public class LogSource extends BaseEntity {
     private LogFormat logFormat;
 
     /**
+     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
+     * 例如: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent
+     */
+    @Column(name = "log_format_pattern", length = 1000)
+    private String logFormatPattern;
+
+    public String getLogFormatPattern() {
+        return logFormatPattern;
+    }
+
+    public void setLogFormatPattern(String logFormatPattern) {
+        this.logFormatPattern = logFormatPattern;
+    }
+
+    /**
      * 自定义日志格式正则表达式（当 logFormat 为 CUSTOM 时使用）
      */
     @Column(name = "custom_pattern", length = 500)
     private String customPattern;
 
     /**
-     * 日志路径（文件路径、URL等）
+     * 日志路径（JSON格式存储，支持多种日志类型）
+     * 
+     * 结构设计（未来可扩展添加新的日志类型）：
+     * 
+     * SpringBoot日志 - 单个路径：
+     * {
+     *   "type": "SPRING_BOOT",
+     *   "paths": ["/var/log/myapp/application.log"]
+     * }
+     * 
+     * Nginx日志 - 两个路径（access和error）+ 日志格式：
+     * {
+     *   "type": "NGINX",
+     *   "paths": ["/var/log/nginx/access.log", "/var/log/nginx/error.log"],
+     *   "logFormatPattern": "$remote_addr - $remote_user [$time_local] \"$request\" $status"
+     * }
+     * 
+     * Generic/其他日志类型：
+     * {
+     *   "type": "LOCAL_FILE",
+     *   "paths": ["/var/log/app.log"]
+     * }
      */
-    @Column(name = "path", nullable = false, length = 500)
-    private String path;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "paths", columnDefinition = "jsonb")
+    private Map<String, Object> paths;
 
     /**
      * 主机地址（远程采集时使用）
@@ -195,5 +232,42 @@ public class LogSource extends BaseEntity {
          * 替换内容
          */
         private String replacement;
+    }
+
+    @SuppressWarnings("unchecked")
+    public String getPath() {
+        if (this.paths == null) {
+            return null;
+        }
+        Object pathsObj = this.paths.get("paths");
+        if (pathsObj instanceof List && ((List<?>) pathsObj).size() > 0) {
+            return (String) ((List<?>) pathsObj).get(0);
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public String getFilePattern() {
+        if (this.paths == null) {
+            return null;
+        }
+        Object pathsObj = this.paths.get("paths");
+        if (pathsObj instanceof List && ((List<?>) pathsObj).size() > 1) {
+            List<String> pathList = (List<String>) pathsObj;
+            return String.join(",", pathList.subList(1, pathList.size()));
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getPathsList() {
+        if (this.paths == null) {
+            return null;
+        }
+        Object pathsObj = this.paths.get("paths");
+        if (pathsObj instanceof List) {
+            return (List<String>) pathsObj;
+        }
+        return null;
     }
 }

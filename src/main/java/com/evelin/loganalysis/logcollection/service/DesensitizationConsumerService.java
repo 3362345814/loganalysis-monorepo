@@ -5,8 +5,8 @@ import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
 import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
-import com.evelin.loganalysis.logprocessing.pipeline.LogProcessingPipeline;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
+import com.evelin.loganalysis.logprocessing.pipeline.LogProcessingPipeline;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -196,7 +196,9 @@ public class DesensitizationConsumerService {
                 message.getOffset(),
                 message.getRawContent().getBytes().length,
                 null, // inode
-                message.getCollectionTime()
+                message.getCollectionTime(),
+                message.getLogFormat(),
+                message.getLogFormatPattern()
         );
     }
 
@@ -218,20 +220,20 @@ public class DesensitizationConsumerService {
                 try {
                     // 调用完整的处理管道
                     var processingResult = logProcessingPipeline.process(event);
-                    
+
                     if (processingResult.isSuccess() && processingResult.getParsedEvent() != null) {
                         // 解析成功，提取字段
                         ParsedLogEvent parsed = processingResult.getParsedEvent();
                         event.setParsedFields(convertToMap(parsed));
-                        
+
                         // 如果有聚合结果，更新聚合组ID
                         if (processingResult.getAggregationResult() != null) {
                             event.setAggregationGroupId(processingResult.getAggregationResult().getGroupId());
                         }
-                        
-                        log.debug("Log processed successfully, groupId: {}", 
-                                processingResult.getAggregationResult() != null ? 
-                                processingResult.getAggregationResult().getGroupId() : "N/A");
+
+//                        log.debug("Log processed successfully, groupId: {}",
+//                                processingResult.getAggregationResult() != null ?
+//                                processingResult.getAggregationResult().getGroupId() : "N/A");
                     }
                 } catch (Exception e) {
                     log.warn("Failed to process log event: {}", event.getEventId(), e);
@@ -241,7 +243,7 @@ public class DesensitizationConsumerService {
             // 保存到数据库
             rawLogEventService.saveAll(toSave);
             log.info("Saved {} log events to database", toSave.size());
-            
+
         } catch (Exception e) {
             log.error("Failed to flush batch to database, retrying...", e);
         }
@@ -252,6 +254,7 @@ public class DesensitizationConsumerService {
      */
     private Map<String, Object> convertToMap(ParsedLogEvent parsed) {
         Map<String, Object> map = new HashMap<>();
+
         if (parsed.getLogTime() != null) {
             map.put("logTime", parsed.getLogTime().toString());
         }
@@ -291,8 +294,11 @@ public class DesensitizationConsumerService {
         if (parsed.getTags() != null && !parsed.getTags().isEmpty()) {
             map.put("tags", parsed.getTags());
         }
+
         if (parsed.getParsedFields() != null && !parsed.getParsedFields().isEmpty()) {
-            map.put("customFields", parsed.getParsedFields());
+            for (Map.Entry<String, Object> entry : parsed.getParsedFields().entrySet()) {
+                map.put(entry.getKey(), entry.getValue());
+            }
         }
         return map;
     }

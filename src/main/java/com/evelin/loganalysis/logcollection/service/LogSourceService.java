@@ -5,7 +5,10 @@ import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
 import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
+import com.evelin.loganalysis.logcollection.util.LogPathSerializer;
+import com.evelin.loganalysis.logcollection.validation.LogPathValidator;
 import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
+import com.evelin.loganalysis.logcommon.enums.LogFormat;
 import com.evelin.loganalysis.logcommon.enums.LogSourceType;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import com.evelin.loganalysis.logcommon.model.Project;
@@ -16,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,6 +36,7 @@ public class LogSourceService {
 
     private final LogSourceRepository logSourceRepository;
     private final ProjectRepository projectRepository;
+    private final LogPathValidator logPathValidator;
 
     /**
      * 创建日志源
@@ -41,15 +46,36 @@ public class LogSourceService {
      */
     @Transactional
     public LogSourceResponse create(LogSourceCreateRequest request) {
-        // 检查名称是否已存在
         if (logSourceRepository.existsByName(request.getName())) {
             throw new IllegalArgumentException("日志源名称已存在: " + request.getName());
+        }
+
+        LogFormat logFormat = null;
+        if (request.getLogFormat() != null) {
+            logFormat = LogFormat.valueOf(request.getLogFormat());
+        }
+
+        if (logFormat != null) {
+            LogPathValidator.ValidationResult validationResult = logPathValidator.validatePaths(
+                logFormat, 
+                request.getPaths()
+            );
+            if (!validationResult.isValid()) {
+                throw new IllegalArgumentException(validationResult.getErrorMessage());
+            }
         }
 
         LogSource logSource = new LogSource();
         logSource.setName(request.getName());
         logSource.setDescription(request.getDescription());
-        logSource.setPath(request.getPath());
+        
+        Map<String, Object> pathsMap = LogPathSerializer.createPathsMap(
+            logFormat,
+            request.getPaths(),
+            request.getLogFormatPattern()
+        );
+        logSource.setPaths(pathsMap);
+        
         logSource.setHost(request.getHost());
         logSource.setPort(request.getPort());
         logSource.setUsername(request.getUsername());
@@ -58,20 +84,20 @@ public class LogSourceService {
         logSource.setEnabled(request.getEnabled() != null ? request.getEnabled() : true);
         logSource.setSourceType(LogSourceType.valueOf(request.getSourceType() != null ? request.getSourceType() : "LOCAL_FILE"));
         logSource.setStatus(CollectionStatus.STOPPED);
-        // 处理日志格式
-        if (request.getLogFormat() != null) {
-            logSource.setLogFormat(com.evelin.loganalysis.logcommon.enums.LogFormat.valueOf(request.getLogFormat()));
+        
+        if (logFormat != null) {
+            logSource.setLogFormat(logFormat);
         }
         logSource.setCustomPattern(request.getCustomPattern());
+        logSource.setLogFormatPattern(request.getLogFormatPattern());
         logSource.setConfig(request.getConfig());
         logSource.setRemark(request.getRemark());
-        // 处理脱敏配置
+        
         logSource.setDesensitizationEnabled(request.getDesensitizationEnabled() != null ? request.getDesensitizationEnabled() : false);
         logSource.setEnabledRuleIds(request.getEnabledRuleIds());
         logSource.setCustomRules(convertToCustomRules(request.getCustomRules()));
-        // 处理项目关联
+        
         if (request.getProjectId() != null) {
-            // 验证项目是否存在
             Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
             if (projectOpt.isEmpty()) {
                 throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
@@ -140,6 +166,18 @@ public class LogSourceService {
     }
 
     /**
+     * 根据项目ID查询日志源
+     *
+     * @param projectId 项目ID
+     * @return 日志源列表
+     */
+    public List<LogSourceResponse> findByProjectId(UUID projectId) {
+        return logSourceRepository.findByProjectId(projectId).stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * 更新日志源
      *
      * @param id      日志源ID
@@ -150,7 +188,6 @@ public class LogSourceService {
     public Optional<LogSourceResponse> update(UUID id, LogSourceUpdateRequest request) {
         return logSourceRepository.findById(id).map(existing -> {
             if (request.getName() != null) {
-                // 检查新名称是否被其他日志源使用
                 Optional<LogSource> byName = logSourceRepository.findByName(request.getName());
                 if (byName.isPresent() && !byName.get().getId().equals(id)) {
                     throw new IllegalArgumentException("日志源名称已存在: " + request.getName());
@@ -160,9 +197,27 @@ public class LogSourceService {
             if (request.getDescription() != null) {
                 existing.setDescription(request.getDescription());
             }
-            if (request.getPath() != null) {
-                existing.setPath(request.getPath());
+            
+            if (request.getPaths() != null) {
+                LogFormat logFormat = existing.getLogFormat();
+                if (logFormat != null) {
+                    LogPathValidator.ValidationResult validationResult = logPathValidator.validatePaths(
+                        logFormat,
+                        request.getPaths()
+                    );
+                    if (!validationResult.isValid()) {
+                        throw new IllegalArgumentException(validationResult.getErrorMessage());
+                    }
+                }
+                
+                Map<String, Object> pathsMap = LogPathSerializer.createPathsMap(
+                    existing.getLogFormat(),
+                    request.getPaths(),
+                    request.getLogFormatPattern() != null ? request.getLogFormatPattern() : existing.getLogFormatPattern()
+                );
+                existing.setPaths(pathsMap);
             }
+            
             if (request.getHost() != null) {
                 existing.setHost(request.getHost());
             }
@@ -187,14 +242,17 @@ public class LogSourceService {
             if (request.getRemark() != null) {
                 existing.setRemark(request.getRemark());
             }
-            // 处理日志格式
+            
             if (request.getLogFormat() != null) {
-                existing.setLogFormat(com.evelin.loganalysis.logcommon.enums.LogFormat.valueOf(request.getLogFormat()));
+                existing.setLogFormat(LogFormat.valueOf(request.getLogFormat()));
             }
             if (request.getCustomPattern() != null) {
                 existing.setCustomPattern(request.getCustomPattern());
             }
-            // 处理脱敏配置
+            if (request.getLogFormatPattern() != null) {
+                existing.setLogFormatPattern(request.getLogFormatPattern());
+            }
+            
             if (request.getDesensitizationEnabled() != null) {
                 existing.setDesensitizationEnabled(request.getDesensitizationEnabled());
             }
@@ -204,16 +262,14 @@ public class LogSourceService {
             if (request.getCustomRules() != null) {
                 existing.setCustomRules(convertToCustomRules(request.getCustomRules()));
             }
-            // 处理项目关联
+            
             if (request.getProjectId() != null) {
-                // 验证项目是否存在
                 Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
                 if (projectOpt.isEmpty()) {
                     throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
                 }
                 existing.setProjectId(request.getProjectId());
             } else {
-                // 如果传入null，则清除项目关联
                 existing.setProjectId(null);
             }
 
@@ -339,8 +395,13 @@ public class LogSourceService {
         response.setDescription(logSource.getDescription());
         response.setSourceType(logSource.getSourceType() != null ? logSource.getSourceType().name() : null);
         response.setLogFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
+        response.setLogFormatPattern(logSource.getLogFormatPattern());
         response.setCustomPattern(logSource.getCustomPattern());
-        response.setPath(logSource.getPath());
+        response.setConfig(logSource.getConfig());
+        
+        List<String> paths = LogPathSerializer.deserializePaths(logSource.getPaths());
+        response.setPaths(paths);
+        
         response.setHost(logSource.getHost());
         response.setPort(logSource.getPort());
         response.setEncoding(logSource.getEncoding());
@@ -351,11 +412,11 @@ public class LogSourceService {
         response.setCreatedAt(logSource.getCreatedAt());
         response.setUpdatedAt(logSource.getUpdatedAt());
         response.setRemark(logSource.getRemark());
-        // 脱敏配置
+        
         response.setDesensitizationEnabled(logSource.getDesensitizationEnabled());
         response.setEnabledRuleIds(logSource.getEnabledRuleIds());
         response.setCustomRules(convertFromCustomRules(logSource.getCustomRules()));
-        // 项目关联
+        
         response.setProjectId(logSource.getProjectId());
         if (logSource.getProjectId() != null) {
             Optional<Project> projectOpt = projectRepository.findById(logSource.getProjectId());

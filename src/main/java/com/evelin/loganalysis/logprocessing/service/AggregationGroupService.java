@@ -43,7 +43,7 @@ public class AggregationGroupService {
             group.setLastEventTime(aggregationResult.getAggregatedAt());
             group.setSeverity(aggregationResult.getSeverity());
             group.setSimilarityScore(aggregationResult.getSimilarityScore());
-            log.debug("更新聚合组: {}, 事件数: {}", group.getGroupId(), group.getEventCount());
+//            log.debug("更新聚合组: {}, 事件数: {}", group.getGroupId(), group.getEventCount());
             return aggregationGroupRepository.save(group);
         } else {
             // 创建新聚合组
@@ -61,7 +61,7 @@ public class AggregationGroupService {
             group.setSimilarityScore(aggregationResult.getSimilarityScore());
             group.setStatus("ACTIVE");
             group.setIsAnalyzed(false);
-            log.info("创建新聚合组: {}, 事件数: {}", group.getGroupId(), group.getEventCount());
+//            log.info("创建新聚合组: {}, 事件数: {}", group.getGroupId(), group.getEventCount());
             return aggregationGroupRepository.save(group);
         }
     }
@@ -164,7 +164,7 @@ public class AggregationGroupService {
         long active = aggregationGroupRepository.countByStatus("ACTIVE");
         long expired = aggregationGroupRepository.countByStatus("EXPIRED");
         long analyzed = aggregationGroupRepository.countByStatus("ANALYZED");
-        
+
         Map<String, Long> severityCounts = countBySeverity();
 
         return Map.of(

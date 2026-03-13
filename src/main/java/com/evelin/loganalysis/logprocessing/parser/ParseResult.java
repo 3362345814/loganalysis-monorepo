@@ -95,4 +95,9 @@ public class ParseResult {
      * 错误消息
      */
     private String errorMessage;
+
+    /**
+     * 日志类型
+     */
+    private String logType;
 }

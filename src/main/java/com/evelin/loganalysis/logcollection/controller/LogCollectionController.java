@@ -66,6 +66,15 @@ public class LogCollectionController {
     }
 
     /**
+     * 根据项目ID查询日志源
+     */
+    @GetMapping("/sources/project/{projectId}")
+    public Result<List<LogSourceResponse>> listSourcesByProject(@PathVariable UUID projectId) {
+        List<LogSourceResponse> sources = logSourceService.findByProjectId(projectId);
+        return Result.success(sources);
+    }
+
+    /**
      * 根据ID查询日志源
      */
     @GetMapping("/sources/{sourceId}")

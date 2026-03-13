@@ -35,14 +35,21 @@ public class LogSourceCreateRequest {
     private String logFormat;
 
     /**
+     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
+     */
+    private String logFormatPattern;
+
+    /**
      * 自定义日志格式正则表达式
      */
     private String customPattern;
 
     /**
-     * 日志路径
+     * 日志路径列表（JSON格式）
+     * SpringBoot: ["path/to/log/file.log"]
+     * Nginx: ["path/to/access.log", "path/to/error.log"]
      */
-    private String path;
+    private List<String> paths;
 
     /**
      * 主机地址

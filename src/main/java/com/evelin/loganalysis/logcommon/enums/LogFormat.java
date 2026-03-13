@@ -19,10 +19,25 @@ public enum LogFormat {
     LOG4J,
 
     /**
-     * Nginx 日志格式
-     * 示例: 127.0.0.1 - - [10/Mar/2026:11:37:02 +0000] "GET /path HTTP/1.1" 200 123
+     * Nginx 日志（通用，用于采集配置）
+     * 采集时会同时采集 access 和 error 日志
+     * 解析时使用 NGINX_ACCESS 和 NGINX_ERROR
      */
     NGINX,
+
+    /**
+     * Nginx Access 日志
+     * 用户需要提供 log_format 字符串来生成解析正则
+     * 示例: 192.168.97.4 - - [13/Mar/2026:05:13:17 +0000] "POST /api/orders HTTP/1.1" 201 95
+     */
+    NGINX_ACCESS,
+
+    /**
+     * Nginx Error 日志
+     * 固定格式解析
+     * 示例: 2026/03/13 14:26:31 [error] 1234#1234: *5678 upstream timed out
+     */
+    NGINX_ERROR,
 
     /**
      * JSON 格式日志

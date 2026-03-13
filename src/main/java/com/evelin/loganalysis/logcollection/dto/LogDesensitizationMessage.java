@@ -75,6 +75,12 @@ public class LogDesensitizationMessage implements Serializable {
     private String customPattern;
 
     /**
+     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
+     * 例如: $remote_addr - $remote_user [$time_local] "$request" $status
+     */
+    private String logFormatPattern;
+
+    /**
      * 脱敏配置
      */
     private DesensitizationConfig desensitizationConfig;

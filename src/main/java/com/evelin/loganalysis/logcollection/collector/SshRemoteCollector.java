@@ -447,7 +447,8 @@ public class SshRemoteCollector implements LogCollector {
                     filePointer,
                     line.getBytes(charset).length,
                     "",
-                    java.time.LocalDateTime.now()
+                    java.time.LocalDateTime.now(),
+                    logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null
             );
 
             boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
@@ -481,7 +482,8 @@ public class SshRemoteCollector implements LogCollector {
             case "LOG4J":
                 return line.matches("^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}.*");
             case "NGINX":
-                return line.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}.*");
+                return line.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}.*") 
+                    || line.matches("^\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}.*");
             case "JSON":
                 return line.trim().startsWith("{");
             default:
@@ -599,6 +601,7 @@ public class SshRemoteCollector implements LogCollector {
                         .offset(event.getFileOffset())
                         .collectionTime(event.getCollectionTime())
                         .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
+                        .logFormatPattern(logSource.getLogFormatPattern())
                         .customPattern(logSource.getCustomPattern())
                         .desensitizationConfig(buildDesensitizationConfig())
                         .build();

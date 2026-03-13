@@ -39,6 +39,17 @@ public class RawLogEvent {
     private String sourceName;
 
     /**
+     * 日志格式类型
+     */
+    private String logFormat;
+
+    /**
+     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
+     * 例如: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent
+     */
+    private String logFormatPattern;
+
+    /**
      * 文件路径
      */
     private String filePath;
@@ -104,7 +115,19 @@ public class RawLogEvent {
      */
     public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,
                                      String rawContent, Long lineNumber, Long fileOffset,
-                                     Integer byteLength, String fileInode, LocalDateTime fileMtime) {
+                                     Integer byteLength, String fileInode, LocalDateTime fileMtime,
+                                     String logFormat) {
+        return create(sourceId, sourceName, filePath, rawContent, lineNumber, fileOffset,
+                byteLength, fileInode, fileMtime, logFormat, null);
+    }
+
+    /**
+     * 创建工厂方法（支持 logFormatPattern）
+     */
+    public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,
+                                     String rawContent, Long lineNumber, Long fileOffset,
+                                     Integer byteLength, String fileInode, LocalDateTime fileMtime,
+                                     String logFormat, String logFormatPattern) {
         return RawLogEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .sourceId(sourceId)
@@ -117,6 +140,8 @@ public class RawLogEvent {
                 .collectionTime(LocalDateTime.now())
                 .fileInode(fileInode)
                 .fileMtime(fileMtime)
+                .logFormat(logFormat)
+                .logFormatPattern(logFormatPattern)
                 .build();
     }
 }

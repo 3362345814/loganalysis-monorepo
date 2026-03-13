@@ -18,15 +18,15 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -179,6 +179,52 @@ public class LocalFileCollector implements LogCollector {
     private RabbitTemplate rabbitTemplate;
 
     /**
+     * 多文件采集支持
+     * 存储文件路径 -> 文件上下文信息的映射
+     */
+    private final Map<String, FileContext> fileContextMap = new ConcurrentHashMap<>();
+
+    /**
+     * 采集的文件模式（如果有）
+     */
+    private String[] filePatterns;
+
+    /**
+     * 是否是目录模式（path是目录且有filePattern）
+     */
+    private boolean isDirectoryMode;
+
+    /**
+     * 目录扫描间隔（毫秒）
+     */
+    private static final long DIRECTORY_SCAN_INTERVAL_MS = 5000;
+
+    /**
+     * 单个文件上下文
+     */
+    private static class FileContext {
+        private final String filePath;
+        private RandomAccessFile file;
+        private long filePointer;
+        private String currentInode;
+        private long currentFileSize;
+        private long currentFileMtime;
+        private long collectedLines;
+        private final StringBuilder multiLineBuffer = new StringBuilder();
+        private long multiLineStartLineNumber;
+        private final AtomicBoolean active = new AtomicBoolean(false);
+
+        FileContext(String filePath) {
+            this.filePath = filePath;
+        }
+
+        synchronized void resetBuffer() {
+            multiLineBuffer.setLength(0);
+            multiLineStartLineNumber = 0;
+        }
+    }
+
+    /**
      * 构造函数
      *
      * @param logSource          日志源配置
@@ -201,6 +247,31 @@ public class LocalFileCollector implements LogCollector {
         this.logQueue = new LinkedBlockingQueue<>(config.getQueueCapacity());
     }
 
+    /**
+     * 获取要采集的文件路径列表
+     * 优先使用 paths 字段（JSON格式），兼容旧的 path 字段
+     */
+    private List<String> getFilePaths() {
+        List<String> pathsList = logSource.getPathsList();
+        if (pathsList != null && !pathsList.isEmpty()) {
+            return pathsList;
+        }
+        // 兼容旧字段
+        String legacyPath = logSource.getPath();
+        if (legacyPath != null && !legacyPath.isEmpty()) {
+            return Collections.singletonList(legacyPath);
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * 判断是否使用多路径模式
+     */
+    private boolean isMultiPathMode() {
+        List<String> paths = getFilePaths();
+        return paths != null && paths.size() > 1;
+    }
+
     @Override
     public String getId() {
         return id;
@@ -220,29 +291,42 @@ public class LocalFileCollector implements LogCollector {
     public void start() {
         if (running.compareAndSet(false, true)) {
             state = CollectionState.STARTING;
-            log.info("Starting local file collector: name={}, path={}", getName(), logSource.getPath());
+            
+            List<String> filePaths = getFilePaths();
+            log.info("Starting local file collector: name={}, paths={}, multiPathMode={}",
+                    getName(), filePaths, isMultiPathMode());
 
             try {
                 // 1. 初始化线程池
                 initExecutors();
 
-                // 2. 加载检查点
-                loadCheckpoint();
+                // 2. 获取文件路径列表
+                if (filePaths.isEmpty()) {
+                    throw new IllegalArgumentException("No file paths configured for collection");
+                }
 
-                // 3. 打开文件
-                openFile();
+                // 3. 初始化多文件/目录模式
+                initMultiPathMode(filePaths);
 
-                // 4. 启动文件监听
+                // 4. 初始化所有文件
+                initAllFiles();
+
+                // 5. 启动文件监听
                 startFileWatcher();
 
-                // 5. 启动日志存储消费者（将日志存入数据库）
+                // 6. 启动日志存储消费者（将日志存入数据库）
                 startConsumer();
 
-                // 6. 启动读取循环
+                // 7. 启动读取循环
                 startReadLoop();
 
-                // 7. 启动检查点定时保存
+                // 8. 启动检查点定时保存
                 startCheckpointScheduler();
+
+                // 9. 启动目录扫描线程（如果需要）
+                if (isDirectoryMode) {
+                    startDirectoryScanner();
+                }
 
                 state = CollectionState.RUNNING;
                 log.info("Local file collector started successfully: name={}", getName());
@@ -255,6 +339,217 @@ public class LocalFileCollector implements LogCollector {
         } else {
             log.warn("Collector is already running: name={}", getName());
         }
+    }
+
+    /**
+     * 初始化多路径模式
+     */
+    private void initMultiPathMode(List<String> filePaths) {
+        if (filePaths.size() > 1) {
+            isDirectoryMode = false;
+            log.info("Multi-path mode enabled: {} files", filePaths.size());
+        } else {
+            String singlePath = filePaths.get(0);
+            File pathFile = new File(singlePath);
+            if (pathFile.isDirectory()) {
+                isDirectoryMode = true;
+                filePatterns = null;
+                log.info("Directory mode enabled: path={}", singlePath);
+            } else {
+                isDirectoryMode = false;
+                log.info("Single file mode: path={}", singlePath);
+            }
+        }
+    }
+
+    /**
+     * 初始化所有文件
+     */
+    private void initAllFiles() {
+        List<String> filePaths = getFilePaths();
+        
+        if (isDirectoryMode) {
+            // 目录模式：扫描目录下的文件
+            scanAndInitFiles();
+        } else {
+            // 单文件或多路径模式：初始化所有指定的文件到 fileContextMap
+            for (String filePath : filePaths) {
+                if (!fileContextMap.containsKey(filePath)) {
+                    FileContext ctx = new FileContext(filePath);
+                    fileContextMap.put(filePath, ctx);
+                    loadCheckpointForFile(filePath);
+                    try {
+                        openFileForContext(ctx);
+                        log.info("Initialized file for collection: {}", filePath);
+                    } catch (IOException e) {
+                        log.error("Failed to open file: {}", filePath, e);
+                    }
+                }
+            }
+            
+            // 设置监控目录为第一个文件的父目录
+            if (!filePaths.isEmpty()) {
+                watchPath = Paths.get(filePaths.get(0)).getParent();
+            }
+        }
+    }
+
+    /**
+     * 扫描目录并初始化匹配的文件
+     */
+    private void scanAndInitFiles() {
+        List<String> filePaths = getFilePaths();
+        String dirPath = filePaths.isEmpty() ? logSource.getPath() : filePaths.get(0);
+        
+        // 如果只有一个路径且是目录，使用该目录
+        if (filePaths.size() == 1 && new File(filePaths.get(0)).isDirectory()) {
+            dirPath = filePaths.get(0);
+        }
+        
+        File dir = new File(dirPath);
+
+        if (!dir.exists() || !dir.isDirectory()) {
+            log.warn("Directory does not exist or is not a directory: {}", dirPath);
+            return;
+        }
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir.toPath())) {
+            for (Path entry : stream) {
+                if (!Files.isRegularFile(entry)) {
+                    continue;
+                }
+
+                String fileName = entry.getFileName().toString();
+                if (matchesPattern(fileName)) {
+                    String fullPath = entry.toAbsolutePath().toString();
+                    if (!fileContextMap.containsKey(fullPath)) {
+                        FileContext ctx = new FileContext(fullPath);
+                        fileContextMap.put(fullPath, ctx);
+
+                        // 加载该文件的检查点
+                        loadCheckpointForFile(fullPath);
+
+                        // 打开文件
+                        openFileForContext(ctx);
+
+                        log.info("Initialized file for collection: {}", fullPath);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.error("Failed to scan directory: {}", dirPath, e);
+        }
+    }
+
+    /**
+     * 检查文件名是否匹配任意一个模式
+     */
+    private boolean matchesPattern(String fileName) {
+        if (filePatterns == null || filePatterns.length == 0) {
+            return false;
+        }
+
+        for (String pattern : filePatterns) {
+            // 支持通配符 * 
+            if (pattern.contains("*")) {
+                String regex = pattern.replace(".", "\\.").replace("*", ".*");
+                if (fileName.matches(regex)) {
+                    return true;
+                }
+            } else if (pattern.equals(fileName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 启动目录扫描线程
+     */
+    private void startDirectoryScanner() {
+        watcherExecutor.submit(() -> {
+            log.info("Directory scanner started for: {}", logSource.getPath());
+            while (running.get()) {
+                try {
+                    Thread.sleep(DIRECTORY_SCAN_INTERVAL_MS);
+
+                    // 检查是否有新文件
+                    scanAndInitFiles();
+
+                    // 检查文件是否被删除
+                    checkDeletedFiles();
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    log.error("Error in directory scanner", e);
+                }
+            }
+            log.info("Directory scanner stopped for: {}", logSource.getPath());
+        });
+    }
+
+    /**
+     * 检查已删除的文件
+     */
+    private void checkDeletedFiles() {
+        Set<String> toRemove = new HashSet<>();
+
+        for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+            String path = entry.getKey();
+            if (!new File(path).exists()) {
+                log.info("File deleted, removing from collection: {}", path);
+                try {
+                    FileContext ctx = entry.getValue();
+                    if (ctx.file != null) {
+                        ctx.file.close();
+                    }
+                } catch (IOException e) {
+                    log.warn("Error closing file: {}", path, e);
+                }
+                toRemove.add(path);
+            }
+        }
+
+        fileContextMap.keySet().removeAll(toRemove);
+    }
+
+    /**
+     * 为指定文件加载检查点
+     */
+    private void loadCheckpointForFile(String filePath) {
+        CollectionCheckpoint checkpoint = checkpointManager.load(logSource.getId().toString(), filePath);
+        FileContext ctx = fileContextMap.get(filePath);
+        if (ctx != null && checkpoint != null) {
+            ctx.filePointer = checkpoint.getOffset();
+            log.info("Loaded checkpoint for file: path={}, offset={}", filePath, ctx.filePointer);
+        }
+    }
+
+    /**
+     * 为FileContext打开文件
+     */
+    private void openFileForContext(FileContext ctx) throws IOException {
+        Path path = Paths.get(ctx.filePath);
+        File fileObj = path.toFile();
+
+        if (!fileObj.exists()) {
+            log.warn("Log file not found: {}", ctx.filePath);
+            return;
+        }
+
+        // 更新文件信息
+        updateFileInfoForContext(ctx, path);
+
+        // 打开文件
+        ctx.file = new RandomAccessFile(fileObj, "r");
+        ctx.file.seek(ctx.filePointer);
+
+        log.info("Opened log file: path={}, offset={}, size={}",
+                ctx.filePath, ctx.filePointer, ctx.currentFileSize);
+
+        ctx.active.set(true);
     }
 
     @Override
@@ -411,9 +706,11 @@ public class LocalFileCollector implements LogCollector {
             case LOG4J ->
                 // Log4j 日志: 2026-03-10 11:37:02
                     "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}";
-            case NGINX ->
-                // Nginx 日志: 127.0.0.1 - -
-                    "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s+-\\s+-";
+            case NGINX, NGINX_ACCESS, NGINX_ERROR ->
+                // Nginx 日志（Access 或 Error）
+                // Access: 127.0.0.1 - -
+                // Error: 2026/03/13 14:26:31
+                    "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s+-\\s+-|^\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}";
             case JSON ->
                 // JSON 日志以 { 开头
                     "^\\{";
@@ -453,6 +750,27 @@ public class LocalFileCollector implements LogCollector {
             } catch (Exception e) {
                 // 如果无法获取inode，使用文件路径+大小+修改时间作为唯一标识
                 currentInode = filePath.toString() + "_" + currentFileSize + "_" + currentFileMtime;
+            }
+
+        } catch (IOException e) {
+            log.warn("Failed to read file attributes: path={}", filePath, e);
+        }
+    }
+
+    /**
+     * 为FileContext更新文件信息
+     */
+    private void updateFileInfoForContext(FileContext ctx, Path filePath) {
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
+            ctx.currentFileSize = attrs.size();
+            ctx.currentFileMtime = attrs.lastModifiedTime().toMillis();
+
+            try {
+                DosFileAttributes dosAttrs = Files.readAttributes(filePath, DosFileAttributes.class);
+                ctx.currentInode = String.valueOf(dosAttrs.fileKey());
+            } catch (Exception e) {
+                ctx.currentInode = filePath.toString() + "_" + ctx.currentFileSize + "_" + ctx.currentFileMtime;
             }
 
         } catch (IOException e) {
@@ -669,15 +987,27 @@ public class LocalFileCollector implements LogCollector {
      * 读取循环
      */
     private void readLoop() {
-        log.info("Read loop started: path={}", logSource.getPath());
+        List<String> filePaths = getFilePaths();
+        log.info("Read loop started: paths={}, directoryMode={}", filePaths, isDirectoryMode);
 
-        StringBuilder lineBuilder = new StringBuilder();
+        if (isDirectoryMode) {
+            readLoopDirectoryMode();
+        } else {
+            readLoopSingleFileMode();
+        }
+
+        log.info("Read loop stopped: paths={}", filePaths);
+    }
+
+    /**
+     * 单文件/多路径模式读取循环 - 使用 fileContextMap
+     */
+    private void readLoopSingleFileMode() {
         long lastCheckpointTime = System.currentTimeMillis();
         long linesSinceCheckpoint = 0;
 
         while (running.get()) {
             try {
-                // 如果暂停，等待
                 while (paused.get() && running.get()) {
                     Thread.sleep(100);
                 }
@@ -686,55 +1016,36 @@ public class LocalFileCollector implements LogCollector {
                     break;
                 }
 
-                // 读取数据
-                byte[] readBuffer = new byte[config.getReadBufferSize()];
-                int bytesRead = file.read(readBuffer, 0, readBuffer.length);
-
-                if (bytesRead == -1) {
-                    // 文件到达末尾，等待新内容
+                if (fileContextMap.isEmpty()) {
                     Thread.sleep(100);
                     continue;
                 }
 
-                // 如果读取的字节数小于缓冲区大小，只处理实际读取的部分
-                if (bytesRead < readBuffer.length) {
-                    byte[] trimmedBuffer = new byte[bytesRead];
-                    System.arraycopy(readBuffer, 0, trimmedBuffer, 0, bytesRead);
-                    readBuffer = trimmedBuffer;
-                }
+                List<String> pathsToRemove = new ArrayList<>();
 
-                // 更新文件指针到下一次读取的位置
-                filePointer += bytesRead;
+                for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+                    String filePath = entry.getKey();
+                    FileContext ctx = entry.getValue();
 
-                // 按行分割
-                String content = new String(readBuffer, logSource.getEncoding());
-                lineBuilder.append(content);
+                    if (!ctx.active.get() || ctx.file == null) {
+                        continue;
+                    }
 
-                int lineIndex;
-                while ((lineIndex = lineBuilder.indexOf("\n")) >= 0) {
-                    String line = lineBuilder.substring(0, lineIndex);
-                    lineBuilder.delete(0, lineIndex + 1);
-
-                    if (!line.isEmpty()) {
-                        // 获取当前行的物理行号
-                        long currentLineNumber = collectedLines.incrementAndGet();
-
-                        // 处理多行日志
-                        processMultiLineLog(line, currentLineNumber);
-
-                        linesSinceCheckpoint++;
-
-                        // 定期保存检查点
-                        if (linesSinceCheckpoint >= config.getCheckpointInterval()
-                                || System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
-                            // 注意：不在此处 flush 多行缓冲区，以保证多行日志的完整性
-                            // 多行日志会在遇到新的日志开始行时自动 flush
-                            saveCheckpointAsync();
-                            linesSinceCheckpoint = 0;
-                            lastCheckpointTime = System.currentTimeMillis();
-                        }
+                    try {
+                        readFromFileContext(ctx, filePath);
+                    } catch (Exception e) {
+                        log.error("Error reading from file: {}", filePath, e);
                     }
                 }
+
+                if (linesSinceCheckpoint >= config.getCheckpointInterval()
+                        || System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
+                    saveAllCheckpointsAsync();
+                    linesSinceCheckpoint = 0;
+                    lastCheckpointTime = System.currentTimeMillis();
+                }
+
+                Thread.sleep(10);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -745,11 +1056,248 @@ public class LocalFileCollector implements LogCollector {
                 break;
             }
         }
+    }
 
-        // 最后处理缓冲区中的多行日志
-        flushMultiLineBuffer();
+    /**
+     * 保存所有文件的检查点
+     */
+    private void saveAllCheckpointsAsync() {
+        for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+            String filePath = entry.getKey();
+            FileContext ctx = entry.getValue();
+            if (ctx.active.get()) {
+                saveCheckpointForFileAsync(filePath, ctx);
+            }
+        }
+    }
 
-        log.info("Read loop stopped: path={}", logSource.getPath());
+    /**
+     * 目录模式读取循环 - 支持多文件并发采集
+     */
+    private void readLoopDirectoryMode() {
+        while (running.get()) {
+            try {
+                while (paused.get() && running.get()) {
+                    Thread.sleep(100);
+                }
+
+                if (!running.get()) {
+                    break;
+                }
+
+                // 检查是否有活跃的文件需要读取
+                if (fileContextMap.isEmpty()) {
+                    Thread.sleep(100);
+                    continue;
+                }
+
+                // 遍历所有文件上下文进行读取
+                List<String> pathsToRemove = new ArrayList<>();
+
+                for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+                    String filePath = entry.getKey();
+                    FileContext ctx = entry.getValue();
+
+                    if (!ctx.active.get() || ctx.file == null) {
+                        continue;
+                    }
+
+                    try {
+                        readFromFileContext(ctx, filePath);
+                    } catch (Exception e) {
+                        log.error("Error reading from file: {}", filePath, e);
+                        ctx.active.set(false);
+                    }
+                }
+
+                // 短暂休眠避免CPU占用过高
+                Thread.sleep(10);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                log.error("Error in directory read loop", e);
+                state = CollectionState.ERROR;
+                break;
+            }
+        }
+    }
+
+    /**
+     * 从文件上下文读取数据
+     */
+    private void readFromFileContext(FileContext ctx, String filePath) throws IOException {
+        // 检查文件是否存在且大小变化
+        File fileObj = new File(filePath);
+        if (!fileObj.exists()) {
+            log.warn("File no longer exists: {}", filePath);
+            ctx.active.set(false);
+            return;
+        }
+
+        long currentSize = fileObj.length();
+        if (currentSize < ctx.currentFileSize) {
+            // 文件被轮转了，重置位置
+            log.info("File rotation detected: {} (old size: {}, new size: {})",
+                    filePath, ctx.currentFileSize, currentSize);
+            ctx.filePointer = 0;
+            ctx.resetBuffer();
+        }
+
+        // 更新文件大小
+        ctx.currentFileSize = currentSize;
+
+        // 如果没有新数据，跳过
+        if (ctx.filePointer >= ctx.currentFileSize) {
+            return;
+        }
+
+        // 移动到当前位置
+        ctx.file.seek(ctx.filePointer);
+
+        // 读取数据
+        StringBuilder lineBuilder = new StringBuilder();
+        long lastCheckpointTime = System.currentTimeMillis();
+        long linesSinceCheckpoint = 0;
+
+        byte[] readBuffer = new byte[config.getReadBufferSize()];
+        int bytesRead = ctx.file.read(readBuffer, 0, readBuffer.length);
+
+        if (bytesRead == -1) {
+            return;
+        }
+
+        if (bytesRead < readBuffer.length) {
+            byte[] trimmedBuffer = new byte[bytesRead];
+            System.arraycopy(readBuffer, 0, trimmedBuffer, 0, bytesRead);
+            readBuffer = trimmedBuffer;
+        }
+
+        ctx.filePointer += bytesRead;
+
+        String content = new String(readBuffer, logSource.getEncoding());
+        lineBuilder.append(content);
+
+        int lineIndex;
+        while ((lineIndex = lineBuilder.indexOf("\n")) >= 0) {
+            String line = lineBuilder.substring(0, lineIndex);
+            lineBuilder.delete(0, lineIndex + 1);
+
+            if (!line.isEmpty()) {
+                long currentLineNumber = ++ctx.collectedLines;
+
+                // 处理多行日志（为每个文件独立处理）
+                processMultiLineLogForContext(ctx, line, currentLineNumber, filePath);
+
+                linesSinceCheckpoint++;
+
+                // 定期保存检查点
+                if (linesSinceCheckpoint >= config.getCheckpointInterval()
+                        || System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
+                    saveCheckpointForFileAsync(filePath, ctx);
+                    linesSinceCheckpoint = 0;
+                    lastCheckpointTime = System.currentTimeMillis();
+                }
+            }
+        }
+    }
+
+    /**
+     * 为指定文件保存检查点
+     */
+    private void saveCheckpointForFileAsync(String filePath, FileContext ctx) {
+        try {
+            checkpointManager.save(
+                    logSource.getId().toString(),
+                    filePath,
+                    ctx.filePointer,
+                    ctx.currentFileSize,
+                    ctx.currentInode,
+                    java.time.LocalDateTime.now()
+            );
+        } catch (Exception e) {
+            log.warn("Failed to save checkpoint for file: {}", filePath, e);
+        }
+    }
+
+    /**
+     * 为文件上下文处理多行日志
+     */
+    private void processMultiLineLogForContext(FileContext ctx, String line, long lineNumber, String filePath) {
+        // 检查是否是日志开始行
+        if (logStartPattern != null) {
+            Matcher matcher = logStartPattern.matcher(line);
+            if (matcher.find()) {
+                // 如果缓冲区有内容，说明是多行日志的结束，发送到队列
+                if (ctx.multiLineBuffer.length() > 0) {
+                    sendToQueue(ctx.multiLineBuffer.toString(), ctx.multiLineStartLineNumber, filePath);
+                    ctx.resetBuffer();
+                }
+                // 开始新的多行日志
+                ctx.multiLineBuffer.append(line);
+                ctx.multiLineStartLineNumber = lineNumber;
+                return;
+            }
+        }
+
+        // 继续追加到多行缓冲区
+        if (ctx.multiLineBuffer.length() > 0) {
+            ctx.multiLineBuffer.append("\n").append(line);
+        } else {
+            // 没有开始的多行日志，直接发送
+            sendToQueue(line, lineNumber, filePath);
+        }
+
+        // 如果缓冲区太大，也发送到队列（防止内存溢出）
+        if (ctx.multiLineBuffer.length() > 65536) {
+            sendToQueue(ctx.multiLineBuffer.toString(), ctx.multiLineStartLineNumber, filePath);
+            ctx.resetBuffer();
+        }
+    }
+
+    /**
+     * 发送日志到队列
+     */
+    private void sendToQueue(String content, long lineNumber, String filePath) {
+        try {
+            RawLogEvent event = new RawLogEvent();
+            event.setEventId(UUID.randomUUID().toString());
+            event.setSourceId(logSource.getId());
+            event.setSourceName(logSource.getName());
+            event.setFilePath(filePath);
+            event.setRawContent(content);
+            event.setLineNumber(lineNumber);
+            event.setFileOffset(filePointer);
+            event.setByteLength(content.getBytes().length);
+            event.setCollectionTime(java.time.LocalDateTime.now());
+            event.setLogFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
+            event.setLogFormatPattern(logSource.getLogFormatPattern());
+
+            // #region agent log
+            Map<String, Object> agentData = new HashMap<>();
+            agentData.put("sourceId", logSource.getId() != null ? logSource.getId().toString() : null);
+            agentData.put("logFormat", logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
+            agentData.put("patternNull", logSource.getLogFormatPattern() == null);
+            agentData.put("patternLen", logSource.getLogFormatPattern() == null ? 0 : logSource.getLogFormatPattern().length());
+            agentData.put("patternTail", logSource.getLogFormatPattern() == null ? null : logSource.getLogFormatPattern().substring(Math.max(0, logSource.getLogFormatPattern().length() - 80)));
+            agentData.put("filePath", filePath);
+            agentData.put("lineNumber", lineNumber);
+            agentLog(
+                    "post-fix",
+                    "H2",
+                    "LocalFileCollector.java:sendToQueue:pattern_snapshot",
+                    "Collector snapshot of LogSource logFormatPattern",
+                    agentData
+            );
+            // #endregion
+
+            if (!logQueue.offer(event, 5, TimeUnit.SECONDS)) {
+                log.warn("Failed to offer log event to queue, queue is full");
+            }
+        } catch (Exception e) {
+            log.error("Failed to send log to queue", e);
+        }
     }
 
     /**
@@ -818,8 +1366,28 @@ public class LocalFileCollector implements LogCollector {
                     filePointer,
                     line.getBytes(logSource.getEncoding()).length,
                     currentInode,
-                    java.time.LocalDateTime.now()
+                    java.time.LocalDateTime.now(),
+                    logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null,
+                    logSource.getLogFormatPattern()
             );
+
+            // #region agent log
+            Map<String, Object> agentData2 = new HashMap<>();
+            agentData2.put("sourceId", logSource.getId() != null ? logSource.getId().toString() : null);
+            agentData2.put("logFormat", logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
+            agentData2.put("patternNull", logSource.getLogFormatPattern() == null);
+            agentData2.put("patternLen", logSource.getLogFormatPattern() == null ? 0 : logSource.getLogFormatPattern().length());
+            agentData2.put("patternTail", logSource.getLogFormatPattern() == null ? null : logSource.getLogFormatPattern().substring(Math.max(0, logSource.getLogFormatPattern().length() - 80)));
+            agentData2.put("filePath", logSource.getPath());
+            agentData2.put("lineNumber", lineNumber);
+            agentLog(
+                    "post-fix",
+                    "H2",
+                    "LocalFileCollector.java:processLine:pattern_snapshot",
+                    "Collector snapshot (RawLogEvent.create) of LogSource logFormatPattern",
+                    agentData2
+            );
+            // #endregion
 
             // 放入队列
             boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
@@ -837,6 +1405,62 @@ public class LocalFileCollector implements LogCollector {
             }
         }
     }
+
+    // #region agent log
+    private static final Path AGENT_DEBUG_LOG_PATH = Path.of("/Users/cityseason/Documents/graduation_project/project/.cursor/debug-d4a73b.log");
+
+    private static void agentLog(String runId, String hypothesisId, String location, String message, Map<String, Object> data) {
+        try {
+            long ts = System.currentTimeMillis();
+            StringBuilder sb = new StringBuilder(256);
+            sb.append('{')
+                    .append("\"sessionId\":\"d4a73b\",")
+                    .append("\"runId\":\"").append(escapeJson(runId)).append("\",")
+                    .append("\"hypothesisId\":\"").append(escapeJson(hypothesisId)).append("\",")
+                    .append("\"location\":\"").append(escapeJson(location)).append("\",")
+                    .append("\"message\":\"").append(escapeJson(message)).append("\",")
+                    .append("\"timestamp\":").append(ts).append(',')
+                    .append("\"data\":").append(toJsonObject(data))
+                    .append('}')
+                    .append('\n');
+            Files.writeString(
+                    AGENT_DEBUG_LOG_PATH,
+                    sb.toString(),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND
+            );
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String toJsonObject(Map<String, Object> data) {
+        if (data == null || data.isEmpty()) return "{}";
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        boolean first = true;
+        for (Map.Entry<String, Object> e : data.entrySet()) {
+            if (!first) sb.append(',');
+            first = false;
+            sb.append("\"").append(escapeJson(e.getKey())).append("\":");
+            Object v = e.getValue();
+            if (v == null) {
+                sb.append("null");
+            } else if (v instanceof Number || v instanceof Boolean) {
+                sb.append(v.toString());
+            } else {
+                sb.append("\"").append(escapeJson(String.valueOf(v))).append("\"");
+            }
+        }
+        sb.append('}');
+        return sb.toString();
+    }
+    // #endregion
 
     /**
      * 启动检查点定时保存
@@ -1031,6 +1655,7 @@ public class LocalFileCollector implements LogCollector {
                         .offset(event.getFileOffset())
                         .collectionTime(event.getCollectionTime())
                         .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
+                        .logFormatPattern(logSource.getLogFormatPattern())
                         .customPattern(logSource.getCustomPattern())
                         .desensitizationConfig(buildDesensitizationConfig())
                         .build();

@@ -1,0 +1,148 @@
+package com.evelin.loganalysis.logprocessing.parser;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@Component
+public class NginxJsonLogParser implements ParseStrategy {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+    
+    // 常见的时间字段名
+    private static final String[] TIME_FIELDS = {
+            "time_local", "timestamp", "@timestamp", "time", "datetime", "date"
+    };
+
+    @Override
+    public ParseResult parse(String content) {
+        if (content == null || content.isEmpty()) {
+            return ParseResult.builder()
+                    .success(false)
+                    .errorMessage("Empty content")
+                    .build();
+        }
+
+        try {
+            // 尝试解析为 JSON
+            JsonNode rootNode = objectMapper.readTree(content);
+            Map<String, Object> jsonMap = objectMapper.convertValue(rootNode, Map.class);
+            
+            if (jsonMap != null && !jsonMap.isEmpty()) {
+                log.debug("NginxJsonLogParser: parsed JSON with {} fields", jsonMap.size());
+                return buildParseResult(jsonMap);
+            }
+        } catch (JsonProcessingException e) {
+            log.debug("Not JSON format: {}", e.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to parse nginx JSON log: {}", e.getMessage());
+        }
+
+        return parseFallback(content);
+    }
+
+    private ParseResult buildParseResult(Map<String, Object> jsonMap) {
+        Map<String, Object> fields = new HashMap<>();
+        
+        for (Map.Entry<String, Object> entry : jsonMap.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            fields.put(key, convertValue(value));
+        }
+
+        // 尝试解析时间
+        for (String timeField : TIME_FIELDS) {
+            if (fields.containsKey(timeField)) {
+                LocalDateTime logTime = parseTimeField(timeField, fields.get(timeField));
+                if (logTime != null) {
+                    fields.put("log_time", logTime);
+                    break;
+                }
+            }
+        }
+
+        return ParseResult.builder()
+                .success(true)
+                .logType("nginx_access_json")
+                .fields(fields)
+                .build();
+    }
+
+    private LocalDateTime parseTimeField(String timeField, Object value) {
+        if (value == null) return null;
+        
+        String timeStr = value.toString().trim();
+        if (timeStr.isEmpty()) return null;
+        
+        // 尝试多种格式
+        DateTimeFormatter[] formatters = {
+            // Nginx 标准格式: 13/Mar/2026:14:59:16 +0000
+            DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss X").withLocale(java.util.Locale.US),
+            // 另一种: 13/Mar/2026:14:59:16 +00:00
+            DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss XXX").withLocale(java.util.Locale.US),
+            // ISO 格式
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+            // 简单格式
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        };
+        
+        for (DateTimeFormatter formatter : formatters) {
+            try {
+                ZonedDateTime zdt = ZonedDateTime.parse(timeStr, formatter);
+                return zdt.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+            } catch (DateTimeParseException e) {
+                // 尝试下一个
+            }
+        }
+        
+        log.debug("Failed to parse time field '{}': {}", timeField, timeStr);
+        return null;
+    }
+
+    private Object convertValue(Object value) {
+        if (value instanceof Double) {
+            Double d = (Double) value;
+            if (d == Math.floor(d) && !Double.isInfinite(d)) {
+                return d.longValue();
+            }
+            return d;
+        }
+        return value;
+    }
+
+    @Override
+    public String getFormatName() {
+        return "nginx_json";
+    }
+
+    @Override
+    public boolean supports(String content) {
+        if (content == null || content.isEmpty()) {
+            return false;
+        }
+        String trimmed = content.trim();
+        return trimmed.startsWith("{") && trimmed.endsWith("}");
+    }
+
+    private ParseResult parseFallback(String content) {
+        Map<String, Object> fields = new HashMap<>();
+        fields.put("raw_content", content);
+        
+        return ParseResult.builder()
+                .success(true)
+                .logType("unknown")
+                .fields(fields)
+                .build();
+    }
+}
