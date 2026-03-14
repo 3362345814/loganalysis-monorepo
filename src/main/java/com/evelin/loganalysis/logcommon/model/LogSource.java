@@ -59,14 +59,6 @@ public class LogSource extends BaseEntity {
     @Column(name = "log_format_pattern", length = 1000)
     private String logFormatPattern;
 
-    public String getLogFormatPattern() {
-        return logFormatPattern;
-    }
-
-    public void setLogFormatPattern(String logFormatPattern) {
-        this.logFormatPattern = logFormatPattern;
-    }
-
     /**
      * 自定义日志格式正则表达式（当 logFormat 为 CUSTOM 时使用）
      */

@@ -584,10 +584,17 @@ public class LocalFileCollector extends AbstractLogCollector {
             readBuffer = trimmedBuffer;
         }
 
-        ctx.filePointer += bytesRead;
-
         String content = new String(readBuffer, getCharset());
-        lineBuilder.append(content);
+
+        int lastNewlineIndex = content.lastIndexOf('\n');
+        if (lastNewlineIndex >= 0) {
+            String completeContent = content.substring(0, lastNewlineIndex + 1);
+            lineBuilder.append(completeContent);
+            ctx.filePointer += (lastNewlineIndex + 1);
+        } else {
+            lineBuilder.append(content);
+            ctx.filePointer += bytesRead;
+        }
 
         int lineIndex;
         while ((lineIndex = lineBuilder.indexOf("\n")) >= 0) {

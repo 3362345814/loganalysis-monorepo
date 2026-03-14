@@ -24,25 +24,19 @@ public class AccessLogParser implements ParseStrategy {
         VARIABLE_PATTERNS.put("remote_addr", "([\\d\\.]+)");
         VARIABLE_PATTERNS.put("remote_user", "(\\S+)");
         VARIABLE_PATTERNS.put("time_local", "([^\\]]+)");
-        VARIABLE_PATTERNS.put("request", "[^\\s\"]+");
-        VARIABLE_PATTERNS.put("request_method", "[A-Z]+");
-        VARIABLE_PATTERNS.put("request_uri", "\\S+");
-        VARIABLE_PATTERNS.put("http_version", "HTTP/[\\d\\.]+");
-        VARIABLE_PATTERNS.put("status", "\\d{3}");
-        VARIABLE_PATTERNS.put("body_bytes_sent", "\\d+");
-        // 带引号的字段（支持包含空格的 User-Agent）
-        VARIABLE_PATTERNS.put("http_referer", "[^\"]*|-");
-        VARIABLE_PATTERNS.put("http_user_agent", "[^\"]*");
-        VARIABLE_PATTERNS.put("http_x_forwarded_for", "[^\"]*|-");
-        VARIABLE_PATTERNS.put("upstream_addr", "[\\d\\.:]+");
-        VARIABLE_PATTERNS.put("upstream_status", "\\d{3}|-");
-        VARIABLE_PATTERNS.put("request_time", "[\\d\\.]+");
-        VARIABLE_PATTERNS.put("upstream_response_time", "[\\d\\.]+|-");
-        VARIABLE_PATTERNS.put("upstream_connect_time", "[\\d\\.]+|-");
-        VARIABLE_PATTERNS.put("upstream_header_time", "[\\d\\.]+|-");
-        VARIABLE_PATTERNS.put("rt", "[\\d\\.]+");
-        VARIABLE_PATTERNS.put("uct", "[\\d\\.]+|-");
-        VARIABLE_PATTERNS.put("uht", "[\\d\\.]+|-");
+        VARIABLE_PATTERNS.put("request", "\"(?:([A-Z]+)\\s+(\\S+)\\s+([^\"]+))\"|(\"-|\"[^\"]*\")");
+        VARIABLE_PATTERNS.put("request_method", "([A-Z]+)");
+        VARIABLE_PATTERNS.put("request_uri", "(\\S+)");
+        VARIABLE_PATTERNS.put("http_version", "(HTTP/[\\d\\.]+)");
+        VARIABLE_PATTERNS.put("status", "(\\d{3})");
+        VARIABLE_PATTERNS.put("body_bytes_sent", "(\\d+)");
+        VARIABLE_PATTERNS.put("http_referer", "(\"[^\"]*\"|-)");
+        VARIABLE_PATTERNS.put("http_user_agent", "(\"[^\"]*\"|-)");
+        VARIABLE_PATTERNS.put("http_x_forwarded_for", "(\"[^\"]*\"|-)");
+        VARIABLE_PATTERNS.put("upstream_addr", "([\\d\\.:]+)");
+        VARIABLE_PATTERNS.put("upstream_status", "(\\d{3}|-)");
+        VARIABLE_PATTERNS.put("request_time", "([\\d\\.]+)");
+        VARIABLE_PATTERNS.put("upstream_response_time", "([\\d\\.]+|-)");
         VARIABLE_PATTERNS.put("urt", "[\\d\\.]+|-");
     }
 
@@ -69,7 +63,6 @@ public class AccessLogParser implements ParseStrategy {
         
         try {
             this.pattern = Pattern.compile(regex);
-            log.info("AccessLogParser configured with format: {}", logFormat);
             log.debug("AccessLogParser regex: {}", regex);
         } catch (Exception e) {
             log.error("Failed to compile regex from log_format: {}", regex, e);
@@ -161,8 +154,6 @@ public class AccessLogParser implements ParseStrategy {
                 log.debug("Pattern matched successfully, groups: {}", matcher.groupCount());
                 return buildParseResult(matcher);
             } else {
-                log.warn("AccessLogParser: content does not match pattern, content: {}", content);
-                // 调试：尝试部分匹配
                 log.debug("Regex: {}", pattern.pattern());
             }
         } catch (Exception e) {

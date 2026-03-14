@@ -30,6 +30,7 @@ public class LogParser {
     private final NginxLogParser nginxLogParser;
     private final NginxJsonLogParser nginxJsonLogParser;
     private final AccessLogParser accessLogParser;
+    private final Log4jLogParser log4jLogParser;
 
 
     /**
@@ -102,6 +103,11 @@ public class LogParser {
             return springBootLogParser;
         }
 
+        // 其次尝试 Log4j 解析
+        if (log4jLogParser.supports(content)) {
+            return log4jLogParser;
+        }
+
         // 使用默认解析器
         return defaultLogParser;
     }
@@ -116,11 +122,17 @@ public class LogParser {
 
             // NGINX 类型需要根据配置文件中的 logType 来确定是 error 还是 access
             if ("NGINX".equals(format)) {
-                // 对于 access 日志，优先尝试 JSON 解析（支持 nginx json log）
+                // 对于 access 日志，优先尝试 JSON 解析
                 if ("access".equals(logType)) {
-                    if (jsonLogParser.supports(content) || nginxJsonLogParser.supports(content)) {
-                        return jsonLogParser.supports(content) ? jsonLogParser : nginxJsonLogParser;
+                    // 先尝试通用 JSON 解析器
+                    if (jsonLogParser.supports(content)) {
+                        return jsonLogParser;
                     }
+                    // 再尝试 Nginx JSON 解析器
+                    if (nginxJsonLogParser.supports(content)) {
+                        return nginxJsonLogParser;
+                    }
+                    // JSON 解析失败，使用普通 access log 解析器
                     return accessLogParser;
                 }
                 // 对于 error 日志
@@ -145,7 +157,9 @@ public class LogParser {
                 case "SPRING_BOOT":
                     return springBootLogParser;
                 case "LOG4J":
-                case "CUSTOM":
+                case "LOG4J1":
+                case "LOG4J2":
+                    return log4jLogParser;
                 case "PLAIN_TEXT":
                 default:
                     return defaultLogParser;
