@@ -7,14 +7,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 日志解析器主类
@@ -29,66 +26,11 @@ public class LogParser {
     private final SpringBootLogParser springBootLogParser;
     private final JsonLogParser jsonLogParser;
     private final DefaultLogParser defaultLogParser;
-    private final NielsLogParser nielsLogParser;
     private final ErrorLogParser errorLogParser;
     private final NginxLogParser nginxLogParser;
     private final NginxJsonLogParser nginxJsonLogParser;
+    private final AccessLogParser accessLogParser;
 
-    // #region agent log
-    private static final Path AGENT_DEBUG_LOG_PATH = Path.of("/Users/cityseason/Documents/graduation_project/project/.cursor/debug-d4a73b.log");
-
-    private static void agentLog(String runId, String hypothesisId, String location, String message, Map<String, Object> data) {
-        try {
-            long ts = System.currentTimeMillis();
-            StringBuilder sb = new StringBuilder(256);
-            sb.append('{')
-              .append("\"sessionId\":\"d4a73b\",")
-              .append("\"runId\":\"").append(escapeJson(runId)).append("\",")
-              .append("\"hypothesisId\":\"").append(escapeJson(hypothesisId)).append("\",")
-              .append("\"location\":\"").append(escapeJson(location)).append("\",")
-              .append("\"message\":\"").append(escapeJson(message)).append("\",")
-              .append("\"timestamp\":").append(ts).append(',')
-              .append("\"data\":").append(toJsonObject(data))
-              .append('}')
-              .append('\n');
-            Files.writeString(
-                AGENT_DEBUG_LOG_PATH,
-                sb.toString(),
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND
-            );
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    private static String toJsonObject(Map<String, Object> data) {
-        if (data == null || data.isEmpty()) return "{}";
-        StringBuilder sb = new StringBuilder();
-        sb.append('{');
-        boolean first = true;
-        for (Map.Entry<String, Object> e : data.entrySet()) {
-            if (!first) sb.append(',');
-            first = false;
-            sb.append("\"").append(escapeJson(e.getKey())).append("\":");
-            Object v = e.getValue();
-            if (v == null) {
-                sb.append("null");
-            } else if (v instanceof Number || v instanceof Boolean) {
-                sb.append(v.toString());
-            } else {
-                sb.append("\"").append(escapeJson(String.valueOf(v))).append("\"");
-            }
-        }
-        sb.append('}');
-        return sb.toString();
-    }
-    // #endregion
 
     /**
      * 解析单条原始日志
@@ -102,35 +44,10 @@ public class LogParser {
         }
 
         String content = rawLogEvent.getRawContent();
-        
-        // 获取用户提供的 nginx log_format 字符串
-        String logFormatPattern = rawLogEvent.getLogFormatPattern();
 
-        // #region agent log
-        Map<String, Object> agentData = new HashMap<>();
-        agentData.put("eventId", rawLogEvent.getEventId());
-        agentData.put("sourceId", rawLogEvent.getSourceId() != null ? rawLogEvent.getSourceId().toString() : null);
-        agentData.put("logFormat", rawLogEvent.getLogFormat());
-        agentData.put("patternNull", logFormatPattern == null);
-        agentData.put("patternLen", logFormatPattern == null ? 0 : logFormatPattern.length());
-        agentData.put("patternHead", logFormatPattern == null ? null : logFormatPattern.substring(0, Math.min(80, logFormatPattern.length())));
-        agentData.put("patternTail", logFormatPattern == null ? null : logFormatPattern.substring(Math.max(0, logFormatPattern.length() - 80)));
-        agentData.put("contentHead", content.substring(0, Math.min(120, content.length())));
-        agentLog(
-            "post-fix",
-            "H1",
-            "LogParser.java:parse:pattern_snapshot",
-            "RawLogEvent logFormatPattern snapshot",
-            agentData
-        );
-        // #endregion
-        
-        ParseStrategy strategy = selectStrategy(content, rawLogEvent.getLogFormat());
-        
-        // 如果是 NginxJsonLogParser，不需要额外配置，直接解析
-        if (strategy instanceof NginxJsonLogParser) {
-            log.debug("Using NginxJsonLogParser for JSON format");
-        }
+
+        ParseStrategy strategy = selectStrategy(content, rawLogEvent.getLogFormat(), rawLogEvent.getLogType());
+
 
         // 解析日志
         ParseResult result = strategy.parse(content);
@@ -147,21 +64,21 @@ public class LogParser {
     public List<ParsedLogEvent> parseBatch(List<RawLogEvent> rawLogEvents) {
         return rawLogEvents.stream()
                 .map(this::parse)
-                .filter(e -> e != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
     /**
      * 选择解析策略
      *
-     * @param content 日志内容
+     * @param content   日志内容
      * @param logFormat 日志格式（优先使用）
      * @return 解析策略
      */
-    private ParseStrategy selectStrategy(String content, String logFormat) {
+    private ParseStrategy selectStrategy(String content, String logFormat, String logType) {
         // 如果指定了日志格式，直接使用对应的解析器
         if (logFormat != null && !logFormat.isEmpty()) {
-            return getStrategyByFormat(logFormat);
+            return getStrategyByFormat(content, logFormat, logType);
         }
 
         // 如果没有指定格式，自动检测
@@ -191,17 +108,40 @@ public class LogParser {
 
     /**
      * 根据日志格式名称获取对应的解析器
-     * 对于 NGINX，会根据 logFormatPattern 判断使用 AccessLogParser 还是 ErrorLogParser
+     * 对于 NGINX，会根据 filePath 判断使用 AccessLogParser 还是 ErrorLogParser
      */
-    private ParseStrategy getStrategyByFormat(String logFormat) {
+    private ParseStrategy getStrategyByFormat(String content, String logFormat, String logType) {
         try {
-            switch (logFormat.toUpperCase()) {
+            String format = logFormat.toUpperCase();
+
+            // NGINX 类型需要根据配置文件中的 logType 来确定是 error 还是 access
+            if ("NGINX".equals(format)) {
+                // 对于 access 日志，优先尝试 JSON 解析（支持 nginx json log）
+                if ("access".equals(logType)) {
+                    if (jsonLogParser.supports(content) || nginxJsonLogParser.supports(content)) {
+                        return jsonLogParser.supports(content) ? jsonLogParser : nginxJsonLogParser;
+                    }
+                    return accessLogParser;
+                }
+                // 对于 error 日志
+                if ("error".equals(logType)) {
+                    return errorLogParser;
+                }
+                // 默认使用 nginxLogParser
+                log.warn("[LogParser] 未配置nginx日志类型，使用默认解析器");
+                return nginxLogParser;
+            }
+
+            switch (format) {
                 case "JSON":
                     return jsonLogParser;
                 case "NGINX":
                 case "NGINX_JSON":
-                    // 使用 NginxJsonLogParser 解析 JSON 格式的 Nginx 日志
                     return nginxJsonLogParser;
+                case "NGINX_ERROR":
+                    return errorLogParser;
+                case "NGINX_ACCESS":
+                    return accessLogParser;
                 case "SPRING_BOOT":
                     return springBootLogParser;
                 case "LOG4J":

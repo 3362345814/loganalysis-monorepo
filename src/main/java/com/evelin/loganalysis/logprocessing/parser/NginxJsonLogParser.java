@@ -40,7 +40,6 @@ public class NginxJsonLogParser implements ParseStrategy {
             Map<String, Object> jsonMap = objectMapper.convertValue(rootNode, Map.class);
             
             if (jsonMap != null && !jsonMap.isEmpty()) {
-                log.debug("NginxJsonLogParser: parsed JSON with {} fields", jsonMap.size());
                 return buildParseResult(jsonMap);
             }
         } catch (JsonProcessingException e) {

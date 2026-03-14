@@ -65,6 +65,8 @@ public class RawLogEventResponse {
      * 采集时间
      */
     private LocalDateTime collectionTime;
+    private LocalDateTime originalLogTime;
+    private String logLevel;
 
     /**
      * 创建时间
@@ -107,6 +109,8 @@ public class RawLogEventResponse {
                 .rawContent(entity.getRawContent())
                 .lineNumber(entity.getLineNumber())
                 .collectionTime(entity.getCollectionTime())
+                .originalLogTime(entity.getOriginalLogTime())
+                .logLevel(entity.getLogLevel())
                 .createdAt(entity.getCreatedAt())
                 .desensitizedContent(entity.getDesensitizedContent())
                 .masked(entity.getMasked())

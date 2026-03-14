@@ -78,6 +78,8 @@ public class RawLogEvent {
      * 采集时间
      */
     private LocalDateTime collectionTime;
+    private LocalDateTime originalLogTime;  // 日志原始生成时间（从日志内容中提取）
+    private String logLevel;  // 日志级别（从解析结果中提取）
 
     /**
      * 文件inode（用于检测文件轮转）
@@ -98,6 +100,7 @@ public class RawLogEvent {
      * 是否已脱敏
      */
     private Boolean masked;
+    private String logType;  // 日志类型标识: 如 "error", "access" 等，从配置文件中读取
 
     /**
      * 解析后的字段（JSON格式）
@@ -142,6 +145,31 @@ public class RawLogEvent {
                 .fileMtime(fileMtime)
                 .logFormat(logFormat)
                 .logFormatPattern(logFormatPattern)
+                .build();
+    }
+
+    /**
+     * 创建工厂方法（支持 logFormatPattern 和 logType）
+     */
+    public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,
+                                     String rawContent, Long lineNumber, Long fileOffset,
+                                     Integer byteLength, String fileInode, LocalDateTime fileMtime,
+                                     String logFormat, String logFormatPattern, String logType) {
+        return RawLogEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .sourceId(sourceId)
+                .sourceName(sourceName)
+                .filePath(filePath)
+                .rawContent(rawContent)
+                .lineNumber(lineNumber)
+                .fileOffset(fileOffset)
+                .byteLength(byteLength)
+                .collectionTime(LocalDateTime.now())
+                .fileInode(fileInode)
+                .fileMtime(fileMtime)
+                .logFormat(logFormat)
+                .logFormatPattern(logFormatPattern)
+                .logType(logType)
                 .build();
     }
 }

@@ -81,6 +81,11 @@ public class LogDesensitizationMessage implements Serializable {
     private String logFormatPattern;
 
     /**
+     * 日志类型标识（如 error, access），从配置文件中读取
+     */
+    private String logType;
+
+    /**
      * 脱敏配置
      */
     private DesensitizationConfig desensitizationConfig;

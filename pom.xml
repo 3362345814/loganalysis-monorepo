@@ -204,13 +204,6 @@
             <artifactId>commons-lang3</artifactId>
         </dependency>
 
-        <!-- Nginx/Apache 访问日志解析 -->
-        <dependency>
-            <groupId>nl.basjes.parse.httpdlog</groupId>
-            <artifactId>httpdlog-parser</artifactId>
-            <version>6.0.0</version>
-        </dependency>
-
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>

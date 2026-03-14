@@ -1,202 +1,83 @@
 package com.evelin.loganalysis.logcollection.collector;
 
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
-import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
-import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
-import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
-import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.model.LogSource;
 import com.jcraft.jsch.*;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * SSH远程文件日志采集器
- * <p>
- * 通过SSH协议连接远程服务器，采集远程日志文件，支持：
- * - 断点续读（从上次停止位置继续读取）
- * - 文件轮转检测
- * - 实时监听（定时检查文件变化）
- * - 背压处理（有界队列缓冲采集任务）
- * <p>
- * 注意：此类不是Spring Bean，由外部（如 CollectorFactory）负责创建和管理
- *
- * @author Evelin
- */
 @Slf4j
-public class SshRemoteCollector implements LogCollector {
-
-    private final String id;
-    @Getter
-    private final LogSource logSource;
-    private final CheckpointManager checkpointManager;
-    private final CollectionConfig config;
-
-    private volatile CollectionState state = CollectionState.STOPPED;
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicBoolean paused = new AtomicBoolean(false);
-    private final AtomicLong collectedLines = new AtomicLong(0);
-
-    private final StringBuilder multiLineBuffer = new StringBuilder();
-    private long multiLineStartLineNumber = 0;
-
-    private final BlockingQueue<RawLogEvent> logQueue;
-    private final ExecutorService readerExecutor;
-    private final ExecutorService consumerExecutor;
-    private final ScheduledExecutorService checkpointScheduler;
-    private final RabbitTemplate rabbitTemplate;
+public class SshRemoteCollector extends AbstractLogCollector {
 
     private Session session;
     private ChannelSftp channelSftp;
 
-    private long filePointer = 0;
-    private long lastKnownFileSize = 0;
+    private final Map<String, FileContext> fileContextMap = new ConcurrentHashMap<>();
+    private String[] filePatterns;
+    private boolean isDirectoryMode;
+
+    private String tempDir;
+
+    private static class FileContext {
+        private final String filePath;
+        private long filePointer;
+        private long currentFileSize;
+        private long collectedLines;
+        private final StringBuilder multiLineBuffer = new StringBuilder();
+        private long multiLineStartLineNumber;
+        private final AtomicBoolean active = new AtomicBoolean(false);
+
+        FileContext(String filePath) {
+            this.filePath = filePath;
+        }
+
+        synchronized void resetBuffer() {
+            multiLineBuffer.setLength(0);
+            multiLineStartLineNumber = 0;
+        }
+    }
 
     public SshRemoteCollector(LogSource logSource,
                               CheckpointManager checkpointManager,
                               CollectionConfig config,
-                              RawLogEventService rawLogEventService,
+                              com.evelin.loganalysis.logcollection.service.RawLogEventService rawLogEventService,
                               RabbitTemplate rabbitTemplate) {
-        this.logSource = logSource;
-        this.checkpointManager = checkpointManager;
-        this.config = config;
-        this.rabbitTemplate = rabbitTemplate;
-
-        int queueCapacity = config.getQueueCapacity() > 0 ? config.getQueueCapacity() : 10000;
-        this.logQueue = new LinkedBlockingQueue<>(queueCapacity);
-
-        this.readerExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "ssh-reader-" + logSource.getName());
-            t.setDaemon(true);
-            return t;
-        });
-
-        this.consumerExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "ssh-consumer-" + logSource.getName());
-            t.setDaemon(true);
-            return t;
-        });
-
-        this.checkpointScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "ssh-checkpoint-" + logSource.getName());
-            t.setDaemon(true);
-            return t;
-        });
-
-        this.id = logSource.getId().toString();
+        super(logSource, checkpointManager, config, rabbitTemplate);
+        this.tempDir = "/tmp/ssh_log_" + logSource.getId() + "_" + System.currentTimeMillis();
     }
 
     @Override
-    public String getId() {
-        return id;
+    protected String getThreadNamePrefix() {
+        return "ssh-remote-" + getName();
     }
 
-    @Override
-    public String getName() {
-        return logSource.getName();
-    }
-
-    @Override
-    public CollectionState getState() {
-        return state;
-    }
-
-    @Override
-    public void start() {
-        if (running.compareAndSet(false, true)) {
-            state = CollectionState.RUNNING;
-            log.info("Starting SSH collector: name={}, host={}, path={}",
-                    getName(), logSource.getHost(), logSource.getPath());
-
-            try {
-                connect();
-                loadCheckpoint();
-                startReader();
-                startConsumer();
-                startCheckpointScheduler();
-                log.info("SSH collector started: name={}", getName());
-            } catch (Exception e) {
-                log.error("Failed to start SSH collector: name={}", getName(), e);
-                running.set(false);
-                state = CollectionState.ERROR;
-                throw new RuntimeException("Failed to start SSH collector", e);
-            }
-        } else {
-            log.warn("Collector already running: name={}", getName());
+    private List<String> getFilePaths() {
+        List<String> pathsList = logSource.getPathsList();
+        if (pathsList != null && !pathsList.isEmpty()) {
+            return pathsList;
         }
-    }
-
-    @Override
-    public void stop() {
-        if (running.compareAndSet(true, false)) {
-            state = CollectionState.STOPPING;
-            log.info("Stopping SSH collector: name={}", getName());
-
-            try {
-                saveCheckpointSync();
-                shutdownExecutors();
-                disconnect();
-            } catch (Exception e) {
-                log.error("Error while stopping SSH collector: name={}", getName(), e);
-            }
-
-            state = CollectionState.STOPPED;
-            log.info("SSH collector stopped: name={}, totalLines={}", getName(), collectedLines.get());
-        } else {
-            log.warn("Collector is not running: name={}", getName());
+        String legacyPath = logSource.getPath();
+        if (legacyPath != null && !legacyPath.isEmpty()) {
+            return Collections.singletonList(legacyPath);
         }
+        return Collections.emptyList();
     }
 
     @Override
-    public void pause() {
-        if (running.get() && paused.compareAndSet(false, true)) {
-            state = CollectionState.PAUSED;
-            log.info("SSH collector paused: name={}", getName());
-        }
-    }
-
-    @Override
-    public void resume() {
-        if (running.get() && paused.compareAndSet(true, false)) {
-            state = CollectionState.RUNNING;
-            log.info("SSH collector resumed: name={}", getName());
-        }
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running.get();
-    }
-
-    @Override
-    public long getCollectedLines() {
-        return collectedLines.get();
-    }
-
-    @Override
-    public boolean isHealthy() {
-        return running.get() && state == CollectionState.RUNNING && !paused.get();
-    }
-
-    public BlockingQueue<RawLogEvent> getLogQueue() {
-        return logQueue;
-    }
-
-    private void connect() throws JSchException, SftpException {
+    protected void doConnect() throws JSchException, SftpException {
         JSch jsch = new JSch();
 
         String host = logSource.getHost();
@@ -208,7 +89,6 @@ public class SshRemoteCollector implements LogCollector {
 
         session = jsch.getSession(username, host, port);
         session.setPassword(password);
-
         session.setConfig("StrictHostKeyChecking", "no");
         session.setTimeout(30000);
         session.connect();
@@ -220,7 +100,8 @@ public class SshRemoteCollector implements LogCollector {
         log.info("SSH connected successfully: host={}", host);
     }
 
-    private void disconnect() {
+    @Override
+    protected void doDisconnect() {
         try {
             if (channelSftp != null) {
                 channelSftp.exit();
@@ -234,56 +115,71 @@ public class SshRemoteCollector implements LogCollector {
         } catch (Exception e) {
             log.warn("Error disconnecting SSH: name={}", getName(), e);
         }
-    }
 
-    private void loadCheckpoint() {
-        try {
-            CollectionCheckpoint checkpoint = checkpointManager.load(
-                    logSource.getId().toString(),
-                    logSource.getPath()
-            );
-
-            if (checkpoint != null) {
-                filePointer = checkpoint.getOffset() != null ? checkpoint.getOffset() : 0;
-                lastKnownFileSize = checkpoint.getFileSize() != null ? checkpoint.getFileSize() : 0;
-                log.info("Checkpoint loaded: name={}, filePointer={}", getName(), filePointer);
-            } else {
-                filePointer = 0;
-                lastKnownFileSize = 0;
-                log.info("No checkpoint found, starting from beginning: name={}", getName());
+        File tempDirFile = new File(tempDir);
+        if (tempDirFile.exists()) {
+            File[] files = tempDirFile.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    f.delete();
+                }
             }
-        } catch (Exception e) {
-            log.warn("Failed to load checkpoint, starting from beginning: name={}", getName(), e);
-            filePointer = 0;
-            lastKnownFileSize = 0;
+            tempDirFile.delete();
         }
     }
 
-    private void saveCheckpointSync() {
-        try {
-            checkpointManager.save(
-                    logSource.getId().toString(),
-                    logSource.getPath(),
-                    filePointer,
-                    lastKnownFileSize,
-                    "",
-                    java.time.LocalDateTime.now()
-            );
-            log.info("Checkpoint saved synchronously: name={}, filePointer={}", getName(), filePointer);
-        } catch (Exception e) {
-            log.error("Failed to save checkpoint: name={}", getName(), e);
+    @Override
+    protected void doInitFiles() throws Exception {
+        List<String> filePaths = getFilePaths();
+
+        if (filePaths.isEmpty()) {
+            throw new IllegalArgumentException("No file paths configured for collection");
+        }
+
+        initMultiPathMode(filePaths);
+
+        for (String filePath : filePaths) {
+            if (!fileContextMap.containsKey(filePath)) {
+                FileContext ctx = new FileContext(filePath);
+                fileContextMap.put(filePath, ctx);
+                loadCheckpointForContext(filePath);
+                log.info("Initialized file for SSH collection: {}", filePath);
+            }
+        }
+
+        log.info("SSH collector initialized: {} files, directoryMode={}", fileContextMap.size(), isDirectoryMode);
+    }
+
+    private void initMultiPathMode(List<String> filePaths) {
+        if (filePaths.size() > 1) {
+            isDirectoryMode = false;
+            log.info("Multi-path mode enabled for SSH: {} files", filePaths.size());
+        } else {
+            isDirectoryMode = false;
+            log.info("Single file mode for SSH: path={}", filePaths.get(0));
         }
     }
 
-    private void startReader() {
-        readerExecutor.submit(this::readLoop);
+    private void loadCheckpointForContext(String filePath) {
+        CollectionCheckpoint checkpoint = checkpointManager.load(
+                logSource.getId().toString(),
+                filePath
+        );
+        FileContext ctx = fileContextMap.get(filePath);
+        if (ctx != null && checkpoint != null) {
+            ctx.filePointer = checkpoint.getOffset() != null ? checkpoint.getOffset() : 0L;
+            ctx.currentFileSize = checkpoint.getFileSize() != null ? checkpoint.getFileSize() : 0L;
+            log.info("Loaded checkpoint for SSH file: path={}, offset={}, size={}",
+                    filePath, ctx.filePointer, ctx.currentFileSize);
+        }
     }
 
-    private void readLoop() {
-        log.info("SSH read loop started: path={}", logSource.getPath());
+    @Override
+    protected void readLoop() {
+        log.info("SSH read loop started: paths={}", getFilePaths());
 
-        Charset charset = getCharset();
-        String tempFilePath = "/tmp/ssh_log_" + logSource.getId() + ".tmp";
+        long lastCheckpointTime = System.currentTimeMillis();
+        long linesSinceCheckpoint = 0;
 
         while (running.get()) {
             try {
@@ -295,39 +191,32 @@ public class SshRemoteCollector implements LogCollector {
                     break;
                 }
 
-                try {
-                    channelSftp.get(logSource.getPath(), tempFilePath);
-                } catch (SftpException e) {
-                    log.warn("Failed to download file via SFTP, retrying: path={}, error={}",
-                            logSource.getPath(), e.getMessage());
-                    Thread.sleep(2000);
-                    continue;
-                }
-
-                File tempFile = new File(tempFilePath);
-                if (!tempFile.exists() || tempFile.length() == 0) {
-                    log.warn("Downloaded file is empty or not found, retrying: path={}", logSource.getPath());
-                    Thread.sleep(2000);
-                    continue;
-                }
-
-                long currentFileSize = tempFile.length();
-
-                if (currentFileSize < lastKnownFileSize) {
-                    log.info("File rotation detected: oldSize={}, newSize={}", lastKnownFileSize, currentFileSize);
-                    filePointer = 0;
-                }
-
-                lastKnownFileSize = currentFileSize;
-
-                if (filePointer >= currentFileSize) {
+                if (fileContextMap.isEmpty()) {
                     Thread.sleep(1000);
                     continue;
                 }
 
-                processFileContent(tempFile, charset);
+                for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+                    String filePath = entry.getKey();
+                    FileContext ctx = entry.getValue();
 
-                tempFile.delete();
+                    if (!running.get()) {
+                        break;
+                    }
+
+                    try {
+                        processRemoteFile(filePath, ctx);
+                    } catch (Exception e) {
+                        log.error("Error processing remote file: {}", filePath, e);
+                    }
+                }
+
+                if (linesSinceCheckpoint >= config.getCheckpointInterval() ||
+                        System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
+                    saveAllCheckpointsAsync();
+                    linesSinceCheckpoint = 0;
+                    lastCheckpointTime = System.currentTimeMillis();
+                }
 
                 Thread.sleep(config.getFileRotateCheckIntervalMs() > 0 ?
                         config.getFileRotateCheckIntervalMs() : 1000);
@@ -336,25 +225,66 @@ public class SshRemoteCollector implements LogCollector {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                if (running.get()) {
-                    log.error("Error in SSH read loop: name={}", getName(), e);
-                    try {
-                        Thread.sleep(5000);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
+                log.error("Error in SSH read loop", e);
+                state = CollectionState.ERROR;
+                break;
             }
         }
 
-        new File(tempFilePath).delete();
-        log.info("SSH read loop stopped: name={}", getName());
+        log.info("SSH read loop stopped: paths={}", getFilePaths());
     }
 
-    private void processFileContent(File file, Charset charset) throws IOException {
+    private void processRemoteFile(String filePath, FileContext ctx) throws Exception {
+        File tempDirFile = new File(tempDir);
+        if (!tempDirFile.exists()) {
+            tempDirFile.mkdirs();
+        }
+
+        String tempFilePath = tempDir + "/" + new File(filePath).getName();
+
+        try {
+            channelSftp.get(filePath, tempFilePath);
+        } catch (SftpException e) {
+            log.error("SFTP exception during download: path={}, sftpErrorId={}, errorMessage='{}'",
+                    filePath, e.id, e.getMessage() != null ? e.getMessage() : "null", e);
+        }
+
+        File tempFile = new File(tempFilePath);
+        if (!tempFile.exists()) {
+            log.error("Downloaded file does not exist: localPath={}", tempFilePath);
+            return;
+        }
+
+        if (tempFile.length() == 0) {
+            log.warn("Downloaded file is empty: localPath={}, remotePath={}", tempFilePath, filePath);
+            return;
+        }
+
+        long currentFileSize = tempFile.length();
+
+        if (currentFileSize < ctx.currentFileSize) {
+            log.info("File rotation detected: path={}, oldSize={}, newSize={}",
+                    filePath, ctx.currentFileSize, currentFileSize);
+            ctx.filePointer = 0;
+            ctx.resetBuffer();
+        }
+
+        ctx.currentFileSize = currentFileSize;
+
+        if (ctx.filePointer >= currentFileSize) {
+            return;
+        }
+
+        processFileContent(tempFile, ctx, filePath);
+
+        tempFile.delete();
+    }
+
+    private void processFileContent(File file, FileContext ctx, String filePath) throws IOException {
+        Charset charset = getCharset();
+
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
-            raf.seek(filePointer);
+            raf.seek(ctx.filePointer);
 
             StringBuilder lineBuilder = new StringBuilder();
             byte[] readBuffer = new byte[8192];
@@ -371,7 +301,7 @@ public class SshRemoteCollector implements LogCollector {
                     readBuffer = trimmedBuffer;
                 }
 
-                filePointer += bytesRead;
+                ctx.filePointer += bytesRead;
 
                 String content = new String(readBuffer, charset);
                 lineBuilder.append(content);
@@ -382,8 +312,10 @@ public class SshRemoteCollector implements LogCollector {
                     lineBuilder.delete(0, lineIndex + 1);
 
                     if (!line.isEmpty()) {
-                        long lineNum = collectedLines.incrementAndGet();
-                        processMultiLineLog(line, lineNum);
+                        long currentLineNumber = ++ctx.collectedLines;
+                        collectedLines.incrementAndGet();
+
+                        processMultiLineLogForContext(ctx, line, currentLineNumber, filePath);
                     }
                 }
             }
@@ -391,293 +323,79 @@ public class SshRemoteCollector implements LogCollector {
             if (lineBuilder.length() > 0) {
                 String remainingLine = lineBuilder.toString();
                 if (!remainingLine.isEmpty()) {
-                    long lineNum = collectedLines.incrementAndGet();
-                    processMultiLineLog(remainingLine, lineNum);
+                    long currentLineNumber = ++ctx.collectedLines;
+                    collectedLines.incrementAndGet();
+                    processMultiLineLogForContext(ctx, remainingLine, currentLineNumber, filePath);
                 }
+            }
+
+            if (!ctx.multiLineBuffer.isEmpty()) {
+                flushMultiLineBufferForContext(ctx, filePath);
             }
         }
     }
 
-    private void processMultiLineLog(String line, long lineNumber) {
-        if (!running.get()) {
-            return;
-        }
-
+    private void processMultiLineLogForContext(FileContext ctx, String line, long lineNumber, String filePath) {
         boolean isLogStart = isLogStart(line);
 
         if (isLogStart) {
-            if (!multiLineBuffer.isEmpty()) {
-                flushMultiLineBuffer();
+            if (!ctx.multiLineBuffer.isEmpty()) {
+                String logContent = ctx.multiLineBuffer.toString();
+                processLine(logContent, ctx.multiLineStartLineNumber, filePath);
+                ctx.multiLineBuffer.setLength(0);
+                ctx.multiLineStartLineNumber = 0;
             }
-            multiLineStartLineNumber = lineNumber;
-            multiLineBuffer.append(line);
+            ctx.multiLineStartLineNumber = lineNumber;
+            ctx.multiLineBuffer.append(line);
         } else {
-            if (!multiLineBuffer.isEmpty()) {
-                multiLineBuffer.append("\n");
+            if (!ctx.multiLineBuffer.isEmpty()) {
+                ctx.multiLineBuffer.append("\n");
             }
-            multiLineBuffer.append(line);
+            ctx.multiLineBuffer.append(line);
         }
     }
 
-    private void flushMultiLineBuffer() {
+    private void flushMultiLineBufferForContext(FileContext ctx, String filePath) {
         if (!running.get()) {
             return;
         }
-        if (!multiLineBuffer.isEmpty()) {
-            String logContent = multiLineBuffer.toString();
-            processLine(logContent, multiLineStartLineNumber);
-            multiLineBuffer.setLength(0);
-            multiLineStartLineNumber = 0;
+        if (!ctx.multiLineBuffer.isEmpty()) {
+            String logContent = ctx.multiLineBuffer.toString();
+            processLine(logContent, ctx.multiLineStartLineNumber, filePath);
+            ctx.multiLineBuffer.setLength(0);
+            ctx.multiLineStartLineNumber = 0;
         }
     }
 
-    private void processLine(String line, long lineNumber) {
-        try {
-            if (!running.get()) {
-                return;
-            }
-
-            Charset charset = getCharset();
-            RawLogEvent event = RawLogEvent.create(
-                    logSource.getId(),
-                    logSource.getName(),
-                    logSource.getPath(),
-                    line,
-                    lineNumber,
-                    filePointer,
-                    line.getBytes(charset).length,
-                    "",
-                    java.time.LocalDateTime.now(),
-                    logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null
-            );
-
-            boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
-
-            if (!offered)
-                log.warn("Log queue is full, line dropped: lineNumber={}, queueSize={}",
-                        event.getLineNumber(), logQueue.size());
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.info("Collector interrupted, stopping: name={}", getName());
-        } catch (Exception e) {
-            if (running.get()) {
-                log.error("Failed to process line: content={}", line, e);
-            }
-        }
-    }
-
-    private boolean isLogStart(String line) {
-        if (line == null || line.isEmpty()) {
-            return false;
-        }
-
-        String logFormat = logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null;
-        if (logFormat == null) {
-            logFormat = "SPRING_BOOT";
-        }
-
-        switch (logFormat) {
-            case "SPRING_BOOT":
-            case "LOG4J":
-                return line.matches("^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}.*");
-            case "NGINX":
-                return line.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}.*") 
-                    || line.matches("^\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}.*");
-            case "JSON":
-                return line.trim().startsWith("{");
-            default:
-                return line.matches("^\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}.*");
-        }
-    }
-
-    private Charset getCharset() {
-        String encoding = logSource.getEncoding();
-        if (encoding == null || encoding.isEmpty()) {
-            encoding = "UTF-8";
-        }
-        try {
-            return Charset.forName(encoding);
-        } catch (Exception e) {
-            log.warn("Invalid charset: {}, using UTF-8", encoding);
-            return StandardCharsets.UTF_8;
-        }
-    }
-
-    private void startCheckpointScheduler() {
-        checkpointScheduler.scheduleAtFixedRate(
-                this::saveCheckpointAsync,
-                config.getCheckpointIntervalMs(),
-                config.getCheckpointIntervalMs(),
-                TimeUnit.MILLISECONDS
-        );
-    }
-
-    private void saveCheckpointAsync() {
-        if (!running.get()) {
-            return;
-        }
-
+    private void saveCheckpointForContextAsync(String filePath, FileContext ctx) {
         try {
             checkpointManager.save(
                     logSource.getId().toString(),
-                    logSource.getPath(),
-                    filePointer,
-                    lastKnownFileSize,
+                    filePath,
+                    ctx.filePointer,
+                    ctx.currentFileSize,
                     "",
                     java.time.LocalDateTime.now()
             );
         } catch (Exception e) {
-            log.warn("Failed to save checkpoint asynchronously", e);
+            log.warn("Failed to save checkpoint for file: {}", filePath, e);
         }
     }
 
-    private void startConsumer() {
-        consumerExecutor.submit(this::consumeLoop);
-        log.info("Started log consumer: name={}", getName());
-    }
-
-    private void consumeLoop() {
-        log.info("Consumer loop started: name={}", getName());
-
-        List<RawLogEvent> batchBuffer = new ArrayList<>();
-        long lastFlushTime = System.currentTimeMillis();
-        int batchSize = 100;
-        long flushIntervalMs = 5000;
-
-        log.info("Consumer config: batchSize={}, flushIntervalMs={}, queueCapacity={}",
-                batchSize, flushIntervalMs, logQueue.size());
-
-        while (running.get() || !logQueue.isEmpty()) {
-            try {
-                RawLogEvent event = logQueue.poll(1, TimeUnit.SECONDS);
-
-                if (event != null) {
-                    batchBuffer.add(event);
-
-                    if (batchBuffer.size() >= batchSize) {
-                        sendToRabbitMQ(batchBuffer);
-                        batchBuffer.clear();
-                        lastFlushTime = System.currentTimeMillis();
-                    }
-                }
-
-                if (!batchBuffer.isEmpty() &&
-                        System.currentTimeMillis() - lastFlushTime >= flushIntervalMs) {
-                    sendToRabbitMQ(batchBuffer);
-                    batchBuffer.clear();
-                    lastFlushTime = System.currentTimeMillis();
-                }
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Exception e) {
-                log.error("Error in consumer loop", e);
+    private void saveAllCheckpointsAsync() {
+        for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+            FileContext ctx = entry.getValue();
+            if (ctx.active.get() || ctx.filePointer > 0) {
+                saveCheckpointForContextAsync(entry.getKey(), ctx);
             }
         }
-
-        if (!batchBuffer.isEmpty()) {
-            sendToRabbitMQ(batchBuffer);
-        }
-
-        log.info("Consumer loop stopped: name={}", getName());
     }
 
-    private void sendToRabbitMQ(List<RawLogEvent> events) {
-        if (events == null || events.isEmpty()) {
+    @Override
+    protected void saveCheckpointAsync() {
+        if (!running.get()) {
             return;
         }
-
-        try {
-            for (RawLogEvent event : events) {
-                LogDesensitizationMessage message = LogDesensitizationMessage.builder()
-                        .messageId(UUID.randomUUID())
-                        .sourceId(event.getSourceId())
-                        .sourceName(event.getSourceName())
-                        .filePath(event.getFilePath())
-                        .rawContent(event.getRawContent())
-                        .lineNumber(event.getLineNumber())
-                        .offset(event.getFileOffset())
-                        .collectionTime(event.getCollectionTime())
-                        .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
-                        .logFormatPattern(logSource.getLogFormatPattern())
-                        .customPattern(logSource.getCustomPattern())
-                        .desensitizationConfig(buildDesensitizationConfig())
-                        .build();
-
-                String routingKey = "log.raw." + event.getSourceId();
-                rabbitTemplate.convertAndSend(RabbitMQConfig.LOG_EXCHANGE, routingKey, message);
-            }
-
-            log.debug("Sent {} events to RabbitMQ: name={}", events.size(), getName());
-        } catch (Exception e) {
-            log.error("Failed to send events to RabbitMQ: name={}", getName(), e);
-        }
-    }
-
-    private LogDesensitizationMessage.DesensitizationConfig buildDesensitizationConfig() {
-        return LogDesensitizationMessage.DesensitizationConfig.builder()
-                .enabled(logSource.getDesensitizationEnabled())
-                .enabledRuleIds(logSource.getEnabledRuleIds())
-                .customRules(buildCustomRules())
-                .build();
-    }
-
-    private List<LogDesensitizationMessage.DesensitizationConfig.CustomRule> buildCustomRules() {
-        if (logSource.getCustomRules() == null) {
-            return null;
-        }
-
-        return logSource.getCustomRules().stream()
-                .map(rule -> LogDesensitizationMessage.DesensitizationConfig.CustomRule.builder()
-                        .id(rule.getId())
-                        .name(rule.getName())
-                        .pattern(rule.getPattern())
-                        .maskType(rule.getMaskType())
-                        .build())
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    private void shutdownExecutors() {
-        if (readerExecutor != null && !readerExecutor.isShutdown()) {
-            readerExecutor.shutdownNow();
-            try {
-                if (!readerExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("Reader executor not terminated in time");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                readerExecutor.shutdownNow();
-            }
-        }
-
-        if (consumerExecutor != null && !consumerExecutor.isShutdown()) {
-            consumerExecutor.shutdownNow();
-            try {
-                if (!consumerExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("Consumer executor not terminated in time");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                consumerExecutor.shutdownNow();
-            }
-        }
-
-        if (checkpointScheduler != null && !checkpointScheduler.isShutdown()) {
-            checkpointScheduler.shutdownNow();
-            try {
-                if (!checkpointScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("Checkpoint scheduler not terminated in time");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                checkpointScheduler.shutdownNow();
-            }
-        }
-
-        if (logQueue != null) {
-            logQueue.clear();
-        }
+        saveAllCheckpointsAsync();
     }
 }

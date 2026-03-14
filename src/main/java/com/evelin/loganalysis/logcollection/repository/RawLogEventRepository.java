@@ -27,7 +27,7 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @param pageable 分页参数
      * @return 原始日志事件分页
      */
-    @Query("SELECT r FROM RawLogEventEntity r ORDER BY r.collectionTime DESC")
+    @Query("SELECT r FROM RawLogEventEntity r ORDER BY r.originalLogTime DESC NULLS LAST, r.collectionTime DESC")
     Page<RawLogEventEntity> findAllOrderByCollectionTimeDesc(Pageable pageable);
 
     /**
@@ -105,7 +105,7 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @param pageable  分页参数
      * @return 原始日志事件分页
      */
-    @Query("SELECT r FROM RawLogEventEntity r WHERE r.rawContent LIKE %:content% ORDER BY r.collectionTime DESC")
+    @Query("SELECT r FROM RawLogEventEntity r WHERE r.rawContent LIKE %:content% ORDER BY r.originalLogTime DESC NULLS LAST, r.collectionTime DESC")
     Page<RawLogEventEntity> findByContentContaining(@Param("content") String content, Pageable pageable);
 
     /**
@@ -116,7 +116,7 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @param pageable 分页参数
      * @return 原始日志事件分页
      */
-    @Query("SELECT r FROM RawLogEventEntity r WHERE r.sourceId = :sourceId AND r.rawContent LIKE %:content% ORDER BY r.collectionTime DESC")
+    @Query("SELECT r FROM RawLogEventEntity r WHERE r.sourceId = :sourceId AND r.rawContent LIKE %:content% ORDER BY r.originalLogTime DESC NULLS LAST, r.collectionTime DESC")
     Page<RawLogEventEntity> findBySourceIdAndContentContaining(
             @Param("sourceId") UUID sourceId, @Param("content") String content, Pageable pageable);
 

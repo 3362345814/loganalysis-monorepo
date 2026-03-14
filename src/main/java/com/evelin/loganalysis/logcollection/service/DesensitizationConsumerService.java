@@ -195,10 +195,11 @@ public class DesensitizationConsumerService {
                 message.getLineNumber(),
                 message.getOffset(),
                 message.getRawContent().getBytes().length,
-                null, // inode
+                null,
                 message.getCollectionTime(),
                 message.getLogFormat(),
-                message.getLogFormatPattern()
+                message.getLogFormatPattern(),
+                message.getLogType()
         );
     }
 
@@ -225,6 +226,16 @@ public class DesensitizationConsumerService {
                         // 解析成功，提取字段
                         ParsedLogEvent parsed = processingResult.getParsedEvent();
                         event.setParsedFields(convertToMap(parsed));
+                        
+                        // 设置日志原始生成时间
+                        if (parsed.getLogTime() != null) {
+                            event.setOriginalLogTime(parsed.getLogTime());
+                        }
+                        
+                        // 设置日志级别
+                        if (parsed.getLogLevel() != null) {
+                            event.setLogLevel(parsed.getLogLevel());
+                        }
 
                         // 如果有聚合结果，更新聚合组ID
                         if (processingResult.getAggregationResult() != null) {
@@ -255,46 +266,8 @@ public class DesensitizationConsumerService {
     private Map<String, Object> convertToMap(ParsedLogEvent parsed) {
         Map<String, Object> map = new HashMap<>();
 
-        if (parsed.getLogTime() != null) {
-            map.put("logTime", parsed.getLogTime().toString());
-        }
-        if (parsed.getLogLevel() != null) {
-            map.put("logLevel", parsed.getLogLevel());
-        }
-        if (parsed.getThreadName() != null) {
-            map.put("threadName", parsed.getThreadName());
-        }
-        if (parsed.getLoggerName() != null) {
-            map.put("loggerName", parsed.getLoggerName());
-        }
-        if (parsed.getClassName() != null) {
-            map.put("className", parsed.getClassName());
-        }
-        if (parsed.getMethodName() != null) {
-            map.put("methodName", parsed.getMethodName());
-        }
-        if (parsed.getMessage() != null) {
-            map.put("message", parsed.getMessage());
-        }
-        if (parsed.getExceptionType() != null) {
-            map.put("exceptionType", parsed.getExceptionType());
-        }
-        if (parsed.getExceptionMessage() != null) {
-            map.put("exceptionMessage", parsed.getExceptionMessage());
-        }
-        if (parsed.getStackTrace() != null) {
-            map.put("stackTrace", parsed.getStackTrace());
-        }
-        if (parsed.getTraceId() != null) {
-            map.put("traceId", parsed.getTraceId());
-        }
-        if (parsed.getCategory() != null) {
-            map.put("category", parsed.getCategory());
-        }
-        if (parsed.getTags() != null && !parsed.getTags().isEmpty()) {
-            map.put("tags", parsed.getTags());
-        }
-
+        // 只保存解析后的字段（来自解析器的 parsedFields）
+        // 不保存 message、logLevel、threadName 等通用字段
         if (parsed.getParsedFields() != null && !parsed.getParsedFields().isEmpty()) {
             for (Map.Entry<String, Object> entry : parsed.getParsedFields().entrySet()) {
                 map.put(entry.getKey(), entry.getValue());

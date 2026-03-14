@@ -98,10 +98,22 @@ public class RawLogEventEntity extends BaseEntity {
     private LocalDateTime collectionTime;
 
     /**
+     * 日志原始生成时间（从日志内容中提取）
+     */
+    @Column(name = "original_log_time")
+    private LocalDateTime originalLogTime;
+
+    /**
      * 文件inode（用于检测文件轮转）
      */
     @Column(name = "file_inode", length = 255)
     private String fileInode;
+
+    /**
+     * 日志类型标识（如 error, access），从配置文件中读取
+     */
+    @Column(name = "log_type", length = 50)
+    private String logType;
 
     /**
      * 文件最后修改时间
@@ -151,14 +163,21 @@ public class RawLogEventEntity extends BaseEntity {
      */
     public static RawLogEventEntity from(com.evelin.loganalysis.logcollection.model.RawLogEvent dto) {
         Map<String, Object> parsedFields = dto.getParsedFields();
-        String logLevel = null;
-        LocalDateTime logTime = null;
         
-        if (parsedFields != null) {
+        // 优先使用 dto 中直接设置的 logLevel（从 ParsedLogEvent.getLogLevel() 获取）
+        String logLevel = dto.getLogLevel();
+        
+        // 如果没有，则从 parsedFields 中提取
+        if (logLevel == null && parsedFields != null) {
             Object level = parsedFields.get("logLevel");
             if (level != null) {
                 logLevel = level.toString();
             }
+        }
+        
+        // 同样处理 logTime
+        LocalDateTime logTime = null;
+        if (parsedFields != null) {
             Object time = parsedFields.get("logTime");
             if (time instanceof String) {
                 try {
@@ -180,10 +199,12 @@ public class RawLogEventEntity extends BaseEntity {
                 .fileOffset(dto.getFileOffset())
                 .byteLength(dto.getByteLength())
                 .collectionTime(dto.getCollectionTime())
+                .originalLogTime(dto.getOriginalLogTime())
                 .fileInode(dto.getFileInode())
                 .fileMtime(dto.getFileMtime())
                 .desensitizedContent(dto.getDesensitizedContent())
                 .masked(dto.getMasked())
+                .logType(dto.getLogType())
                 .logLevel(logLevel)
                 .logTime(logTime)
                 .parsedFields(parsedFields)
