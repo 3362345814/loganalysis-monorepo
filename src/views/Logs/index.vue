@@ -13,24 +13,19 @@
             <el-option v-for="source in filteredSources" :key="source.id" :label="source.name" :value="source.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="日志级别">
-          <el-select v-model="filter.logLevel" placeholder="请选择日志级别" clearable style="width: 120px">
-            <el-option label="ERROR" value="ERROR" />
-            <el-option label="WARN" value="WARN" />
-            <el-option label="INFO" value="INFO" />
-            <el-option label="DEBUG" value="DEBUG" />
-            <el-option label="TRACE" value="TRACE" />
+        <el-form-item v-if="isNginxSource && availableLogFiles.length > 0" label="日志文件">
+          <el-select v-model="filter.logFiles" placeholder="选择日志文件" multiple collapse-tags collapse-tags-tooltip @change="handleLogFileChange" style="width: 200px">
+            <el-option v-for="file in availableLogFiles" :key="file.name" :label="file.name" :value="file.name" />
           </el-select>
         </el-form-item>
-        <el-form-item label="时间范围">
-          <el-date-picker
-            v-model="filter.dateRange"
-            type="datetimerange"
-            range-separator="至"
-            start-placeholder="开始时间"
-            end-placeholder="结束时间"
-            value-format="YYYY-MM-DD HH:mm:ss"
-          />
+        <el-form-item label="刷新频率">
+          <el-select v-model="filter.refreshInterval" placeholder="刷新频率" style="width: 120px">
+            <el-option label="关闭" :value="0" />
+            <el-option label="1秒" :value="1000" />
+            <el-option label="3秒" :value="3000" />
+            <el-option label="5秒" :value="5000" />
+            <el-option label="10秒" :value="10000" />
+          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
@@ -39,52 +34,62 @@
       </el-form>
     </el-card>
 
-    <!-- 日志列表 -->
-    <el-card class="table-card">
-      <el-table :data="logs" v-loading="loading" stripe max-height="600">
-        <el-table-column prop="parsedFields.logTime" label="日志时间" width="180">
-          <template #default="{ row }">
-            {{ formatLogTime(row.parsedFields) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="parsedFields.logLevel" label="级别" width="80">
-          <template #default="{ row }">
-            <el-tag :type="getLogLevelType(row.parsedFields?.logLevel)" size="small">
-              {{ row.parsedFields?.logLevel || '-' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="parsedFields.threadName" label="线程" width="120" show-overflow-tooltip />
-        <el-table-column prop="parsedFields.loggerName" label="Logger" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="rawContent" label="日志内容" min-width="300" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.parsedFields?.message || row.rawContent }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="collectionTime" label="采集时间" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.collectionTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="handleView(row)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-wrapper">
-        <el-pagination
-          v-model:current-page="filter.page"
-          v-model:page-size="filter.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-        />
+    <!-- 终端风格日志展示 -->
+    <el-card class="terminal-card">
+      <div class="terminal-header">
+        <span class="terminal-title">日志终端</span>
+        <span class="log-count">共 {{ total }} 条</span>
       </div>
+      <div class="terminal-content" ref="terminalRef" @scroll="handleScroll">
+        <div 
+          v-for="(log, index) in logs" 
+          :key="index" 
+          class="log-line"
+          :class="getLogLevelClass(log.parsedFields?.logLevel)"
+          @mouseenter="showParsedInfo(log, $event)"
+          @mouseleave="hideParsedInfo"
+        >
+          <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
+          <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
+          <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
+            {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
+          </span>
+          <span class="log-message">{{ log.rawContent || log.parsedFields?.message }}</span>
+        </div>
+        <div v-if="logs.length === 0 && !loading" class="terminal-empty">
+          暂无日志数据
+        </div>
+      </div>
+
+      <el-popover
+        v-model:visible="parsedInfoVisible"
+        :width="400"
+        trigger="manual"
+        placement="right"
+        :style="{ position: 'fixed', left: popoverX + 'px', top: popoverY + 'px', zIndex: 9999 }"
+      >
+        <template #reference>
+          <div v-if="false"></div>
+        </template>
+        <div class="parsed-info-panel">
+          <div class="parsed-info-header">
+            <span class="parsed-info-title">解析信息</span>
+            <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
+          </div>
+          <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
+            <el-table-column prop="key" label="字段名" width="140">
+              <template #default="{ row }">
+                <span class="field-key">{{ formatFieldKey(row.key) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="value" label="值">
+              <template #default="{ row }">
+                <span class="field-value">{{ formatFieldValue(row.value) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-popover>
     </el-card>
 
     <!-- 详情对话框 -->
@@ -94,15 +99,17 @@
         <el-descriptions-item label="日志源">{{ currentLog.sourceName }}</el-descriptions-item>
         <el-descriptions-item label="文件路径">{{ currentLog.filePath }}</el-descriptions-item>
         <el-descriptions-item label="行号">{{ currentLog.lineNumber }}</el-descriptions-item>
-        <el-descriptions-item label="采集时间">{{ formatTime(currentLog.collectionTime) }}</el-descriptions-item>
+        <el-descriptions-item :label="currentLog.originalLogTime ? '日志原始时间' : '采集时间'">
+          {{ formatTime(currentLog.originalLogTime || currentLog.collectionTime) }}
+        </el-descriptions-item>
         
         <!-- 解析字段 -->
         <el-descriptions-item label="日志时间" :span="2">
           {{ formatLogTime(currentLog.parsedFields) }}
         </el-descriptions-item>
         <el-descriptions-item label="日志级别">
-          <el-tag :type="getLogLevelType(currentLog.parsedFields?.logLevel)" size="small">
-            {{ currentLog.parsedFields?.logLevel || '-' }}
+          <el-tag :type="getLogLevelType(currentLog.logLevel || currentLog.parsedFields?.logLevel)" size="small">
+            {{ currentLog.logLevel || currentLog.parsedFields?.logLevel || '-' }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="线程名">{{ currentLog.parsedFields?.threadName || '-' }}</el-descriptions-item>
@@ -148,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { logSourceApi, projectApi, rawLogApi } from '@/api'
@@ -157,9 +164,26 @@ const projects = ref([])
 const sources = ref([])
 const logs = ref([])
 const loading = ref(false)
+const terminalRef = ref(null)
+let refreshTimer = null
 const total = ref(0)
 const detailVisible = ref(false)
 const currentLog = ref(null)
+const parsedInfoVisible = ref(false)
+const parsedInfoFields = ref({})
+const popoverX = ref(0)
+const popoverY = ref(0)
+
+const parsedInfoTableData = computed(() => {
+  const data = []
+  for (const key in parsedInfoFields.value) {
+    data.push({
+      key: key,
+      value: parsedInfoFields.value[key]
+    })
+  }
+  return data
+})
 
 const filter = ref({
   projectId: null,
@@ -167,8 +191,12 @@ const filter = ref({
   logLevel: null,
   dateRange: null,
   page: 1,
-  pageSize: 20
+  pageSize: 100,
+  refreshInterval: 0,
+  logFiles: []
 })
+
+const nginxLogFiles = ref([])
 
 const filteredSources = computed(() => {
   if (!filter.value.projectId) {
@@ -176,6 +204,80 @@ const filteredSources = computed(() => {
   }
   return sources.value.filter(s => s.projectId === filter.value.projectId)
 })
+
+const currentSource = computed(() => {
+  return sources.value.find(s => s.id === filter.value.sourceId)
+})
+
+const isNginxSource = computed(() => {
+  if (!currentSource.value) return false
+  const format = currentSource.value.logFormat
+  return format === 'NGINX' || format === 'NGINX_ACCESS' || format === 'NGINX_ERROR'
+})
+
+const availableLogFiles = computed(() => {
+  if (!isNginxSource.value) return []
+  return nginxLogFiles.value
+})
+
+const loadLogFilesForSource = async () => {
+  if (!filter.value.sourceId) {
+    nginxLogFiles.value = []
+    return
+  }
+  
+  if (!isNginxSource.value) {
+    nginxLogFiles.value = []
+    return
+  }
+  
+  try {
+    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const totalCount = countRes.data?.count || 0
+    
+    let allLogs = []
+    const batchSize = 1000
+    const totalPages = Math.ceil(totalCount / batchSize)
+    
+    for (let page = 0; page < totalPages; page++) {
+      const params = {
+        page: page,
+        size: batchSize
+      }
+      const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+      const logs = res.data?.content || []
+      allLogs = allLogs.concat(logs)
+    }
+    
+    const fileMap = new Map()
+    allLogs.forEach(log => {
+      const filePath = log.filePath || ''
+      const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+      if (fileName && !fileMap.has(fileName)) {
+        fileMap.set(fileName, filePath)
+      }
+    })
+    
+    nginxLogFiles.value = Array.from(fileMap.entries()).map(([name, path]) => ({
+      name,
+      path
+    }))
+    
+    const savedLogFiles = localStorage.getItem(`logFiles_${filter.value.sourceId}`)
+    if (savedLogFiles) {
+      try {
+        const parsed = JSON.parse(savedLogFiles)
+        const validFiles = parsed.filter(f => nginxLogFiles.value.some(lf => lf.name === f))
+        filter.value.logFiles = validFiles
+      } catch (e) {
+        filter.value.logFiles = []
+      }
+    }
+  } catch (error) {
+    console.error('获取日志文件列表失败:', error)
+    nginxLogFiles.value = []
+  }
+}
 
 const loadProjects = async () => {
   try {
@@ -202,41 +304,159 @@ const handleProjectChange = () => {
 
 const loadLogs = async () => {
   if (!filter.value.sourceId) {
-    ElMessage.warning('请选择日志源')
+    logs.value = []
+    total.value = 0
     return
   }
-  
-  loading.value = true
+
   try {
-    const params = {
-      page: filter.value.page - 1,
-      size: filter.value.pageSize
+    loading.value = true
+    
+    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const totalCount = countRes.data?.count || 0
+    total.value = totalCount
+    
+    let allLogs = []
+    const batchSize = 1000
+    const totalPages = Math.ceil(totalCount / batchSize)
+    
+    for (let page = 0; page < totalPages; page++) {
+      const params = {
+        page: page,
+        size: batchSize
+      }
+      const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+      const logs = res.data?.content || []
+      allLogs = allLogs.concat(logs)
     }
-    // 如果选择了时间范围，添加时间参数
-    if (filter.value.dateRange && filter.value.dateRange.length === 2) {
-      params.startTime = filter.value.dateRange[0]
-      params.endTime = filter.value.dateRange[1]
+    
+    if (filter.value.logFiles && filter.value.logFiles.length > 0) {
+      allLogs = allLogs.filter(log => {
+        const filePath = log.filePath || ''
+        const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+        return filter.value.logFiles.includes(fileName)
+      })
+      total.value = allLogs.length
     }
-    // 如果选择了日志级别，添加日志级别过滤
-    if (filter.value.logLevel) {
-      params.logLevel = filter.value.logLevel
-    }
-    const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
-    logs.value = res.data?.content || []
-    total.value = res.data?.total || 0
+    
+    const start = (filter.value.page - 1) * filter.value.pageSize
+    const end = start + filter.value.pageSize
+    logs.value = allLogs.slice(start, end)
+    
+    nextTick(() => {
+      if (terminalRef.value) {
+        terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+      }
+    })
   } catch (error) {
     console.error('加载日志失败:', error)
+    logs.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
 
+let lastScrollHeight = 0
+
+const handleScroll = (e) => {
+  const target = e.target
+  lastScrollHeight = target.scrollHeight - target.clientHeight
+  
+  if (target.scrollTop === 0 && !loading.value && filter.value.sourceId && filter.value.refreshInterval === 0) {
+    loadMoreLogsAtTop()
+  }
+}
+
+const loadMoreLogsAtTop = async () => {
+  if (!filter.value.sourceId || loading.value) return
+  
+  try {
+    loading.value = true
+    const oldLogs = [...logs.value]
+    const oldestTime = oldLogs.length > 0 ? getLogTimestamp(oldLogs[oldLogs.length - 1]) : null
+    
+    const params = {
+      page: 0,
+      size: filter.value.pageSize
+    }
+    
+    const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+    let newLogs = res.data?.content || []
+    
+    if (filter.value.logFiles && filter.value.logFiles.length > 0) {
+      newLogs = newLogs.filter(log => {
+        const filePath = log.filePath || ''
+        const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+        return filter.value.logFiles.includes(fileName)
+      })
+    }
+    
+    if (oldLogs.length > 0 && oldestTime) {
+      newLogs = newLogs.filter(log => {
+        const logTime = getLogTimestamp(log)
+        return logTime && logTime > oldestTime
+      })
+    }
+    
+    if (newLogs.length > 0) {
+      const combinedLogs = [...newLogs, ...oldLogs]
+      logs.value = combinedLogs.slice(0, 4000)
+      
+      nextTick(() => {
+        if (terminalRef.value) {
+          const newScrollHeight = terminalRef.value.scrollHeight
+          terminalRef.value.scrollTop = newScrollHeight - lastScrollHeight
+        }
+      })
+    }
+    
+    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const totalCount = countRes.data?.count || 0
+    total.value = totalCount
+    
+  } catch (error) {
+    console.error('加载更多日志失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const getLogTimestamp = (log) => {
+  // 优先使用 originalLogTime
+  if (log.originalLogTime) {
+    return new Date(log.originalLogTime).getTime()
+  }
+  if (log.collectionTime) {
+    return new Date(log.collectionTime).getTime()
+  }
+  if (log.parsedFields?.logTime) {
+    return new Date(log.parsedFields.logTime).getTime()
+  }
+  if (log.parsedFields?.timestamp) {
+    return new Date(log.parsedFields.timestamp).getTime()
+  }
+  return null
+}
+
 const handleSourceChange = () => {
   filter.value.page = 1
+  filter.value.logFiles = []
   if (filter.value.sourceId) {
-    loadLogs()
+    loadLogFilesForSource().then(() => {
+      loadLogs()
+    })
   } else {
+    nginxLogFiles.value = []
     logs.value = []
+  }
+}
+
+const handleLogFileChange = () => {
+  if (filter.value.sourceId) {
+    localStorage.setItem(`logFiles_${filter.value.sourceId}`, JSON.stringify(filter.value.logFiles))
+    filter.value.page = 1
+    loadLogs()
   }
 }
 
@@ -281,13 +501,149 @@ const formatLogTime = (parsedFields) => {
   if (!parsedFields) return '-'
   const logTime = parsedFields.logTime
   if (!logTime) return '-'
-  // 尝试解析多种时间格式
   try {
     return dayjs(logTime).format('YYYY-MM-DD HH:mm:ss')
   } catch {
     return logTime
   }
 }
+
+const getFileName = (filePath) => {
+  if (!filePath) return ''
+  return filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+}
+
+const formatLogTimeDisplay = (log) => {
+  // 优先使用 originalLogTime（从日志内容提取的原始时间）
+  if (log.originalLogTime) {
+    try {
+      return dayjs(log.originalLogTime).format('HH:mm:ss')
+    } catch {
+      return ''
+    }
+  }
+  // 其次使用 parsedFields.logTime
+  if (log.parsedFields?.logTime) {
+    try {
+      return dayjs(log.parsedFields.logTime).format('HH:mm:ss')
+    } catch {
+      return ''
+    }
+  }
+  return ''
+}
+
+const getLogLevelClass = (level) => {
+  if (!level) return 'info'
+  const l = level.toUpperCase()
+  if (l === 'ERROR' || l === 'ERR') return 'error'
+  if (l === 'WARN' || l === 'WARNING') return 'warn'
+  if (l === 'DEBUG') return 'debug'
+  if (l === 'TRACE') return 'trace'
+  return 'info'
+}
+
+const startRefresh = () => {
+  stopRefresh()
+  if (filter.value.refreshInterval > 0 && filter.value.sourceId) {
+    refreshTimer = setInterval(() => {
+      loadLogs()
+    }, filter.value.refreshInterval)
+  }
+}
+
+const stopRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+const showParsedInfo = (log, event) => {
+  const parsedFields = log.parsedFields || {}
+  
+  const info = {}
+  
+  for (const key in parsedFields) {
+    if (parsedFields[key] !== null && parsedFields[key] !== undefined) {
+      info[key] = parsedFields[key]
+    }
+  }
+  
+  if (Object.keys(info).length === 0 && log.rawContent) {
+    info['rawContent'] = log.rawContent
+  }
+  
+  parsedInfoFields.value = info
+  
+  const rect = event.target.getBoundingClientRect()
+  const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+  const scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft
+  
+  popoverX.value = rect.right + scrollLeft + 10
+  popoverY.value = rect.top + scrollTop
+  
+  parsedInfoVisible.value = true
+}
+
+const hideParsedInfo = () => {
+  parsedInfoVisible.value = false
+}
+
+const formatFieldKey = (key) => {
+  const keyMap = {
+    'timestamp': '时间戳',
+    'logTime': '日志时间',
+    'level': '日志级别',
+    'logLevel': '日志级别',
+    'message': '消息',
+    'thread': '线程',
+    'threadName': '线程名',
+    'logger': 'Logger',
+    'loggerName': 'Logger名',
+    'className': '类名',
+    'methodName': '方法名',
+    'fileName': '文件名',
+    'lineNumber': '行号',
+    'exceptionType': '异常类型',
+    'exceptionMessage': '异常消息',
+    'stackTrace': '堆栈跟踪',
+    'traceId': 'TraceID',
+    'request_method': '请求方法',
+    'request_uri': '请求URI',
+    'status': '状态码',
+    'client_ip': '客户端IP',
+    'bytes': '字节数',
+    'pid': '进程ID',
+    'tid': '线程ID',
+    'connection_id': '连接ID',
+    'rawLength': '原始长度',
+    'hasException': '包含异常',
+    'time_local': '本地时间',
+    'raw_content': '原始内容'
+  }
+  return keyMap[key] || key
+}
+
+const formatFieldValue = (value) => {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+watch(() => filter.value.refreshInterval, () => {
+  if (filter.value.sourceId) {
+    startRefresh()
+  }
+})
+
+watch(() => filter.value.sourceId, (newVal) => {
+  if (newVal) {
+    startRefresh()
+  } else {
+    stopRefresh()
+  }
+})
 
 // 根据日志级别返回 Element Plus 标签类型
 const getLogLevelType = (level) => {
@@ -313,6 +669,10 @@ onMounted(() => {
   loadProjects()
   loadSources()
 })
+
+onUnmounted(() => {
+  stopRefresh()
+})
 </script>
 
 <style scoped>
@@ -324,8 +684,152 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.table-card {
-  min-height: 500px;
+.terminal-card {
+  margin-top: 16px;
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid #333;
+}
+
+.terminal-title {
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+}
+
+.log-count {
+  color: #888;
+  font-size: 12px;
+}
+
+.terminal-content {
+  background: #0d0d0d;
+  color: #ccc;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px;
+  max-height: 600px;
+  overflow-y: auto;
+  border-radius: 0 0 4px 4px;
+}
+
+.terminal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-content::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.terminal-content::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+.log-line {
+  padding: 2px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-line:hover {
+  background: #1a1a1a;
+}
+
+.log-file-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #409eff;
+  color: #fff;
+  border-radius: 3px;
+  font-size: 11px;
+  margin-right: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.log-time {
+  color: #888;
+  margin-right: 8px;
+}
+
+.log-level {
+  display: inline-block;
+  width: 50px;
+  text-align: center;
+  margin-right: 8px;
+  font-weight: bold;
+}
+
+.log-level.error {
+  color: #ff4d4f;
+}
+
+.log-level.warn {
+  color: #faad14;
+}
+
+.log-level.info {
+  color: #1890ff;
+}
+
+.log-level.debug {
+  color: #52c41a;
+}
+
+.log-level.trace {
+  color: #722ed1;
+}
+
+.log-message {
+  color: #e6e6e6;
+}
+
+.terminal-empty {
+  text-align: center;
+  color: #666;
+  padding: 40px;
+}
+
+.parsed-info-panel {
+  padding: 0;
+}
+
+.parsed-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  background: #f5f7fa;
+}
+
+.parsed-info-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333;
+}
+
+.parsed-info-count {
+  font-size: 12px;
+  color: #909399;
+}
+
+.field-key {
+  font-weight: 500;
+  color: #606266;
+}
+
+.field-value {
+  color: #303133;
+  word-break: break-all;
 }
 
 .pagination-wrapper {
