@@ -142,6 +142,7 @@
         <el-form-item label="日志格式" prop="logFormat">
           <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
             <el-option label="Spring Boot" value="SPRING_BOOT" />
+            <el-option label="Log4j" value="LOG4J" />
             <el-option label="Nginx" value="NGINX" />
           </el-select>
           <span class="form-tip">选择日志格式以支持多行日志（如Java堆栈）合并</span>
@@ -152,6 +153,14 @@
           <el-form-item label="日志路径" prop="paths">
             <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/application.log" />
             <span class="form-tip">Spring Boot日志只支持单个文件路径，不支持通配符</span>
+          </el-form-item>
+        </template>
+
+        <!-- Log4j Log 配置 -->
+        <template v-if="form.logFormat === 'LOG4J'">
+          <el-form-item label="日志路径" prop="paths">
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" />
+            <span class="form-tip">Log4j日志只支持单个文件路径，不支持通配符</span>
           </el-form-item>
         </template>
 
@@ -417,8 +426,8 @@ const rules = {
     validator: (rule, value, callback) => {
       if (!value || value.length === 0) {
         callback(new Error('请输入日志文件路径'))
-      } else if (form.value.logFormat === 'SPRING_BOOT' && value.length > 1) {
-        callback(new Error('Spring Boot日志只支持单个文件路径'))
+      } else if ((form.value.logFormat === 'SPRING_BOOT' || form.value.logFormat === 'LOG4J') && value.length > 1) {
+        callback(new Error('该日志格式只支持单个文件路径'))
       } else if (form.value.logFormat === 'NGINX' && value.length !== 2) {
         callback(new Error('Nginx日志需要两个文件路径（access.log和error.log）'))
       } else {
@@ -445,6 +454,7 @@ const getStatusType = (status) => {
 const getLogFormatText = (format) => {
   const map = {
     'SPRING_BOOT': 'Spring Boot',
+    'LOG4J': 'Log4j',
     'NGINX': 'Nginx'
   }
   return map[format] || 'Spring Boot'
@@ -475,7 +485,7 @@ const handleLogFormatChange = (value) => {
   if (value !== 'CUSTOM') {
     form.value.customPattern = ''
   }
-  if (value === 'SPRING_BOOT') {
+  if (value === 'SPRING_BOOT' || value === 'LOG4J') {
     form.value.paths = ['']
   } else if (value === 'NGINX') {
     form.value.paths = ['', '']
