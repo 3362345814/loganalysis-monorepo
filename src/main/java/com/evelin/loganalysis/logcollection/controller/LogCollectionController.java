@@ -103,12 +103,12 @@ public class LogCollectionController {
      */
     @DeleteMapping("/sources/{sourceId}")
     public Result<Void> deleteSource(@PathVariable UUID sourceId) {
-        boolean deleted = logSourceService.delete(sourceId);
-        if (deleted) {
-            log.info("删除日志源: {}", sourceId);
+        try {
+            logSourceService.delete(sourceId);
             return Result.success(null);
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
         }
-        return Result.error("日志源不存在: " + sourceId);
     }
 
     /**

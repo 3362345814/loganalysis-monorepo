@@ -38,7 +38,8 @@ import java.util.Map;
         @Index(name = "idx_raw_collection_time", columnList = "collection_time"),
         @Index(name = "idx_raw_file_path", columnList = "file_path"),
         @Index(name = "idx_raw_log_level", columnList = "log_level"),
-        @Index(name = "idx_raw_log_time", columnList = "log_time")
+        @Index(name = "idx_raw_log_time", columnList = "log_time"),
+        @Index(name = "idx_raw_aggregation_group_id", columnList = "aggregation_group_id")
     }
 )
 public class RawLogEventEntity extends BaseEntity {
@@ -156,6 +157,12 @@ public class RawLogEventEntity extends BaseEntity {
     private Map<String, Object> parsedFields;
 
     /**
+     * 关联的聚合组ID
+     */
+    @Column(name = "aggregation_group_id", length = 50)
+    private String aggregationGroupId;
+
+    /**
      * 从 RawLogEvent DTO 创建实体
      *
      * @param dto 原始日志事件DTO
@@ -208,6 +215,7 @@ public class RawLogEventEntity extends BaseEntity {
                 .logLevel(logLevel)
                 .logTime(logTime)
                 .parsedFields(parsedFields)
+                .aggregationGroupId(dto.getAggregationGroupId())
                 .build();
     }
 }

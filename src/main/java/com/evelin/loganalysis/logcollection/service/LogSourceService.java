@@ -3,8 +3,10 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
+import com.evelin.loganalysis.logcollection.repository.CheckpointRepository;
 import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
+import com.evelin.loganalysis.logcollection.repository.RawLogEventRepository;
 import com.evelin.loganalysis.logcollection.util.LogPathSerializer;
 import com.evelin.loganalysis.logcollection.validation.LogPathValidator;
 import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
@@ -37,6 +39,8 @@ public class LogSourceService {
     private final LogSourceRepository logSourceRepository;
     private final ProjectRepository projectRepository;
     private final LogPathValidator logPathValidator;
+    private final CheckpointRepository checkpointRepository;
+    private final RawLogEventRepository rawLogEventRepository;
 
     /**
      * 创建日志源
@@ -284,16 +288,29 @@ public class LogSourceService {
      * 删除日志源
      *
      * @param id 日志源ID
-     * @return 是否删除成功
      */
     @Transactional
-    public boolean delete(UUID id) {
-        if (logSourceRepository.existsById(id)) {
-            logSourceRepository.deleteById(id);
-            log.info("删除日志源成功: {}", id);
-            return true;
+    public void delete(UUID id) {
+        // 检查日志源是否存在
+        LogSource logSource = logSourceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("日志源不存在: " + id));
+
+        // 统计关联数据数量
+        long logCount = rawLogEventRepository.countBySourceId(id);
+        
+        // 删除关联的日志数据
+        if (logCount > 0) {
+            int deletedLogs = rawLogEventRepository.deleteBySourceId(id);
+            log.info("删除日志源 {} 关联的日志数据: {} 条", id, deletedLogs);
         }
-        return false;
+        
+        // 删除关联的检查点
+        checkpointRepository.deleteBySourceId(id);
+        
+        // 删除日志源
+        logSourceRepository.delete(logSource);
+        
+        log.info("删除日志源成功: {}, 关联日志: {} 条", id, logCount);
     }
 
     /**

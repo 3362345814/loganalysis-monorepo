@@ -1,5 +1,7 @@
 package com.evelin.loganalysis.logprocessing.controller;
 
+import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
+import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.model.PageResult;
 import com.evelin.loganalysis.logcommon.model.Result;
 import com.evelin.loganalysis.logprocessing.entity.AggregationGroupEntity;
@@ -28,6 +30,7 @@ import java.util.Optional;
 public class AggregationGroupController {
 
     private final AggregationGroupService aggregationGroupService;
+    private final RawLogEventService rawLogEventService;
 
     /**
      * 获取聚合组统计摘要
@@ -135,6 +138,78 @@ public class AggregationGroupController {
         } catch (Exception e) {
             log.error("获取聚合组详情失败", e);
             return Result.error("获取聚合组详情失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 根据聚合组groupId查询组内所有日志（分页）
+     *
+     * @param groupId 聚合组groupId
+     * @param page    页码（从0开始）
+     * @param size    每页大小
+     * @return 分页的日志列表
+     */
+    @GetMapping("/group/{groupId}/logs")
+    public Result<PageResult<RawLogEventEntity>> getLogsByGroupId(
+            @PathVariable String groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        try {
+            Page<RawLogEventEntity> logPage = rawLogEventService.findByAggregationGroupId(groupId, page, size);
+            
+            PageResult<RawLogEventEntity> result = PageResult.<RawLogEventEntity>builder()
+                    .content(logPage.getContent())
+                    .page(logPage.getNumber())
+                    .size(logPage.getSize())
+                    .total(logPage.getTotalElements())
+                    .totalPages(logPage.getTotalPages())
+                    .first(logPage.isFirst())
+                    .last(logPage.isLast())
+                    .build();
+
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取聚合组日志列表失败", e);
+            return Result.error("获取聚合组日志列表失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 根据聚合组ID查询组内所有日志（分页）
+     *
+     * @param id   聚合组ID（数据库主键）
+     * @param page 页码（从0开始）
+     * @param size 每页大小
+     * @return 分页的日志列表
+     */
+    @GetMapping("/{id}/logs")
+    public Result<PageResult<RawLogEventEntity>> getLogsByAggregationId(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        try {
+            Optional<AggregationGroupEntity> groupOpt = aggregationGroupService.findById(id);
+            if (groupOpt.isEmpty()) {
+                return Result.error("聚合组不存在: " + id);
+            }
+            
+            String groupId = groupOpt.get().getGroupId();
+            Page<RawLogEventEntity> logPage = rawLogEventService.findByAggregationGroupId(groupId, page, size);
+            
+            PageResult<RawLogEventEntity> result = PageResult.<RawLogEventEntity>builder()
+                    .content(logPage.getContent())
+                    .page(logPage.getNumber())
+                    .size(logPage.getSize())
+                    .total(logPage.getTotalElements())
+                    .totalPages(logPage.getTotalPages())
+                    .first(logPage.isFirst())
+                    .last(logPage.isLast())
+                    .build();
+
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("获取聚合组日志列表失败", e);
+            return Result.error("获取聚合组日志列表失败: " + e.getMessage());
         }
     }
 

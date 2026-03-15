@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -154,4 +155,40 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @return 日志列表
      */
     List<RawLogEventEntity> findByCollectionTimeBefore(LocalDateTime beforeTime);
+
+    /**
+     * 根据聚合组ID查询日志（分页）
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @param pageable          分页参数
+     * @return 原始日志事件分页
+     */
+    @Query("SELECT r FROM RawLogEventEntity r WHERE r.aggregationGroupId = :aggregationGroupId ORDER BY r.originalLogTime DESC NULLS LAST, r.collectionTime DESC")
+    Page<RawLogEventEntity> findByAggregationGroupId(@Param("aggregationGroupId") String aggregationGroupId, Pageable pageable);
+
+    /**
+     * 根据聚合组ID查询所有日志
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @return 原始日志事件列表
+     */
+    List<RawLogEventEntity> findAllByAggregationGroupId(String aggregationGroupId);
+
+    /**
+     * 统计聚合组内的日志数量
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @return 数量
+     */
+    long countByAggregationGroupId(String aggregationGroupId);
+
+    /**
+     * 根据日志源ID删除所有日志
+     *
+     * @param sourceId 日志源ID
+     * @return 删除的记录数
+     */
+    @Modifying
+    @Query("DELETE FROM RawLogEventEntity r WHERE r.sourceId = :sourceId")
+    int deleteBySourceId(@Param("sourceId") UUID sourceId);
 }

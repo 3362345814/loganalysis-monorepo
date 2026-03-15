@@ -241,4 +241,37 @@ public class RawLogEventService {
         LocalDateTime beforeTime = LocalDateTime.now().minusDays(days);
         return deleteByCollectionTimeBefore(beforeTime);
     }
+
+    /**
+     * 根据聚合组ID查询日志（分页）
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @param page               页码（从0开始）
+     * @param size               每页大小
+     * @return 原始日志事件分页
+     */
+    public Page<RawLogEventEntity> findByAggregationGroupId(String aggregationGroupId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return rawLogEventRepository.findByAggregationGroupId(aggregationGroupId, pageable);
+    }
+
+    /**
+     * 根据聚合组ID查询所有日志
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @return 原始日志事件列表
+     */
+    public List<RawLogEventEntity> findAllByAggregationGroupId(String aggregationGroupId) {
+        return rawLogEventRepository.findAllByAggregationGroupId(aggregationGroupId);
+    }
+
+    /**
+     * 统计聚合组内的日志数量
+     *
+     * @param aggregationGroupId 聚合组ID
+     * @return 数量
+     */
+    public long countByAggregationGroupId(String aggregationGroupId) {
+        return rawLogEventRepository.countByAggregationGroupId(aggregationGroupId);
+    }
 }
