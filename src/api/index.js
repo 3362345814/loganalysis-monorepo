@@ -164,7 +164,13 @@ export const aggregationApi = {
   // 清理过期聚合组
   cleanup: (timeoutMinutes) => service.post('/processing/aggregation/cleanup', null, {
     params: { timeoutMinutes }
-  })
+  }),
+  
+  // 根据聚合组ID查询组内日志（分页）
+  getLogsById: (id, params) => service.get(`/processing/aggregation/${id}/logs`, { params }),
+  
+  // 根据groupId查询组内日志（分页）
+  getLogsByGroupId: (groupId, params) => service.get(`/processing/aggregation/group/${groupId}/logs`, { params })
 }
 
 // ==================== AI 分析 API ====================

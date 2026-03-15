@@ -158,7 +158,7 @@
     </el-tabs>
 
     <!-- 聚合组详情对话框 -->
-    <el-dialog v-model="detailVisible" title="聚合组详情" width="800px">
+    <el-dialog v-model="detailVisible" title="聚合组详情" width="1000px" top="5vh">
       <el-descriptions :column="2" border v-if="currentGroup">
         <el-descriptions-item label="聚合组ID">{{ currentGroup.groupId }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -181,6 +181,42 @@
         </el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentGroup.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
+
+      <!-- 组内日志列表 -->
+      <el-divider content-position="left">
+        <span style="font-weight: bold;">组内日志列表</span>
+        <el-tag type="info" size="small" style="margin-left: 8px;">共 {{ groupLogsTotal }} 条</el-tag>
+      </el-divider>
+      
+      <el-table :data="groupLogs" v-loading="logsLoading" stripe max-height="400" size="small">
+        <el-table-column prop="logTime" label="日志时间" width="160">
+          <template #default="{ row }">
+            {{ formatTime(row.logTime) || formatTime(row.originalLogTime) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="logLevel" label="级别" width="80">
+          <template #default="{ row }">
+            <el-tag :type="getSeverityType(row.logLevel)" size="small">{{ row.logLevel }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="rawContent" label="日志内容" min-width="400" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.desensitizedContent || row.rawContent }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sourceName" label="日志源" width="120" show-overflow-tooltip />
+      </el-table>
+      
+      <el-pagination
+        v-model:current-page="logsQuery.page"
+        v-model:page-size="logsQuery.size"
+        :total="groupLogsTotal"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 15px; justify-content: flex-end"
+        @size-change="loadGroupLogs"
+        @current-change="loadGroupLogs"
+      />
 
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
@@ -238,6 +274,15 @@ const loadProjects = async () => {
 // 详情对话框
 const detailVisible = ref(false)
 const currentGroup = ref(null)
+
+// 组内日志数据
+const logsLoading = ref(false)
+const groupLogs = ref([])
+const groupLogsTotal = ref(0)
+const logsQuery = reactive({
+  page: 1,
+  size: 10
+})
 
 // 加载聚合组数据
 const loadAggregationGroups = async () => {
@@ -307,7 +352,34 @@ const canAnalysis = (row) => {
 // 查看详情
 const viewDetail = async (row) => {
   currentGroup.value = row
+  logsQuery.page = 1
+  logsQuery.size = 10
+  groupLogs.value = []
+  groupLogsTotal.value = 0
   detailVisible.value = true
+  loadGroupLogs()
+}
+
+// 加载组内日志
+const loadGroupLogs = async () => {
+  if (!currentGroup.value) return
+  
+  logsLoading.value = true
+  try {
+    const params = {
+      page: logsQuery.page - 1,
+      size: logsQuery.size
+    }
+    const res = await aggregationApi.getLogsById(currentGroup.value.id, params)
+    groupLogs.value = res.data.content || []
+    groupLogsTotal.value = res.data.total || 0
+  } catch (error) {
+    console.error('加载组内日志失败:', error)
+    groupLogs.value = []
+    groupLogsTotal.value = 0
+  } finally {
+    logsLoading.value = false
+  }
 }
 
 // 触发AI分析
