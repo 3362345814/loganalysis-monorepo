@@ -113,7 +113,7 @@ public class RawLogEventService {
      */
     public Page<RawLogEventEntity> findBySourceId(UUID sourceId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return rawLogEventRepository.findBySourceIdOrderByCollectionTimeDesc(sourceId, pageable);
+        return rawLogEventRepository.findBySourceIdOrderByOriginalLogTimeDesc(sourceId, pageable);
     }
 
     /**

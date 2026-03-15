@@ -40,12 +40,14 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
 
     /**
      * 根据日志源ID查询原始日志（分页）
+     * 按 originalLogTime 降序排序，originalLogTime 相同时按 collectionTime 降序排序
      *
      * @param sourceId 日志源ID
      * @param pageable 分页参数
      * @return 原始日志事件分页
      */
-    Page<RawLogEventEntity> findBySourceIdOrderByCollectionTimeDesc(UUID sourceId, Pageable pageable);
+    @Query("SELECT r FROM RawLogEventEntity r WHERE r.sourceId = :sourceId ORDER BY r.originalLogTime DESC NULLS LAST, r.collectionTime DESC")
+    Page<RawLogEventEntity> findBySourceIdOrderByOriginalLogTimeDesc(UUID sourceId, Pageable pageable);
 
     /**
      * 根据日志源ID查询原始日志
