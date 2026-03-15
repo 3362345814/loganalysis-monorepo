@@ -166,6 +166,7 @@ const logs = ref([])
 const loading = ref(false)
 const terminalRef = ref(null)
 let refreshTimer = null
+let currentLoadPage = 0
 const total = ref(0)
 const detailVisible = ref(false)
 const currentLog = ref(null)
@@ -316,19 +317,13 @@ const loadLogs = async () => {
     const totalCount = countRes.data?.count || 0
     total.value = totalCount
     
-    let allLogs = []
-    const batchSize = 1000
-    const totalPages = Math.ceil(totalCount / batchSize)
-    
-    for (let page = 0; page < totalPages; page++) {
-      const params = {
-        page: page,
-        size: batchSize
-      }
-      const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
-      const logs = res.data?.content || []
-      allLogs = allLogs.concat(logs)
+    // 只先加载第 0 页（最新 1000 条日志）
+    const params = {
+      page: 0,
+      size: 1000
     }
+    const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+    let allLogs = res.data?.content || []
     
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
       allLogs = allLogs.filter(log => {
@@ -339,12 +334,18 @@ const loadLogs = async () => {
       total.value = allLogs.length
     }
     
-    const start = (filter.value.page - 1) * filter.value.pageSize
-    const end = start + filter.value.pageSize
-    logs.value = allLogs.slice(start, end)
+    // 关键修复：将日志反转，最新的日志放在数组末尾（终端下方）
+    // 后端返回 DESC（最新在前），我们需要升序显示（最早在上，最新在下）
+    allLogs.reverse()
+    
+    // 初始化当前加载的页码
+    currentLoadPage = 0
+    
+    logs.value = allLogs
     
     nextTick(() => {
       if (terminalRef.value) {
+        // 滚动到最底部，显示最新日志
         terminalRef.value.scrollTop = terminalRef.value.scrollHeight
       }
     })
@@ -374,10 +375,17 @@ const loadMoreLogsAtTop = async () => {
   try {
     loading.value = true
     const oldLogs = [...logs.value]
-    const oldestTime = oldLogs.length > 0 ? getLogTimestamp(oldLogs[oldLogs.length - 1]) : null
+    // oldestTime 现在是数组第一个元素的时间（最早日志）
+    const oldestTime = oldLogs.length > 0 ? getLogTimestamp(oldLogs[0]) : null
+    
+    // 正确计算需要请求的页面
+    // 后端返回 DESC（最新在前），我们需要获取比当前最早日志更早的日志
+    // 由于数据已反转，我们需要请求更后面的页面
+    const currentPage = currentLoadPage
+    const nextPage = currentPage + 1
     
     const params = {
-      page: 0,
+      page: nextPage,
       size: filter.value.pageSize
     }
     
@@ -392,19 +400,28 @@ const loadMoreLogsAtTop = async () => {
       })
     }
     
+    // 过滤条件应该是 logTime < oldestTime，获取更早的日志
+    // 因为后端返回的是 DESC 排序，最新在前，所以后面的页面是更旧的日志
     if (oldLogs.length > 0 && oldestTime) {
       newLogs = newLogs.filter(log => {
         const logTime = getLogTimestamp(log)
-        return logTime && logTime > oldestTime
+        // 获取比当前最早日志更早的日志
+        return logTime && logTime < oldestTime
       })
     }
     
+    // 反转新日志（与 loadLogs 保持一致）
+    newLogs.reverse()
+    
     if (newLogs.length > 0) {
+      // 将新日志添加到数组开头（更早的日志在上方）
       const combinedLogs = [...newLogs, ...oldLogs]
       logs.value = combinedLogs.slice(0, 4000)
+      currentLoadPage = nextPage
       
       nextTick(() => {
         if (terminalRef.value) {
+          // 保持滚动位置不变
           const newScrollHeight = terminalRef.value.scrollHeight
           terminalRef.value.scrollTop = newScrollHeight - lastScrollHeight
         }
