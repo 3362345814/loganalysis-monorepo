@@ -179,6 +179,15 @@ public class LogSource extends BaseEntity {
     private Boolean desensitizationEnabled = false;
 
     /**
+     * 聚合级别配置：只有等于或高于此级别的日志才会被聚合
+     * WARN: 聚合 WARN及以上级别（ WARN, ERROR, FATAL）
+     * ERROR: 聚合 ERROR及以上级别（ ERROR, FATAL）
+     * 不配置则聚合所有级别
+     */
+    @Column(name = "aggregation_level", length = 20)
+    private String aggregationLevel;
+
+    /**
      * 启用的脱敏规则ID列表
      */
     @JdbcTypeCode(SqlTypes.JSON)

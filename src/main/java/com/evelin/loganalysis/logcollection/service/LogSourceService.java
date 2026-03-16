@@ -100,6 +100,7 @@ public class LogSourceService {
         logSource.setDesensitizationEnabled(request.getDesensitizationEnabled() != null ? request.getDesensitizationEnabled() : false);
         logSource.setEnabledRuleIds(request.getEnabledRuleIds());
         logSource.setCustomRules(convertToCustomRules(request.getCustomRules()));
+        logSource.setAggregationLevel(request.getAggregationLevel());
         
         if (request.getProjectId() != null) {
             Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
@@ -259,6 +260,9 @@ public class LogSourceService {
             
             if (request.getDesensitizationEnabled() != null) {
                 existing.setDesensitizationEnabled(request.getDesensitizationEnabled());
+            }
+            if (request.getAggregationLevel() != null) {
+                existing.setAggregationLevel(request.getAggregationLevel());
             }
             if (request.getEnabledRuleIds() != null) {
                 existing.setEnabledRuleIds(request.getEnabledRuleIds());
@@ -431,6 +435,7 @@ public class LogSourceService {
         response.setRemark(logSource.getRemark());
         
         response.setDesensitizationEnabled(logSource.getDesensitizationEnabled());
+        response.setAggregationLevel(logSource.getAggregationLevel());
         response.setEnabledRuleIds(logSource.getEnabledRuleIds());
         response.setCustomRules(convertFromCustomRules(logSource.getCustomRules()));
         

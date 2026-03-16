@@ -80,6 +80,13 @@ public class LogSourceUpdateRequest {
     private Boolean desensitizationEnabled;
 
     /**
+     * 聚合级别配置：只有等于或高于此级别的日志才会被聚合
+     * WARN: 聚合 WARN及以上级别
+     * ERROR: 聚合 ERROR及以上级别
+     */
+    private String aggregationLevel;
+
+    /**
      * 启用的脱敏规则ID列表
      */
     private List<String> enabledRuleIds;

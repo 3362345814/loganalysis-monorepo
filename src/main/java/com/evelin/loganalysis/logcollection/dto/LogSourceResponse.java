@@ -85,6 +85,11 @@ public class LogSourceResponse {
     private Boolean desensitizationEnabled;
 
     /**
+     * 聚合级别配置：只有等于或高于此级别的日志才会被聚合
+     */
+    private String aggregationLevel;
+
+    /**
      * 启用的脱敏规则ID列表
      */
     private List<String> enabledRuleIds;

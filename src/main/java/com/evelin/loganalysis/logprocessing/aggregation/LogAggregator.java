@@ -28,19 +28,23 @@ public class LogAggregator {
     private final AggregationGroupService aggregationGroupService;
 
     /**
+     * 日志级别优先级（数值越大级别越高）
+     */
+    private static final Map<String, Integer> LOG_LEVEL_PRIORITY = Map.of(
+            "TRACE", 0,
+            "DEBUG", 1,
+            "INFO", 2,
+            "WARN", 3,
+            "WARNING", 3,
+            "ERROR", 4,
+            "FATAL", 5,
+            "CRITICAL", 5
+    );
+
+    /**
      * 活跃的聚合组缓存
      */
     private final Map<String, AggregationGroup> activeGroups = new ConcurrentHashMap<>();
-
-    /**
-     * 聚合日志事件
-     *
-     * @param event 日志事件
-     * @return 聚合结果
-     */
-    public AggregationResult aggregate(ParsedLogEvent event) {
-        return aggregate(event, event.getSourceId(), event.getSourceName());
-    }
 
     /**
      * 聚合日志事件（带日志源信息）
@@ -48,9 +52,68 @@ public class LogAggregator {
      * @param event      日志事件
      * @param sourceId   日志源ID
      * @param sourceName 日志源名称
+     * @param aggregationLevel 聚合级别配置（null表示聚合所有级别）
+     * @return 聚合结果
+     */
+    public AggregationResult aggregate(ParsedLogEvent event, String sourceId, String sourceName, String aggregationLevel) {
+        // 检查是否满足聚合级别要求
+        if (!shouldAggregate(event.getLogLevel(), aggregationLevel)) {
+            log.debug("日志级别 {} 不满足聚合级别 {} 要求，跳过聚合", event.getLogLevel(), aggregationLevel);
+            return null;
+        }
+
+        return aggregateInternal(event, sourceId, sourceName);
+    }
+
+    /**
+     * 聚合日志事件（不带聚合级别配置，默认聚合所有）
+     *
+     * @param event      日志事件
+     * @param sourceId   日志源ID
+     * @param sourceName 日志源名称
      * @return 聚合结果
      */
     public AggregationResult aggregate(ParsedLogEvent event, String sourceId, String sourceName) {
+        return aggregate(event, sourceId, sourceName, null);
+    }
+
+    /**
+     * 聚合日志事件（兼容旧版本调用）
+     *
+     * @param event 日志事件
+     * @return 聚合结果
+     */
+    public AggregationResult aggregate(ParsedLogEvent event) {
+        return aggregate(event, event.getSourceId(), event.getSourceName(), null);
+    }
+
+    /**
+     * 判断是否应该聚合该日志
+     *
+     * @param logLevel          日志级别
+     * @param aggregationLevel  聚合级别配置（null表示聚合所有级别）
+     * @return 是否应该聚合
+     */
+    private boolean shouldAggregate(String logLevel, String aggregationLevel) {
+        // 如果没有配置聚合级别，则聚合所有日志
+        if (aggregationLevel == null || aggregationLevel.isEmpty()) {
+            return true;
+        }
+
+        // 获取日志级别的优先级
+        Integer eventLevelPriority = LOG_LEVEL_PRIORITY.getOrDefault(logLevel != null ? logLevel.toUpperCase() : "INFO", 2);
+
+        // 获取聚合级别的优先级
+        Integer aggLevelPriority = LOG_LEVEL_PRIORITY.getOrDefault(aggregationLevel.toUpperCase(), 3);
+
+        // 只有当日志级别 >= 聚合级别时才进行聚合
+        return eventLevelPriority >= aggLevelPriority;
+    }
+
+    /**
+     * 内部聚合方法，实际执行聚合逻辑
+     */
+    private AggregationResult aggregateInternal(ParsedLogEvent event, String sourceId, String sourceName) {
         if (event == null) {
             return null;
         }

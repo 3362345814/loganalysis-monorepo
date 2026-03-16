@@ -1,6 +1,7 @@
 package com.evelin.loganalysis.logprocessing.pipeline;
 
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
+import com.evelin.loganalysis.logcollection.service.LogSourceService;
 import com.evelin.loganalysis.logprocessing.aggregation.LogAggregator;
 import com.evelin.loganalysis.logprocessing.config.ProcessingConfig;
 import com.evelin.loganalysis.logprocessing.context.ContextExtractor;
@@ -15,6 +16,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -35,6 +38,7 @@ public class LogProcessingPipeline {
     private final DesensitizationService desensitizationService;
     private final Executor processingExecutor;
     private final AutoAnalysisTrigger autoAnalysisTrigger;
+    private final LogSourceService logSourceService;
 
     public LogProcessingPipeline(
             ProcessingConfig processingConfig,
@@ -44,6 +48,7 @@ public class LogProcessingPipeline {
             LogAggregator logAggregator,
             DesensitizationService desensitizationService,
             AutoAnalysisTrigger autoAnalysisTrigger,
+            LogSourceService logSourceService,
             @Qualifier("processingExecutor") Executor processingExecutor) {
         this.processingConfig = processingConfig;
         this.logParser = logParser;
@@ -52,6 +57,7 @@ public class LogProcessingPipeline {
         this.logAggregator = logAggregator;
         this.desensitizationService = desensitizationService;
         this.autoAnalysisTrigger = autoAnalysisTrigger;
+        this.logSourceService = logSourceService;
         this.processingExecutor = processingExecutor;
     }
 
@@ -112,17 +118,21 @@ public class LogProcessingPipeline {
 
             // 步骤5: 日志聚合
             if (processingConfig.isAggregationEnabled()) {
-                // 直接从 parsedEvent 获取日志源信息
+                // 获取日志源的聚合级别配置
+                String aggregationLevel = getAggregationLevel(parsedEvent.getSourceId());
+
+                // 从 parsedEvent 获取日志源信息，并传递聚合级别
                 AggregationResult aggregationResult = logAggregator.aggregate(
                         parsedEvent,
                         parsedEvent.getSourceId(),
-                        parsedEvent.getSourceName()
+                        parsedEvent.getSourceName(),
+                        aggregationLevel
                 );
                 result.setAggregationResult(aggregationResult);
                 result.setStage("AGGREGATED");
 
-                // 步骤6: 自动触发 AI 分析（仅对 ERROR 及以上级别的日志）
-                if (aggregationResult.isNewGroup()) {
+                // 步骤6: 自动触发 AI 分析（仅对 ERROR 及以上级别的新聚合组）
+                if (aggregationResult != null && aggregationResult.isNewGroup()) {
                     autoAnalysisTrigger.triggerAutoAnalysis(aggregationResult);
                 }
             }
@@ -182,5 +192,27 @@ public class LogProcessingPipeline {
     @Scheduled(fixedRate = 300000) // 每5分钟执行一次
     public void cleanupContextCache() {
         contextExtractor.clearCache();
+    }
+
+    /**
+     * 获取日志源的聚合级别配置
+     *
+     * @param sourceId 日志源ID
+     * @return 聚合级别配置（null表示聚合所有级别）
+     */
+    private String getAggregationLevel(String sourceId) {
+        if (sourceId == null) {
+            return null;
+        }
+        try {
+            Optional<com.evelin.loganalysis.logcommon.model.LogSource> sourceOpt =
+                    logSourceService.getEntityById(UUID.fromString(sourceId));
+            if (sourceOpt.isPresent()) {
+                return sourceOpt.get().getAggregationLevel();
+            }
+        } catch (Exception e) {
+            log.warn("获取日志源聚合级别配置失败: {}", e.getMessage());
+        }
+        return null;
     }
 }
