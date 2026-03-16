@@ -89,7 +89,13 @@
     <!-- 分析结果列表 -->
     <el-card class="table-card">
       <el-table :data="paginatedList" v-loading="loading" stripe>
-        <el-table-column prop="aggregationId" label="聚合组ID" width="180" />
+        <el-table-column prop="aggregationId" label="聚合组ID" width="180">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="jumpToAggregation(row)">
+              {{ row.aggregationId }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="aggregationName" label="聚合组名称" min-width="150" />
         <el-table-column prop="rootCause" label="根因分析" min-width="250">
           <template #default="{ row }">
@@ -224,9 +230,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, CircleCheck, Warning, Timer, Refresh, Search } from '@element-plus/icons-vue'
 import { analysisApi, projectApi } from '@/api'
+
+const router = useRouter()
 
 // 状态
 const loading = ref(false)
@@ -384,6 +393,17 @@ const handleSearch = () => {
 const handleViewDetail = (row) => {
   currentDetail.value = row
   detailDialogVisible.value = true
+}
+
+// 跳转到聚合组页面
+const jumpToAggregation = (row) => {
+  // 跳转到智能分析页面，并传入聚合组ID参数
+  router.push({
+    path: '/processing',
+    query: {
+      highlightGroupId: row.aggregationId
+    }
+  })
 }
 
 // 分页变化

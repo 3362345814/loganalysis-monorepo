@@ -262,14 +262,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Refresh, Setting } from '@element-plus/icons-vue'
 import { aggregationApi, analysisApi, analysisConfigApi, projectApi, logSourceApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 
 const router = useRouter()
+const route = useRoute()
 
 // 分析配置
 const analysisConfig = ref(null)
@@ -320,14 +321,14 @@ const projects = ref([])
 
 const aggQuery = reactive({
   projectId: null,
-  page: 0,
+  page: 1,
   size: 20,
   status: '',
   severity: ''
 })
 
 const handleProjectChange = () => {
-  aggQuery.page = 0
+  aggQuery.page = 1  // 重置为第1页
   loadAggregationGroups()
 }
 
@@ -358,7 +359,7 @@ const loadAggregationGroups = async () => {
   aggLoading.value = true
   try {
     const params = {
-      page: aggQuery.page,
+      page: aggQuery.page - 1,  // 转换为0-based索引
       size: aggQuery.size
     }
     if (aggQuery.status) params.status = aggQuery.status
@@ -569,7 +570,43 @@ onMounted(() => {
   loadAggSummary()
   loadAggregationGroups()
   loadAnalysisConfig()
+
+  // 检测URL参数，如果传入了highlightGroupId则自动打开对应聚合组详情
+  const highlightGroupId = route.query.highlightGroupId
+  if (highlightGroupId) {
+    // 直接根据groupId查询聚合组
+    loadAggregationByGroupId(highlightGroupId, () => {
+      // 加载成功后清除URL参数
+      router.replace({ path: '/processing' })
+    })
+  }
 })
+
+// 根据groupId加载聚合组并打开详情
+const loadAggregationByGroupId = async (groupId, onSuccess) => {
+  try {
+    const res = await aggregationApi.getByGroupId(groupId)
+    if (res.data) {
+      // 设置当前聚合组并打开详情
+      currentGroup.value = res.data
+      // 重置日志查询参数
+      logsQuery.page = 1
+      logsQuery.size = 10
+      groupLogs.value = []
+      groupLogsTotal.value = 0
+      detailVisible.value = true
+      // 加载组内日志
+      loadGroupLogs()
+      // 成功后回调
+      if (onSuccess) onSuccess()
+    } else {
+      ElMessage.warning('未找到该聚合组: ' + groupId)
+    }
+  } catch (error) {
+    console.error('加载聚合组失败:', error)
+    ElMessage.error('加载聚合组失败: ' + (error.message || '未知错误'))
+  }
+}
 </script>
 
 <style scoped>
