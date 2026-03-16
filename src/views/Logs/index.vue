@@ -45,9 +45,10 @@
           v-for="(log, index) in logs" 
           :key="index" 
           class="log-line"
-          :class="getLogLevelClass(log.parsedFields?.logLevel)"
+          :class="[getLogLevelClass(log.parsedFields?.logLevel), { 'log-highlight': highlightedIndex === index }]"
           @mouseenter="showParsedInfo(log, $event)"
           @mouseleave="hideParsedInfo"
+          @click="handleView(log)"
         >
           <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
           <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
@@ -156,9 +157,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { logSourceApi, projectApi, rawLogApi } from '@/api'
+
+const route = useRoute()
+const router = useRouter()
 
 const projects = ref([])
 const sources = ref([])
@@ -174,6 +179,12 @@ const parsedInfoVisible = ref(false)
 const parsedInfoFields = ref({})
 const popoverX = ref(0)
 const popoverY = ref(0)
+
+// 高亮相关状态
+const highlightTime = ref(null)
+const highlightId = ref(null)
+const highlightedIndex = ref(-1)
+const hasScrolledToHighlight = ref(false)
 
 const parsedInfoTableData = computed(() => {
   const data = []
@@ -293,6 +304,25 @@ const loadSources = async () => {
   try {
     const res = await logSourceApi.getAll()
     sources.value = res.data || []
+
+    // 如果有路由参数传入的 sourceId，在日志源加载完成后自动查询日志
+    if (route.query.sourceId && !logs.value.length) {
+      // 如果有项目ID，设置项目筛选
+      if (route.query.projectId) {
+        filter.value.projectId = route.query.projectId
+      }
+
+      // 优先使用ID精确定位
+      if (route.query.highlightId) {
+        highlightId.value = route.query.highlightId
+      } else if (route.query.highlightTime) {
+        // 使用时间定位作为后备
+        highlightTime.value = route.query.highlightTime
+      }
+
+      // 加载日志
+      loadLogs()
+    }
   } catch (error) {
     console.error('加载日志源失败:', error)
   }
@@ -342,13 +372,51 @@ const loadLogs = async () => {
     currentLoadPage = 0
     
     logs.value = allLogs
-    
-    nextTick(() => {
-      if (terminalRef.value) {
-        // 滚动到最底部，显示最新日志
-        terminalRef.value.scrollTop = terminalRef.value.scrollHeight
-      }
-    })
+
+    // 查找并高亮匹配的日志
+    // 优先使用 ID 精确定位，其次使用时间定位
+    let foundIndex = -1
+    const currentHighlightId = highlightId.value
+    const currentHighlightTime = highlightTime.value
+
+    if (currentHighlightId) {
+      // 使用 ID 精确定位
+      foundIndex = logs.value.findIndex(log => log.id === currentHighlightId)
+    } else if (currentHighlightTime) {
+      // 使用时间定位（作为后备）
+      const targetTime = new Date(currentHighlightTime).getTime()
+      foundIndex = logs.value.findIndex(log => {
+        const logTime = getLogTimestamp(log)
+        return logTime && Math.abs(logTime - targetTime) < 5000 // 5秒内视为匹配
+      })
+    }
+
+    if (foundIndex !== -1) {
+      highlightedIndex.value = foundIndex
+      nextTick(() => {
+        scrollToHighlightedLog(foundIndex)
+        // 延迟清除定位状态和URL参数，让用户能看到高亮效果
+        setTimeout(() => {
+          clearHighlight()
+          // 清除URL参数，避免刷新时重复定位
+          if (route.query.highlightId || route.query.highlightTime) {
+            router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+          }
+        }, 3000)
+      })
+    } else {
+      // 没有找到高亮日志，滚动到最新
+      nextTick(() => {
+        if (terminalRef.value) {
+          terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+        }
+        // 清除定位状态和URL参数
+        clearHighlight()
+        if (route.query.highlightId || route.query.highlightTime) {
+          router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+        }
+      })
+    }
   } catch (error) {
     console.error('加载日志失败:', error)
     logs.value = []
@@ -505,8 +573,29 @@ const handleSizeChange = (size) => {
 }
 
 const handleView = (row) => {
+  // 点击日志时清除高亮状态
+  clearHighlight()
   currentLog.value = row
   detailVisible.value = true
+}
+
+// 清除高亮状态
+const clearHighlight = () => {
+  highlightId.value = null
+  highlightTime.value = null
+  highlightedIndex.value = -1
+}
+
+// 滚动到高亮的日志
+const scrollToHighlightedLog = (index) => {
+  if (!terminalRef.value || index < 0) return
+
+  // 获取所有日志行
+  const logLines = terminalRef.value.querySelectorAll('.log-line')
+  if (logLines[index]) {
+    logLines[index].scrollIntoView({ behavior: 'smooth', block: 'center' })
+    hasScrolledToHighlight.value = true
+  }
 }
 
 const formatTime = (time) => {
@@ -654,11 +743,16 @@ watch(() => filter.value.refreshInterval, () => {
   }
 })
 
-watch(() => filter.value.sourceId, (newVal) => {
-  if (newVal) {
+watch(() => filter.value.sourceId, (newVal, oldVal) => {
+  if (newVal && newVal !== oldVal) {
+    // 加载日志
+    loadLogs()
+    // 启动定时刷新
     startRefresh()
-  } else {
+  } else if (!newVal) {
     stopRefresh()
+    logs.value = []
+    total.value = 0
   }
 })
 
@@ -683,6 +777,25 @@ const getLogLevelType = (level) => {
 }
 
 onMounted(() => {
+  // 先设置项目ID（用于筛选日志源）
+  if (route.query.projectId) {
+    filter.value.projectId = route.query.projectId
+  }
+
+  // 设置日志源ID
+  if (route.query.sourceId) {
+    filter.value.sourceId = route.query.sourceId
+
+    // 优先使用ID精确定位
+    if (route.query.highlightId) {
+      highlightId.value = route.query.highlightId
+    } else if (route.query.highlightTime) {
+      // 使用时间定位作为后备
+      highlightTime.value = route.query.highlightTime
+    }
+  }
+
+  // 加载项目、日志源和日志
   loadProjects()
   loadSources()
 })
@@ -757,10 +870,6 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
-.log-line:hover {
-  background: #1a1a1a;
-}
-
 .log-file-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -807,6 +916,26 @@ onUnmounted(() => {
 
 .log-message {
   color: #e6e6e6;
+}
+
+.log-line:hover {
+  background: #1a1a1a;
+  cursor: pointer;
+}
+
+.log-highlight {
+  background: rgba(64, 158, 255, 0.3) !important;
+  border-left: 3px solid #409eff;
+  animation: highlight-pulse 2s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    background: rgba(64, 158, 255, 0.6);
+  }
+  100% {
+    background: rgba(64, 158, 255, 0.3);
+  }
 }
 
 .terminal-empty {

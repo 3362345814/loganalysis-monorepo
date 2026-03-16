@@ -201,10 +201,15 @@
         </el-table-column>
         <el-table-column prop="rawContent" label="日志内容" min-width="400" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ row.desensitizedContent || row.rawContent }}</span>
+            <span class="log-content-clickable">{{ row.desensitizedContent || row.rawContent }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="sourceName" label="日志源" width="120" show-overflow-tooltip />
+        <el-table-column label="操作" width="80" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="jumpToLogDetail(row)">查看</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       
       <el-pagination
@@ -234,10 +239,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
-import { aggregationApi, analysisApi, projectApi } from '@/api'
+import { aggregationApi, analysisApi, projectApi, logSourceApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+
+const router = useRouter()
 
 const activeTab = ref('aggregation')
 
@@ -391,7 +399,7 @@ const triggerAnalysis = async (row) => {
     ElMessage.warning('只有 ERROR 及以上级别才能触发 AI 分析')
     return
   }
-  
+
   try {
     await analysisApi.trigger({
       aggregationId: row.id || row.groupId,
@@ -407,6 +415,61 @@ const triggerAnalysis = async (row) => {
     console.error('触发分析失败:', error)
     ElMessage.error('触发分析失败: ' + (error.message || '未知错误'))
   }
+}
+
+// 跳转到日志详情页面
+const jumpToLogDetail = async (row) => {
+  // 优先使用 row 的信息，如果没有则从 currentGroup 获取
+  const sourceId = row.sourceId || currentGroup.value?.sourceId
+  const sourceName = row.sourceName || currentGroup.value?.sourceName
+
+  if (!sourceId) {
+    ElMessage.warning('无法获取日志源信息')
+    return
+  }
+
+  // 获取项目ID - 尝试从 currentGroup 获取，如果没有则通过 API 查询
+  let projectId = currentGroup.value?.projectId
+
+  // 如果没有项目ID，尝试通过日志源API获取
+  if (!projectId) {
+    try {
+      const sourceRes = await logSourceApi.getById(sourceId)
+      if (sourceRes.data && sourceRes.data.projectId) {
+        projectId = sourceRes.data.projectId
+      }
+    } catch (error) {
+      console.warn('获取日志源项目ID失败:', error)
+    }
+  }
+
+  // 构建查询参数 - 使用日志ID精确定位
+  const queryParams = {
+    sourceId: sourceId,
+    sourceName: sourceName
+  }
+
+  // 添加项目ID
+  if (projectId) {
+    queryParams.projectId = projectId
+  }
+
+  // 使用日志ID精确定位（优先使用ID，其次使用时间作为后备）
+  if (row.id) {
+    queryParams.highlightId = row.id
+  } else if (row.logTime || row.originalLogTime) {
+    // 如果没有ID，使用时间作为后备
+    queryParams.highlightTime = row.logTime || row.originalLogTime
+  }
+
+  // 跳转到日志显示页面
+  router.push({
+    path: '/logs',
+    query: queryParams
+  })
+
+  // 关闭详情对话框
+  detailVisible.value = false
 }
 
 onMounted(() => {

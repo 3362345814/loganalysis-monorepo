@@ -66,6 +66,14 @@
             <el-switch v-model="row.enabled" disabled />
           </template>
         </el-table-column>
+        <el-table-column prop="aggregationLevel" label="聚合级别" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.aggregationLevel" :type="row.aggregationLevel === 'ERROR' ? 'danger' : 'warning'">
+              {{ row.aggregationLevel }}及以上
+            </el-tag>
+            <el-tag v-else type="info">全部</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="lastCollectionTime" label="最后采集" width="180">
           <template #default="{ row }">
             {{ formatTime(row.lastCollectionTime) }}
@@ -268,6 +276,19 @@
                   </el-alert>
                 </div>
               </div>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="聚合配置" name="aggregation">
+          <el-form label-width="120px">
+            <el-form-item label="聚合级别">
+              <el-select v-model="form.aggregationLevel" placeholder="选择聚合级别" clearable style="width: 250px">
+                <el-option label="聚合所有级别" :value="null" />
+                <el-option label="WARN 及以上（WARN, ERROR, FATAL）" value="WARN" />
+                <el-option label="ERROR 及以上（ERROR, FATAL）" value="ERROR" />
+              </el-select>
+              <span class="form-tip">只有等于或高于此级别的日志才会被聚合，未选择则聚合所有日志</span>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -569,6 +590,7 @@ const handleCreateSource = () => {
     customPattern: '',
     description: '',
     desensitizationEnabled: false,
+    aggregationLevel: null,
     enabledRuleIds: [],
     customRules: [],
     config: {
@@ -619,6 +641,7 @@ const handleEdit = (row) => {
     ...row,
     paths: parsedPaths,
     desensitizationEnabled: row.desensitizationEnabled || false,
+    aggregationLevel: row.aggregationLevel || null,
     enabledRuleIds: row.enabledRuleIds || [],
     customRules: row.customRules || [],
     logFormatPattern: row.logFormatPattern || '',
