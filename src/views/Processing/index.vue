@@ -8,6 +8,7 @@
             <div class="card-header">
               <span>日志聚合组</span>
               <div>
+                <el-button :icon="Setting" @click="configVisible = true">配置</el-button>
                 <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
               </div>
             </div>
@@ -134,9 +135,9 @@
                   type="success" 
                   text 
                   @click="triggerAnalysis(row)"
-                  :disabled="row.isAnalyzed || !canAnalysis(row)"
+                  :disabled="row.isAnalyzed"
                 >
-                  {{ row.isAnalyzed ? '已分析' : (canAnalysis(row) ? '分析' : '级别不足') }}
+                  {{ row.isAnalyzed ? '已分析' : '分析' }}
                 </el-button>
               </template>
             </el-table-column>
@@ -228,10 +229,33 @@
         <el-button 
           type="primary" 
           @click="triggerAnalysis(currentGroup)"
-          :disabled="currentGroup?.isAnalyzed || !canAnalysis(currentGroup)"
+          :disabled="currentGroup?.isAnalyzed"
         >
-          {{ currentGroup?.isAnalyzed ? '已分析' : (canAnalysis(currentGroup) ? '触发AI分析' : '级别不足') }}
+          {{ currentGroup?.isAnalyzed ? '已分析' : '触发AI分析' }}
         </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 分析配置对话框 -->
+    <el-dialog v-model="configVisible" title="AI分析配置" width="500px">
+      <el-form :model="configForm" label-width="120px">
+        <el-form-item label="上下文行数">
+          <el-input-number v-model="configForm.contextSize" :min="10" :max="30" />
+          <span style="margin-left: 10px; color: #909399">行 (10-30)</span>
+        </el-form-item>
+        <el-form-item label="自动分析级别">
+          <el-select v-model="configForm.autoAnalysisSeverity" style="width: 100%">
+            <el-option label="ERROR 及以上" value="ERROR" />
+            <el-option label="WARNING 及以上" value="WARNING" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="启用自动分析">
+          <el-switch v-model="configForm.autoAnalysisEnabled" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveAnalysisConfig">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -240,12 +264,49 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh } from '@element-plus/icons-vue'
-import { aggregationApi, analysisApi, projectApi, logSourceApi } from '@/api'
+import { Refresh, Setting } from '@element-plus/icons-vue'
+import { aggregationApi, analysisApi, analysisConfigApi, projectApi, logSourceApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 
 const router = useRouter()
+
+// 分析配置
+const analysisConfig = ref(null)
+const configVisible = ref(false)
+const configForm = reactive({
+  contextSize: 10,
+  autoAnalysisSeverity: 'ERROR',
+  autoAnalysisEnabled: true
+})
+
+// 加载分析配置
+const loadAnalysisConfig = async () => {
+  try {
+    const res = await analysisConfigApi.get()
+    if (res.data) {
+      analysisConfig.value = res.data
+      configForm.contextSize = res.data.contextSize || 10
+      configForm.autoAnalysisSeverity = res.data.autoAnalysisSeverity || 'ERROR'
+      configForm.autoAnalysisEnabled = res.data.autoAnalysisEnabled !== false
+    }
+  } catch (error) {
+    console.error('加载分析配置失败:', error)
+  }
+}
+
+// 保存分析配置
+const saveAnalysisConfig = async () => {
+  try {
+    await analysisConfigApi.update(configForm)
+    ElMessage.success('配置保存成功')
+    configVisible.value = false
+    loadAnalysisConfig()
+  } catch (error) {
+    console.error('保存分析配置失败:', error)
+    ElMessage.error('保存配置失败')
+  }
+}
 
 const activeTab = ref('aggregation')
 
@@ -350,11 +411,10 @@ const formatTime = (time) => {
   return time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
 }
 
-// 检查是否允许触发分析（ERROR 及以上级别）
+// 检查是否允许触发分析（现在允许所有级别手动触发）
 const canAnalysis = (row) => {
-  const severity = row.severity || 'INFO'
-  const severityPriority = { 'CRITICAL': 3, 'ERROR': 2, 'WARNING': 1, 'INFO': 0 }
-  return (severityPriority[severity] || 0) >= 2
+  // 手动分析现在允许所有严重程度
+  return true
 }
 
 // 查看详情
@@ -392,20 +452,46 @@ const loadGroupLogs = async () => {
 
 // 触发AI分析
 const triggerAnalysis = async (row) => {
-  // 检查严重程度，只有 ERROR 及以上级别才能触发分析
-  const severity = row.severity || 'INFO'
-  const severityPriority = { 'CRITICAL': 3, 'ERROR': 2, 'WARNING': 1, 'INFO': 0 }
-  if ((severityPriority[severity] || 0) < 2) {
-    ElMessage.warning('只有 ERROR 及以上级别才能触发 AI 分析')
+  // 获取聚合组ID（数据库主键）
+  const aggregationId = row.id
+  if (!aggregationId) {
+    ElMessage.error('无法获取聚合组ID')
     return
   }
 
   try {
-    await analysisApi.trigger({
-      aggregationId: row.id || row.groupId,
+    // 先获取上下文数据，使用配置的contextSize
+    ElMessage.info('正在获取日志上下文...')
+    const contextSize = analysisConfig.value?.contextSize || 10
+    const contextRes = await aggregationApi.getContext(aggregationId, { contextSize: contextSize })
+
+    if (!contextRes.data) {
+      ElMessage.error('获取上下文失败')
+      return
+    }
+
+    const contextData = contextRes.data
+
+    // 组装完整的分析数据
+    const analysisData = {
+      aggregationId: aggregationId,
       groupId: row.groupId,
-      severity: severity
-    })
+      severity: row.severity || 'INFO',
+      // 基本信息
+      name: contextData.name,
+      eventCount: contextData.eventCount,
+      startTime: contextData.startTime,
+      endTime: contextData.endTime,
+      representativeLog: contextData.representativeLog,
+      // 相关日志
+      relatedLogs: contextData.relatedLogs || [],
+      // 上下文日志
+      contextBefore: contextData.contextBefore || [],
+      contextAfter: contextData.contextAfter || []
+    }
+
+    // 触发分析
+    await analysisApi.trigger(analysisData)
     ElMessage.success('已触发AI分析，请稍后查看结果')
     detailVisible.value = false
     // 刷新列表
@@ -413,8 +499,14 @@ const triggerAnalysis = async (row) => {
     loadAggSummary()
   } catch (error) {
     console.error('触发分析失败:', error)
-    ElMessage.error('触发分析失败: ' + (error.message || '未知错误'))
+    ElMessage.error('触发分析失败: ' + (error.response?.data?.message || error.message || '未知错误'))
   }
+}
+
+// 重试分析
+const retryAnalysis = async (row) => {
+  // 对于失败的分析，直接调用triggerAnalysis重新分析
+  await triggerAnalysis(row)
 }
 
 // 跳转到日志详情页面
@@ -476,6 +568,7 @@ onMounted(() => {
   loadProjects()
   loadAggSummary()
   loadAggregationGroups()
+  loadAnalysisConfig()
 })
 </script>
 

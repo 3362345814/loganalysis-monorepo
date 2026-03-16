@@ -170,7 +170,10 @@ export const aggregationApi = {
   getLogsById: (id, params) => service.get(`/processing/aggregation/${id}/logs`, { params }),
   
   // 根据groupId查询组内日志（分页）
-  getLogsByGroupId: (groupId, params) => service.get(`/processing/aggregation/group/${groupId}/logs`, { params })
+  getLogsByGroupId: (groupId, params) => service.get(`/processing/aggregation/group/${groupId}/logs`, { params }),
+
+  // 获取聚合组上下文（用于AI分析）
+  getContext: (id, params) => service.get(`/processing/aggregation/${id}/context`, { params })
 }
 
 // ==================== AI 分析 API ====================
@@ -220,4 +223,15 @@ export const llmConfigApi = {
   
   // 验证 API Key
   validate: (id) => service.post(`/llm-config/${id}/validate`)
+}
+
+// ==================== AI 分析配置 API ====================
+
+// AI 分析配置相关
+export const analysisConfigApi = {
+  // 获取配置
+  get: () => service.get('/analysis-config'),
+  
+  // 更新配置
+  update: (data) => service.put('/analysis-config', data)
 }
