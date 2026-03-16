@@ -1,6 +1,7 @@
 package com.evelin.loganalysis.logprocessing.service;
 
 import com.evelin.loganalysis.loganalysisai.analysis.service.AnalysisService;
+import com.evelin.loganalysis.loganalysisai.config.service.AnalysisConfigService;
 import com.evelin.loganalysis.logprocessing.dto.AggregationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AutoAnalysisTrigger {
 
     private final AnalysisService analysisService;
+    private final AnalysisConfigService analysisConfigService;
 
     /**
      * 已触发的分析（避免重复分析）
@@ -31,22 +33,13 @@ public class AutoAnalysisTrigger {
     private final Set<String> analyzedGroups = ConcurrentHashMap.newKeySet();
 
     /**
-     * 是否启用自动分析
-     */
-    private boolean enabled = true;
-
-    /**
-     * 自动触发的严重程度阈值（ERROR 及以上）
-     */
-    private String minSeverity = "ERROR";
-
-    /**
      * 触发自动分析
      *
      * @param aggregationResult 聚合结果
      */
     public void triggerAutoAnalysis(AggregationResult aggregationResult) {
-        if (!enabled) {
+        // 从配置中获取是否启用自动分析
+        if (!analysisConfigService.isAutoAnalysisEnabled()) {
             return;
         }
 
@@ -57,8 +50,14 @@ public class AutoAnalysisTrigger {
         String severity = aggregationResult.getSeverity();
         String groupId = aggregationResult.getGroupId();
 
+        // 从配置中获取自动分析级别阈值
+        String configSeverity = analysisConfigService.getAutoAnalysisSeverity();
+        if (configSeverity == null) {
+            return;
+        }
+
         // 检查严重程度
-        if (!shouldAnalyze(severity)) {
+        if (!shouldAnalyze(severity, configSeverity)) {
             return;
         }
 
@@ -78,7 +77,7 @@ public class AutoAnalysisTrigger {
     /**
      * 判断是否应该分析
      */
-    private boolean shouldAnalyze(String severity) {
+    private boolean shouldAnalyze(String severity, String minSeverity) {
         if (severity == null) {
             return false;
         }
@@ -132,20 +131,6 @@ public class AutoAnalysisTrigger {
             // 失败时移除标记，允许重试
             analyzedGroups.remove(groupId);
         }
-    }
-
-    /**
-     * 设置是否启用自动分析
-     */
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    /**
-     * 设置最小严重程度
-     */
-    public void setMinSeverity(String minSeverity) {
-        this.minSeverity = minSeverity;
     }
 
     /**

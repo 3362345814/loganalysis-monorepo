@@ -14,9 +14,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+
+import java.util.Comparator;
 
 /**
  * 聚合组管理接口
@@ -192,10 +192,10 @@ public class AggregationGroupController {
             if (groupOpt.isEmpty()) {
                 return Result.error("聚合组不存在: " + id);
             }
-            
+
             String groupId = groupOpt.get().getGroupId();
             Page<RawLogEventEntity> logPage = rawLogEventService.findByAggregationGroupId(groupId, page, size);
-            
+
             PageResult<RawLogEventEntity> result = PageResult.<RawLogEventEntity>builder()
                     .content(logPage.getContent())
                     .page(logPage.getNumber())
@@ -210,6 +210,116 @@ public class AggregationGroupController {
         } catch (Exception e) {
             log.error("获取聚合组日志列表失败", e);
             return Result.error("获取聚合组日志列表失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取聚合组日志上下文（用于AI分析）
+     * 返回错误日志及其前后N条日志
+     *
+     * @param id           聚合组ID（数据库主键）
+     * @param contextSize  前后上下文日志数量，默认10
+     * @return 包含错误日志和上下文的数据
+     */
+    @GetMapping("/{id}/context")
+    public Result<Map<String, Object>> getAggregationContext(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "10") int contextSize) {
+        try {
+            Optional<AggregationGroupEntity> groupOpt = aggregationGroupService.findById(id);
+            if (groupOpt.isEmpty()) {
+                return Result.error("聚合组不存在: " + id);
+            }
+
+            AggregationGroupEntity group = groupOpt.get();
+            String groupId = group.getGroupId();
+
+            // 获取聚合组内的所有日志
+            List<RawLogEventEntity> allLogs = rawLogEventService.findAllByAggregationGroupId(groupId);
+
+            if (allLogs.isEmpty()) {
+                return Result.error("聚合组内没有日志");
+            }
+
+            // 按时间排序（升序，最早的在前）
+            allLogs.sort(Comparator.comparing(
+                RawLogEventEntity::getOriginalLogTime,
+                Comparator.nullsLast(Comparator.naturalOrder())
+            ));
+
+            // 构建返回数据
+            Map<String, Object> contextData = new HashMap<>();
+
+            // 基本信息
+            contextData.put("groupId", group.getGroupId());
+            contextData.put("name", group.getName());
+            contextData.put("severity", group.getSeverity());
+            contextData.put("eventCount", group.getEventCount());
+            contextData.put("startTime", group.getFirstEventTime());
+            contextData.put("endTime", group.getLastEventTime());
+            contextData.put("representativeLog", group.getRepresentativeLog());
+
+            // 相关日志（最多20条）
+            List<Map<String, Object>> relatedLogs = new ArrayList<>();
+            int maxLogs = Math.min(allLogs.size(), 20);
+            for (int i = 0; i < maxLogs; i++) {
+                RawLogEventEntity log = allLogs.get(i);
+                Map<String, Object> logMap = new HashMap<>();
+                logMap.put("id", log.getId());
+                logMap.put("logTime", log.getOriginalLogTime());
+                logMap.put("logLevel", log.getLogLevel());
+                logMap.put("message", log.getRawContent());
+                relatedLogs.add(logMap);
+            }
+            contextData.put("relatedLogs", relatedLogs);
+
+            // 错误前后的上下文日志
+            List<Map<String, Object>> contextBefore = new ArrayList<>();
+            List<Map<String, Object>> contextAfter = new ArrayList<>();
+
+            // 找到 ERROR/CRITICAL 日志的位置
+            int errorIndex = -1;
+            for (int i = 0; i < allLogs.size(); i++) {
+                String level = allLogs.get(i).getLogLevel();
+                if ("ERROR".equalsIgnoreCase(level) || "CRITICAL".equalsIgnoreCase(level)) {
+                    errorIndex = i;
+                    break;
+                }
+            }
+
+            if (errorIndex >= 0) {
+                // 获取错误前的日志
+                int beforeStart = Math.max(0, errorIndex - contextSize);
+                for (int i = beforeStart; i < errorIndex; i++) {
+                    RawLogEventEntity log = allLogs.get(i);
+                    Map<String, Object> logMap = new HashMap<>();
+                    logMap.put("id", log.getId());
+                    logMap.put("logTime", log.getOriginalLogTime());
+                    logMap.put("logLevel", log.getLogLevel());
+                    logMap.put("message", log.getRawContent());
+                    contextBefore.add(logMap);
+                }
+
+                // 获取错误后的日志
+                int afterEnd = Math.min(allLogs.size(), errorIndex + contextSize + 1);
+                for (int i = errorIndex + 1; i < afterEnd; i++) {
+                    RawLogEventEntity log = allLogs.get(i);
+                    Map<String, Object> logMap = new HashMap<>();
+                    logMap.put("id", log.getId());
+                    logMap.put("logTime", log.getOriginalLogTime());
+                    logMap.put("logLevel", log.getLogLevel());
+                    logMap.put("message", log.getRawContent());
+                    contextAfter.add(logMap);
+                }
+            }
+
+            contextData.put("contextBefore", contextBefore);
+            contextData.put("contextAfter", contextAfter);
+
+            return Result.success(contextData);
+        } catch (Exception e) {
+            log.error("获取聚合组上下文失败", e);
+            return Result.error("获取聚合组上下文失败: " + e.getMessage());
         }
     }
 
