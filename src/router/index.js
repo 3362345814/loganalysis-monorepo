@@ -44,6 +44,12 @@ const routes = [
     meta: { title: '告警管理' }
   },
   {
+    path: '/alerts/rules',
+    name: 'AlertRuleManage',
+    component: () => import('@/views/Alerts/RuleManage.vue'),
+    meta: { title: '告警规则管理' }
+  },
+  {
     path: '/llm-config',
     name: 'LlmConfig',
     component: () => import('@/views/LlmConfig/index.vue'),
