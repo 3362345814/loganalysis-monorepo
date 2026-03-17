@@ -1,6 +1,6 @@
 package com.evelin.loganalysis.logcommon.model;
 
-import com.evelin.loganalysis.logcommon.enums.RuleType;
+import com.evelin.loganalysis.logalert.enums.RuleType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

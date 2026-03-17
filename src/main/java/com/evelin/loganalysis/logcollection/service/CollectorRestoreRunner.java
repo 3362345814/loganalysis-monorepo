@@ -2,8 +2,8 @@ package com.evelin.loganalysis.logcollection.service;
 
 import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.collector.LogCollector;
-import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
-import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;

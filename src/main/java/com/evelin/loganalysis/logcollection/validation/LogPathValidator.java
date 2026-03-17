@@ -1,6 +1,6 @@
 package com.evelin.loganalysis.logcollection.validation;
 
-import com.evelin.loganalysis.logcommon.enums.LogFormat;
+import com.evelin.loganalysis.logcollection.enums.LogFormat;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;

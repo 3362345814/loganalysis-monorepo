@@ -4,7 +4,7 @@ import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.repository.CheckpointRepository;
 import com.evelin.loganalysis.logcommon.model.LogCheckpoint;
-import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;

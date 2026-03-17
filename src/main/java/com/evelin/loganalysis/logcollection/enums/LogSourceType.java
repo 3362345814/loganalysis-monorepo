@@ -1,4 +1,4 @@
-package com.evelin.loganalysis.logcommon.enums;
+package com.evelin.loganalysis.logcollection.enums;
 
 /**
  * 日志源类型枚举

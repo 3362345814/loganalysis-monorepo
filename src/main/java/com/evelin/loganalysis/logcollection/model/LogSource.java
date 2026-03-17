@@ -1,7 +1,8 @@
-package com.evelin.loganalysis.logcommon.model;
+package com.evelin.loganalysis.logcollection.model;
 
-import com.evelin.loganalysis.logcommon.enums.LogFormat;
-import com.evelin.loganalysis.logcommon.enums.LogSourceType;
+import com.evelin.loganalysis.logcollection.enums.LogFormat;
+import com.evelin.loganalysis.logcollection.enums.LogSourceType;
+import com.evelin.loganalysis.logcommon.model.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -137,8 +138,8 @@ public class LogSource extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
     @Builder.Default
-    private com.evelin.loganalysis.logcommon.enums.CollectionStatus status =
-            com.evelin.loganalysis.logcommon.enums.CollectionStatus.STOPPED;
+    private com.evelin.loganalysis.logcollection.enums.CollectionStatus status =
+            com.evelin.loganalysis.logcollection.enums.CollectionStatus.STOPPED;
 
     /**
      * 额外配置（JSON格式）

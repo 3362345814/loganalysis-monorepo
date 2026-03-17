@@ -1,5 +1,6 @@
 package com.evelin.loganalysis.logprocessing.pipeline;
 
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.service.LogSourceService;
 import com.evelin.loganalysis.logprocessing.aggregation.LogAggregator;
@@ -205,7 +206,7 @@ public class LogProcessingPipeline {
             return null;
         }
         try {
-            Optional<com.evelin.loganalysis.logcommon.model.LogSource> sourceOpt =
+            Optional<LogSource> sourceOpt =
                     logSourceService.getEntityById(UUID.fromString(sourceId));
             if (sourceOpt.isPresent()) {
                 return sourceOpt.get().getAggregationLevel();

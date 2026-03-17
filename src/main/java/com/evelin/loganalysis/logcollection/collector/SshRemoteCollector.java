@@ -4,7 +4,7 @@ import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
-import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.jcraft.jsch.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

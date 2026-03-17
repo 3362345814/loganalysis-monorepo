@@ -1,4 +1,4 @@
-package com.evelin.loganalysis.logcommon.enums;
+package com.evelin.loganalysis.logalert.enums;
 
 /**
  * 通知渠道枚举
@@ -25,6 +25,11 @@ public enum NotificationChannel {
      * 企业微信
      */
     WECHAT,
+
+    /**
+     * 飞书
+     */
+    FEISHU,
 
     /**
      * Slack

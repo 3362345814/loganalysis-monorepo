@@ -1,8 +1,8 @@
 package com.evelin.loganalysis.logcollection.repository;
 
-import com.evelin.loganalysis.logcommon.enums.CollectionStatus;
-import com.evelin.loganalysis.logcommon.enums.LogSourceType;
-import com.evelin.loganalysis.logcommon.model.LogSource;
+import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
+import com.evelin.loganalysis.logcollection.enums.LogSourceType;
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

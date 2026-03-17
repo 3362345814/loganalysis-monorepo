@@ -1,4 +1,4 @@
-package com.evelin.loganalysis.logcommon.enums;
+package com.evelin.loganalysis.logalert.enums;
 
 /**
  * 告警级别枚举

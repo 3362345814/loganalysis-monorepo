@@ -1,4 +1,4 @@
-package com.evelin.loganalysis.logcommon.enums;
+package com.evelin.loganalysis.logalert.enums;
 
 /**
  * 告警状态枚举
@@ -10,6 +10,11 @@ public enum AlertStatus {
      * 待处理
      */
     PENDING,
+
+    /**
+     * 已确认
+     */
+    ACKNOWLEDGED,
 
     /**
      * 处理中
