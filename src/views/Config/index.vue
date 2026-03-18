@@ -93,6 +93,23 @@
                 :disabled="!row.enabled"
                 style="width: 150px;"
               />
+              <el-input
+                v-model="row.configParams.from"
+                placeholder="发件人邮箱"
+                size="small"
+                :disabled="!row.enabled"
+                style="margin-top: 8px; margin-bottom: 8px;"
+              >
+                <template #prepend>发件人</template>
+              </el-input>
+              <el-input
+                v-model="row.configParams.recipients"
+                placeholder="收件人邮箱，多个用逗号分隔"
+                size="small"
+                :disabled="!row.enabled"
+              >
+                <template #prepend>收件人</template>
+              </el-input>
             </div>
             <div v-else-if="row.channel === 'WEBHOOK'">
               <el-input
