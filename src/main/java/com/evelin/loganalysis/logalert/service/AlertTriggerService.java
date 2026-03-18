@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -139,6 +140,15 @@ public class AlertTriggerService {
             }
 
             // 创建告警记录
+            // 将 sourceId 字符串转换为 UUID
+            List<UUID> sourceIdList = null;
+            if (sourceId != null && !sourceId.isEmpty()) {
+                try {
+                    sourceIdList = List.of(UUID.fromString(sourceId));
+                } catch (IllegalArgumentException e) {
+                    log.warn("无效的sourceId格式: {}", sourceId);
+                }
+            }
             alertRecordService.createAlertFromRule(
                     rule,
                     title,
@@ -146,7 +156,9 @@ public class AlertTriggerService {
                     triggerCondition,
                     triggerValue,
                     1,
-                    List.of(sourceName)
+                    List.of(sourceName),
+                    null,  // aggregationId - 暂时不传
+                    sourceIdList
             );
 
             // 发送通知
