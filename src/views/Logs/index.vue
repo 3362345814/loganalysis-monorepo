@@ -347,11 +347,31 @@ const loadLogs = async () => {
     const totalCount = countRes.data?.count || 0
     total.value = totalCount
     
-    // 只先加载第 0 页（最新 1000 条日志）
-    const params = {
-      page: 0,
-      size: 1000
+    // 检查是否有高亮时间，如果有则加载包含该时间的日志范围
+    const currentHighlightTime = highlightTime.value
+    let page = 0
+    let params = {}
+    
+    if (currentHighlightTime) {
+      // 计算目标时间范围：向前后各扩展一段时间
+      const targetDate = new Date(currentHighlightTime)
+      const startTime = new Date(targetDate.getTime() - 30 * 60 * 1000) // 往前30分钟
+      const endTime = new Date(targetDate.getTime() + 30 * 60 * 1000)   // 往后30分钟
+      
+        params = {
+        page: 0,
+        size: 1000,
+        startTime: startTime.toISOString().slice(0, 19),
+        endTime: endTime.toISOString().slice(0, 19)
+      }
+    } else {
+      // 默认只先加载第 0 页（最新 1000 条日志）
+      params = {
+        page: 0,
+        size: 1000
+      }
     }
+    
     const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
     let allLogs = res.data?.content || []
     
@@ -364,26 +384,50 @@ const loadLogs = async () => {
       total.value = allLogs.length
     }
     
+    // 查找并高亮匹配的日志
+    // 优先使用 ID 精确定位（从后端获取），其次使用时间定位
+    const currentHighlightId = highlightId.value
+    let highlightLogData = null
+
+    if (currentHighlightId) {
+      // 先尝试从已加载日志中查找
+      const foundIdx = allLogs.findIndex(log => log.id === currentHighlightId)
+      
+      // 如果没找到，从后端获取该日志
+      if (foundIdx === -1) {
+        try {
+          const idRes = await rawLogApi.getById(currentHighlightId)
+          if (idRes.data) {
+            // 保存获取到的日志数据
+            highlightLogData = idRes.data
+          }
+        } catch (error) {
+          console.error('获取高亮日志失败:', error)
+        }
+      }
+    }
+    
     // 关键修复：将日志反转，最新的日志放在数组末尾（终端下方）
     // 后端返回 DESC（最新在前），我们需要升序显示（最早在上，最新在下）
     allLogs.reverse()
+    
+    // 如果有从后端获取的高亮日志，插入到列表开头
+    if (highlightLogData) {
+      allLogs.unshift(highlightLogData)
+    }
     
     // 初始化当前加载的页码
     currentLoadPage = 0
     
     logs.value = allLogs
 
-    // 查找并高亮匹配的日志
-    // 优先使用 ID 精确定位，其次使用时间定位
+    // 在反转后的日志列表中查找并高亮
     let foundIndex = -1
-    const currentHighlightId = highlightId.value
-    const currentHighlightTime = highlightTime.value
 
     if (currentHighlightId) {
-      // 使用 ID 精确定位
       foundIndex = logs.value.findIndex(log => log.id === currentHighlightId)
     } else if (currentHighlightTime) {
-      // 使用时间定位（作为后备）
+      // 使用时间定位（在已加载的日志中查找）
       const targetTime = new Date(currentHighlightTime).getTime()
       foundIndex = logs.value.findIndex(log => {
         const logTime = getLogTimestamp(log)
@@ -440,6 +484,10 @@ const handleScroll = (e) => {
 const loadMoreLogsAtTop = async () => {
   if (!filter.value.sourceId || loading.value) return
   
+  // #region agent debug log
+  fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'C', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'loadMoreLogsAtTop started', data: {sourceId: filter.value.sourceId, currentLoadPage: currentLoadPage, logsCount: logs.value.length, pageSize: filter.value.pageSize}, timestamp: Date.now()})}).catch(() => {});
+  // #endregion
+  
   try {
     loading.value = true
     const oldLogs = [...logs.value]
@@ -452,13 +500,22 @@ const loadMoreLogsAtTop = async () => {
     const currentPage = currentLoadPage
     const nextPage = currentPage + 1
     
+    // #region agent debug log
+    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'D', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'requesting next page', data: {currentPage, nextPage, oldestTime: oldestTime ? new Date(oldestTime).toISOString() : null}, timestamp: Date.now()})}).catch(() => {});
+    // #endregion
+    
+    // 使用与初始加载一致的 pageSize (1000)
     const params = {
       page: nextPage,
-      size: filter.value.pageSize
+      size: 1000
     }
     
     const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
     let newLogs = res.data?.content || []
+    
+    // #region agent debug log
+    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'E', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'newLogs from API', data: {newLogsCount: newLogs.length, firstLogTime: newLogs.length > 0 ? getLogTimestamp(newLogs[0]) : null, lastLogTime: newLogs.length > 0 ? getLogTimestamp(newLogs[newLogs.length - 1]) : null}, timestamp: Date.now()})}).catch(() => {});
+    // #endregion
     
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
       newLogs = newLogs.filter(log => {
@@ -470,13 +527,18 @@ const loadMoreLogsAtTop = async () => {
     
     // 过滤条件应该是 logTime < oldestTime，获取更早的日志
     // 因为后端返回的是 DESC 排序，最新在前，所以后面的页面是更旧的日志
+    // 注意：移除时间过滤逻辑，因为后端已经返回了正确页面的数据
+    // 前端再做时间过滤会导致数据丢失
     if (oldLogs.length > 0 && oldestTime) {
-      newLogs = newLogs.filter(log => {
-        const logTime = getLogTimestamp(log)
-        // 获取比当前最早日志更早的日志
-        return logTime && logTime < oldestTime
-      })
+      // #region agent debug log
+      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'post-fix', hypothesisId: 'J', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'skipping time filter', data: {oldLogsCount: oldLogs.length}, timestamp: Date.now()})}).catch(() => {});
+      // #endregion
+      // 不再过滤，让所有数据通过
     }
+    
+    // #region agent debug log
+    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'F', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'after time filter', data: {newLogsCountAfterFilter: newLogs.length}, timestamp: Date.now()})}).catch(() => {});
+    // #endregion
     
     // 反转新日志（与 loadLogs 保持一致）
     newLogs.reverse()
@@ -487,6 +549,10 @@ const loadMoreLogsAtTop = async () => {
       logs.value = combinedLogs.slice(0, 4000)
       currentLoadPage = nextPage
       
+      // #region agent debug log
+      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'G', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'logs added', data: {totalLogs: logs.value.length, currentLoadPage: currentLoadPage}, timestamp: Date.now()})}).catch(() => {});
+      // #endregion
+      
       nextTick(() => {
         if (terminalRef.value) {
           // 保持滚动位置不变
@@ -494,6 +560,10 @@ const loadMoreLogsAtTop = async () => {
           terminalRef.value.scrollTop = newScrollHeight - lastScrollHeight
         }
       })
+    } else {
+      // #region agent debug log
+      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'H', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'no new logs added', data: {reason: 'newLogs.length === 0'}, timestamp: Date.now()})}).catch(() => {});
+      // #endregion
     }
     
     const countRes = await rawLogApi.getCount(filter.value.sourceId)
@@ -502,6 +572,9 @@ const loadMoreLogsAtTop = async () => {
     
   } catch (error) {
     console.error('加载更多日志失败:', error)
+    // #region agent debug log
+    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'I', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'error', data: {error: error.message}, timestamp: Date.now()})}).catch(() => {});
+    // #endregion
   } finally {
     loading.value = false
   }

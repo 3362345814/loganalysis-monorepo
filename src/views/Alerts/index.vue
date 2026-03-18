@@ -195,17 +195,39 @@
         <el-descriptions-item label="解决备注">{{ currentAlert.resolutionNote || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
-        <el-button
-          v-if="currentAlert?.status === 'PENDING'"
-          type="primary"
-          @click="handleAcknowledge(currentAlert)"
-        >确认告警</el-button>
-        <el-button
-          v-if="currentAlert?.status === 'ACKNOWLEDGED'"
-          type="success"
-          @click="handleResolve(currentAlert)"
-        >解决告警</el-button>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+          <div>
+            <el-button
+              v-if="currentAlert?.aggregationId"
+              type="primary"
+              plain
+              @click="jumpToAggregation"
+            >
+              查看聚合组
+            </el-button>
+            <el-button
+              v-else-if="currentAlert?.sourceIds?.length > 0"
+              type="primary"
+              plain
+              @click="jumpToLogs"
+            >
+              查看日志
+            </el-button>
+          </div>
+          <div>
+            <el-button @click="detailDialogVisible = false">关闭</el-button>
+            <el-button
+              v-if="currentAlert?.status === 'PENDING'"
+              type="primary"
+              @click="handleAcknowledge(currentAlert)"
+            >确认告警</el-button>
+            <el-button
+              v-if="currentAlert?.status === 'ACKNOWLEDGED'"
+              type="success"
+              @click="handleResolve(currentAlert)"
+            >解决告警</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -235,6 +257,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting } from '@element-plus/icons-vue'
 import { alertRecordApi, alertStatisticsApi } from '@/api/alertApi'
+import { logSourceApi } from '@/api'
 
 const router = useRouter()
 
@@ -336,6 +359,45 @@ const handleView = async (row) => {
     detailDialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取告警详情失败')
+  }
+}
+
+// 跳转到聚合组页面
+const jumpToAggregation = () => {
+  if (currentAlert.value?.aggregationId) {
+    router.push({
+      path: '/processing',
+      query: { highlightGroupId: currentAlert.value.aggregationId }
+    })
+    detailDialogVisible.value = false
+  }
+}
+
+// 跳转到日志页面
+const jumpToLogs = async () => {
+  if (currentAlert.value?.sourceIds && currentAlert.value.sourceIds.length > 0) {
+    const sourceId = currentAlert.value.sourceIds[0]
+    // 获取日志源名称
+    let sourceName = ''
+    try {
+      const res = await logSourceApi.getById(sourceId)
+      sourceName = res.data?.name || ''
+    } catch (error) {
+      console.warn('获取日志源名称失败:', error)
+    }
+    
+    const queryParams = {
+      sourceId: sourceId,
+      sourceName: sourceName,
+      highlightTime: currentAlert.value.triggeredAt
+    }
+    router.push({
+      path: '/logs',
+      query: queryParams
+    })
+    detailDialogVisible.value = false
+  } else {
+    ElMessage.warning('无法获取日志源信息')
   }
 }
 
