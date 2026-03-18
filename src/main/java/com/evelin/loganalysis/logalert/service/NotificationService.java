@@ -10,17 +10,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 
 /**
@@ -36,6 +45,7 @@ public class NotificationService {
     private final AlertNotificationRepository notificationRepository;
     private final NotificationChannelConfigRepository channelConfigRepository;
     private final ObjectMapper objectMapper;
+    private final JavaMailSender javaMailSender;
 
     // 默认配置（当数据库没有配置时使用）
     @Value("${alert.notification.dingtalk.webhook-url:}")
@@ -79,17 +89,22 @@ public class NotificationService {
         
         try {
             NotificationChannelConfig dbConfig = channelConfigRepository
-                    .findByChannel(channel.name())
+                    .findByChannel(channel)
                     .orElse(null);
+            
+            log.info("渠道 {} 的数据库配置: {}", channel, dbConfig);
             
             if (dbConfig != null && dbConfig.getEnabled() && dbConfig.getConfigParams() != null) {
                 Map<String, String> params = objectMapper.readValue(
                         dbConfig.getConfigParams(), 
                         Map.class
                 );
+                log.info("渠道 {} 的配置参数: {}", channel, params);
                 config.putAll(params);
                 config.put("_enabled", "true");
                 return config;
+            } else {
+                log.info("渠道 {} 未启用或无配置，使用默认配置", channel);
             }
         } catch (Exception e) {
             log.warn("读取渠道配置失败: {}", channel, e);
@@ -243,7 +258,7 @@ public class NotificationService {
     private void sendEmailNotification(String title, String content, AlertRule rule) {
         Map<String, String> config = getChannelConfig(NotificationChannel.EMAIL);
         boolean isEnabled = "true".equals(config.get("_enabled")) || emailEnabled;
-        
+
         if (!isEnabled) {
             log.warn("邮件通知未启用");
             return;
@@ -254,14 +269,116 @@ public class NotificationService {
         String username = config.getOrDefault("username", defaultEmailUsername);
         String password = config.getOrDefault("password", defaultEmailPassword);
         String from = config.getOrDefault("from", defaultEmailFrom);
+        String recipientsStr = config.get("recipients");
+
+        log.info("邮件配置 - smtpHost: {}, smtpPort: {}, username: {}, from: {}, recipients: {}", 
+                smtpHost, smtpPort, username, from, recipientsStr);
 
         if (smtpHost == null || smtpHost.isEmpty()) {
             log.warn("邮件 SMTP 服务器未配置");
             return;
         }
 
-        // 这里可以集成 Spring Mail 或其他邮件服务
-        log.info("邮件通知: {} - {}, SMTP: {}:{}", title, content, smtpHost, smtpPort);
+        if (recipientsStr == null || recipientsStr.isEmpty()) {
+            log.warn("邮件收件人未配置");
+            return;
+        }
+
+        // 解析收件人列表（支持逗号分隔的多个收件人）
+        List<String> recipients = Arrays.asList(recipientsStr.split(","))
+                .stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+
+        if (recipients.isEmpty()) {
+            log.warn("邮件收件人列表为空");
+            return;
+        }
+
+        try {
+            // 构建邮件内容
+            String emailContent = buildEmailContent(title, content, rule);
+
+            // 使用数据库配置创建 JavaMailSender
+            JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+            mailSender.setHost(smtpHost);
+            mailSender.setPort(Integer.parseInt(smtpPort));
+            mailSender.setUsername(username);
+            mailSender.setPassword(password);
+            mailSender.setDefaultEncoding("UTF-8");
+            
+            // 配置 SMTP 属性
+            Properties props = mailSender.getJavaMailProperties();
+            props.put("mail.smtp.auth", "true");
+            if (Integer.parseInt(smtpPort) == 465) {
+                props.put("mail.smtp.ssl.enable", "true");
+                props.put("mail.smtp.ssl.trust", smtpHost);
+            } else {
+                props.put("mail.smtp.starttls.enable", "true");
+                props.put("mail.smtp.starttls.required", "true");
+            }
+
+            log.info("创建邮件发送器 - host: {}, port: {}, username: {}", smtpHost, smtpPort, username);
+
+            // 发送邮件
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            // 设置发件人
+            if (from != null && !from.isEmpty()) {
+                helper.setFrom(from);
+            } else {
+                helper.setFrom(username);
+            }
+
+            // 设置收件人
+            helper.setTo(recipients.toArray(new String[0]));
+
+            // 设置主题
+            helper.setSubject(title);
+
+            // 设置邮件内容（支持HTML）
+            helper.setText(emailContent, true);
+
+            // 发送邮件
+            mailSender.send(mimeMessage);
+
+            log.info("邮件通知发送成功: {} -> {}", from, recipients);
+
+            // 记录通知发送结果
+            for (String recipient : recipients) {
+                recordNotification(rule.getId(), NotificationChannel.EMAIL, recipient, "SENT", null);
+            }
+        } catch (MessagingException e) {
+            log.error("发送邮件通知失败: {}", e.getMessage(), e);
+            recordNotification(rule.getId(), NotificationChannel.EMAIL, recipientsStr, "FAILED", e.getMessage());
+        } catch (Exception e) {
+            log.error("发送邮件通知失败: {}", e.getMessage(), e);
+            recordNotification(rule.getId(), NotificationChannel.EMAIL, recipientsStr, "FAILED", e.getMessage());
+        }
+    }
+
+    /**
+     * 构建邮件内容
+     */
+    private String buildEmailContent(String title, String content, AlertRule rule) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<html><body>");
+        sb.append("<div style='font-family: Arial, sans-serif; padding: 20px; max-width: 800px;'>");
+        sb.append("<h2 style='color: #d9534f;'>").append(title).append("</h2>");
+        sb.append("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;'>");
+        sb.append("<p><strong>告警内容:</strong></p>");
+        sb.append("<p>").append(content.replace("\n", "<br>")).append("</p>");
+        sb.append("</div>");
+        sb.append("<div style='color: #6c757d; font-size: 12px; margin-top: 20px;'>");
+        sb.append("<p><strong>告警规则:</strong> ").append(rule.getName()).append("</p>");
+        sb.append("<p><strong>告警级别:</strong> ").append(rule.getAlertLevel()).append("</p>");
+        sb.append("<p><strong>触发时间:</strong> ").append(LocalDateTime.now()).append("</p>");
+        sb.append("</div>");
+        sb.append("</div>");
+        sb.append("</body></html>");
+        return sb.toString();
     }
 
     /**

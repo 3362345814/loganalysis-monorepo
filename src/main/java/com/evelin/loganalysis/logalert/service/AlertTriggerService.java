@@ -28,10 +28,10 @@ public class AlertTriggerService {
     /**
      * 检查日志是否触发告警规则
      *
-     * @param logMessage  日志消息
-     * @param logLevel    日志级别
-     * @param sourceId    日志源ID
-     * @param sourceName  日志源名称
+     * @param logMessage 日志消息
+     * @param logLevel   日志级别
+     * @param sourceId   日志源ID
+     * @param sourceName 日志源名称
      */
     public void checkAndTrigger(String logMessage, String logLevel, String sourceId, String sourceName) {
         List<AlertRule> enabledRules = alertRuleService.getEnabledRules();
@@ -39,7 +39,6 @@ public class AlertTriggerService {
         for (AlertRule rule : enabledRules) {
             // 检查是否在冷却期内
             if (alertRuleService.isInCooldown(rule)) {
-                log.debug("规则 {} 在冷却期内，跳过", rule.getName());
                 continue;
             }
 
@@ -162,8 +161,8 @@ public class AlertTriggerService {
     /**
      * 批量检查日志（用于阈值类规则）
      *
-     * @param logs         日志列表
-     * @param timeWindow   时间窗口（分钟）
+     * @param logs       日志列表
+     * @param timeWindow 时间窗口（分钟）
      */
     public void checkBatchAndTrigger(List<LogEntry> logs, int timeWindow) {
         // 获取阈值类规则
@@ -172,20 +171,6 @@ public class AlertTriggerService {
                 .toList();
 
         for (AlertRule rule : thresholdRules) {
-            // 统计符合条件的日志数量
-            long count = logs.stream()
-                    .filter(log -> {
-                        switch (rule.getRuleType()) {
-                            case KEYWORD -> matchKeyword(rule.getConditionExpression(), log.message());
-                            case REGEX -> matchRegex(rule.getConditionExpression(), log.message());
-                            case LEVEL -> matchLevel(rule.getConditionExpression(), log.level());
-                            default -> {
-                            }
-                        }
-                        return false;
-                    })
-                    .count();
-
             // 解析阈值条件，如 "error_count > 100"
             Map<String, Object> parsed = parseThresholdCondition(rule.getConditionExpression());
             if (parsed == null) {
@@ -196,19 +181,20 @@ public class AlertTriggerService {
             int threshold = (int) parsed.get("threshold");
             String operator = (String) parsed.get("operator");
 
-            // 检查是否满足阈值条件
-            boolean triggered = false;
+            // 统计符合条件的日志数量
             long errorCount = logs.stream()
                     .filter(l -> l.level().equalsIgnoreCase(targetLevel))
                     .count();
 
-            switch (operator) {
-                case ">" -> triggered = errorCount > threshold;
-                case ">=" -> triggered = errorCount >= threshold;
-                case "==" -> triggered = errorCount == threshold;
-                case "<" -> triggered = errorCount < threshold;
-                case "<=" -> triggered = errorCount <= threshold;
-            }
+            // 检查是否满足阈值条件
+            boolean triggered = switch (operator) {
+                case ">" -> errorCount > threshold;
+                case ">=" -> errorCount >= threshold;
+                case "==" -> errorCount == threshold;
+                case "<" -> errorCount < threshold;
+                case "<=" -> errorCount <= threshold;
+                default -> false;
+            };
 
             if (triggered) {
                 String title = String.format("%s - 阈值告警", rule.getName());

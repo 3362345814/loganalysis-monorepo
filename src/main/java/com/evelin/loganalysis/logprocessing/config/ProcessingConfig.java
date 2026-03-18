@@ -63,6 +63,11 @@ public class ProcessingConfig {
     private boolean aggregationEnabled = true;
 
     /**
+     * 是否启用告警触发
+     */
+    private boolean alertEnabled = true;
+
+    /**
      * 线程池核心线程数
      */
     private int corePoolSize = 4;
@@ -157,6 +162,14 @@ public class ProcessingConfig {
 
     public void setAggregationEnabled(boolean aggregationEnabled) {
         this.aggregationEnabled = aggregationEnabled;
+    }
+
+    public boolean isAlertEnabled() {
+        return alertEnabled;
+    }
+
+    public void setAlertEnabled(boolean alertEnabled) {
+        this.alertEnabled = alertEnabled;
     }
 
     public int getCorePoolSize() {

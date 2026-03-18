@@ -1,5 +1,6 @@
 package com.evelin.loganalysis.logalert.repository;
 
+import com.evelin.loganalysis.logalert.enums.NotificationChannel;
 import com.evelin.loganalysis.logalert.model.NotificationChannelConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -18,7 +19,7 @@ public interface NotificationChannelConfigRepository extends JpaRepository<Notif
     /**
      * 根据渠道查询配置
      */
-    Optional<NotificationChannelConfig> findByChannel(String channel);
+    Optional<NotificationChannelConfig> findByChannel(NotificationChannel channel);
 
     /**
      * 查询已启用的渠道配置

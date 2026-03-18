@@ -70,6 +70,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Boot Mail -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- ==================== 数据库与搜索引擎 ==================== -->
         <!-- PostgreSQL Driver -->
         <dependency>

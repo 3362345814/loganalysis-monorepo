@@ -10,6 +10,7 @@ import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationServi
 import com.evelin.loganalysis.logprocessing.dto.*;
 import com.evelin.loganalysis.logprocessing.event.EventDetector;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
+import com.evelin.loganalysis.logalert.service.AlertTriggerService;
 import com.evelin.loganalysis.logprocessing.service.AutoAnalysisTrigger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -40,6 +41,7 @@ public class LogProcessingPipeline {
     private final Executor processingExecutor;
     private final AutoAnalysisTrigger autoAnalysisTrigger;
     private final LogSourceService logSourceService;
+    private final AlertTriggerService alertTriggerService;
 
     public LogProcessingPipeline(
             ProcessingConfig processingConfig,
@@ -50,6 +52,7 @@ public class LogProcessingPipeline {
             DesensitizationService desensitizationService,
             AutoAnalysisTrigger autoAnalysisTrigger,
             LogSourceService logSourceService,
+            AlertTriggerService alertTriggerService,
             @Qualifier("processingExecutor") Executor processingExecutor) {
         this.processingConfig = processingConfig;
         this.logParser = logParser;
@@ -59,6 +62,7 @@ public class LogProcessingPipeline {
         this.desensitizationService = desensitizationService;
         this.autoAnalysisTrigger = autoAnalysisTrigger;
         this.logSourceService = logSourceService;
+        this.alertTriggerService = alertTriggerService;
         this.processingExecutor = processingExecutor;
     }
 
@@ -138,6 +142,11 @@ public class LogProcessingPipeline {
                 }
             }
 
+            // 步骤7: 告警检查
+            if (processingConfig.isAlertEnabled()) {
+                checkAlertTrigger(parsedEvent);
+            }
+
             result.setProcessTimeMs(System.currentTimeMillis() - startTime);
 
             return result;
@@ -215,5 +224,32 @@ public class LogProcessingPipeline {
             log.warn("获取日志源聚合级别配置失败: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 检查并触发告警
+     *
+     * @param parsedEvent 解析后的日志事件
+     */
+    private void checkAlertTrigger(ParsedLogEvent parsedEvent) {
+        try {
+            String logMessage = parsedEvent.getMessage();
+            String logLevel = parsedEvent.getLogLevel();
+            String sourceId = parsedEvent.getSourceId();
+            String sourceName = parsedEvent.getSourceName();
+
+            // 调用告警触发服务检查规则
+            alertTriggerService.checkAndTrigger(logMessage, logLevel, sourceId, sourceName);
+
+            // 如果检测到异常事件，也触发告警（基于异常检测结果）
+            if (parsedEvent.isAnomaly()) {
+                String anomalyMessage = String.format("[异常检测] %s (置信度: %.2f)",
+                        parsedEvent.getAnomalyReason() != null ? parsedEvent.getAnomalyReason() : "检测到异常",
+                        parsedEvent.getAnomalyScore());
+                alertTriggerService.checkAndTrigger(anomalyMessage, logLevel, sourceId, sourceName);
+            }
+        } catch (Exception e) {
+            log.error("执行告警检查失败: {}", e.getMessage(), e);
+        }
     }
 }

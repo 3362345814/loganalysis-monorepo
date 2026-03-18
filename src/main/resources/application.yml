@@ -56,6 +56,37 @@ spring:
     password: loganalysis_123456
     virtual-host: /
 
+  # 邮件配置（全局）
+  mail:
+    default-encoding: UTF-8
+    host: ${smtp.host:localhost}
+    port: ${smtp.port:587}
+    username: ${smtp.username:}
+    password: ${smtp.password:}
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 3000
+          writetimeout: 5000
+
+# 告警通知配置
+alert:
+  notification:
+    email:
+      enabled: true
+      smtp-host: smtp.qq.com
+      smtp-port: 587
+      username: your-email@qq.com
+      password: your-auth-code
+      from: your-email@qq.com
+      recipients: your-recipient@domain.com
+
   # Jackson配置（全局）
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
@@ -90,6 +121,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    mail:
+      enabled: false
   metrics:
     export:
       prometheus:
