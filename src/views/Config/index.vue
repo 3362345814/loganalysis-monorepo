@@ -70,14 +70,25 @@
               </div>
             </div>
             <div v-else-if="row.channel === 'WECHAT'">
-              <el-input
-                v-model="row.configParams.webhookUrl"
-                placeholder="请输入企业微信 webhook 地址"
-                size="small"
-                :disabled="!row.enabled"
-              >
-                <template #prepend>Webhook URL</template>
-              </el-input>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <el-input
+                  v-model="row.configParams.webhookUrl"
+                  placeholder="请输入企业微信 webhook 地址"
+                  size="small"
+                  :disabled="!row.enabled"
+                >
+                  <template #prepend>Webhook URL</template>
+                </el-input>
+                <el-button
+                  size="small"
+                  type="primary"
+                  :disabled="!row.enabled || !row.configParams.webhookUrl"
+                  :loading="testingWechatWork === row.channel"
+                  @click="handleTestWechatWork(row)"
+                >
+                  测试连接
+                </el-button>
+              </div>
             </div>
             <div v-else-if="row.channel === 'EMAIL'">
               <el-input
@@ -231,12 +242,13 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
-import { notificationChannelApi, feishuApi, dingtalkApi } from '@/api/alertApi'
+import { notificationChannelApi, feishuApi, dingtalkApi, wechatWorkApi } from '@/api/alertApi'
 
 const loading = ref(false)
 const saving = ref(false)
 const testingFeishu = ref(null)
 const testingDingtalk = ref(null)
+const testingWechatWork = ref(null)
 
 const channelList = ref([])
 
@@ -338,6 +350,25 @@ const handleTestDingtalk = async (row) => {
     ElMessage.error('钉钉连接测试失败: ' + (error.message || '未知错误'))
   } finally {
     testingDingtalk.value = null
+  }
+}
+
+// 测试企业微信连接
+const handleTestWechatWork = async (row) => {
+  testingWechatWork.value = row.channel
+  try {
+    const res = await wechatWorkApi.testConnection({
+      webhookUrl: row.configParams.webhookUrl
+    })
+    if (res.success) {
+      ElMessage.success('企业微信连接测试成功')
+    } else {
+      ElMessage.error(res.message || '企业微信连接测试失败')
+    }
+  } catch (error) {
+    ElMessage.error('企业微信连接测试失败: ' + (error.message || '未知错误'))
+  } finally {
+    testingWechatWork.value = null
   }
 }
 

@@ -118,3 +118,9 @@ export const dingtalkApi = {
   // 测试钉钉连接
   testConnection: (config) => service.post('/alert/dingtalk/test', config)
 }
+
+// 企业微信通知 API
+export const wechatWorkApi = {
+  // 测试企业微信连接
+  testConnection: (config) => service.post('/alert/wechatwork/test', config)
+}
