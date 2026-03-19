@@ -42,6 +42,7 @@ public class NotificationService {
     private final AlertNotificationRepository notificationRepository;
     private final NotificationChannelConfigRepository channelConfigRepository;
     private final ObjectMapper objectMapper;
+    private final FeishuNotificationService feishuNotificationService;
 
     // 默认配置（当数据库没有配置时使用）
     @Value("${alert.notification.dingtalk.webhook-url:}")
@@ -140,7 +141,7 @@ public class NotificationService {
             switch (channel) {
                 case DINGTALK -> sendDingtalkNotification(title, content);
                 case WECHAT -> sendWeixinNotification(title, content);
-                case FEISHU -> sendFeishuNotification(title, content);
+                case FEISHU -> sendFeishuNotification(title, content, rule);
                 case EMAIL -> sendEmailNotification(title, content, rule);
                 case WEBHOOK -> sendWebhookNotification(title, content);
                 default -> log.warn("不支持的通知渠道: {}", channel);
@@ -218,33 +219,12 @@ public class NotificationService {
     /**
      * 发送飞书通知
      */
-    private void sendFeishuNotification(String title, String content) {
-        Map<String, String> config = getChannelConfig(NotificationChannel.FEISHU);
-        String webhookUrl = config.getOrDefault("webhookUrl", defaultFeishuWebhookUrl);
-        String secret = config.getOrDefault("secret", defaultFeishuSecret);
-        
-        if (webhookUrl == null || webhookUrl.isEmpty()) {
-            log.warn("飞书 webhook URL 未配置");
-            return;
-        }
-
+    private void sendFeishuNotification(String title, String content, AlertRule rule) {
         try {
-            Map<String, Object> body = new HashMap<>();
-            body.put("msg_type", "text");
-
-            Map<String, Object> text = new HashMap<>();
-            text.put("content", String.format("【%s】\n%s", title, content));
-            body.put("content", text);
-
-            RestTemplate restTemplate = new RestTemplate();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            restTemplate.postForEntity(webhookUrl, request, String.class);
-            log.info("飞书通知发送成功");
+            feishuNotificationService.sendFeishuNotification(rule, title, content);
+            log.info("飞书通知发送请求已提交");
         } catch (Exception e) {
-            log.error("发送飞书通知失败", e);
+            log.error("发送飞书通知失败: channel={}, error={}", NotificationChannel.FEISHU, e.getMessage());
         }
     }
 
