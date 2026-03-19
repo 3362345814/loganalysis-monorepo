@@ -112,3 +112,9 @@ export const feishuApi = {
   // 测试飞书连接
   testConnection: (config) => service.post('/alert/feishu/test', config)
 }
+
+// 钉钉通知 API
+export const dingtalkApi = {
+  // 测试钉钉连接
+  testConnection: (config) => service.post('/alert/dingtalk/test', config)
+}

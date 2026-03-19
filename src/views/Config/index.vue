@@ -37,6 +37,7 @@
                 placeholder="请输入钉钉 webhook 地址"
                 size="small"
                 :disabled="!row.enabled"
+                style="margin-bottom: 8px;"
               >
                 <template #prepend>Webhook URL</template>
               </el-input>
@@ -45,10 +46,28 @@
                 placeholder="请输入加签密钥(可选)"
                 size="small"
                 :disabled="!row.enabled"
-                style="margin-top: 8px;"
+                style="margin-bottom: 8px;"
               >
                 <template #prepend>加签密钥</template>
               </el-input>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <el-input
+                  v-model="row.configParams.recipients"
+                  placeholder="接收人，多个用逗号分隔(可选)"
+                  size="small"
+                >
+                  <template #prepend>接收人</template>
+                </el-input>
+                <el-button
+                  size="small"
+                  type="primary"
+                  :disabled="!row.enabled || !row.configParams.webhookUrl"
+                  :loading="testingDingtalk === row.channel"
+                  @click="handleTestDingtalk(row)"
+                >
+                  测试连接
+                </el-button>
+              </div>
             </div>
             <div v-else-if="row.channel === 'WECHAT'">
               <el-input
@@ -212,11 +231,12 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
-import { notificationChannelApi, feishuApi } from '@/api/alertApi'
+import { notificationChannelApi, feishuApi, dingtalkApi } from '@/api/alertApi'
 
 const loading = ref(false)
 const saving = ref(false)
 const testingFeishu = ref(null)
+const testingDingtalk = ref(null)
 
 const channelList = ref([])
 
@@ -298,6 +318,26 @@ const handleTestFeishu = async (row) => {
     ElMessage.error('飞书连接测试失败: ' + (error.message || '未知错误'))
   } finally {
     testingFeishu.value = null
+  }
+}
+
+// 测试钉钉连接
+const handleTestDingtalk = async (row) => {
+  testingDingtalk.value = row.channel
+  try {
+    const res = await dingtalkApi.testConnection({
+      webhookUrl: row.configParams.webhookUrl,
+      secret: row.configParams.secret
+    })
+    if (res.success) {
+      ElMessage.success('钉钉连接测试成功')
+    } else {
+      ElMessage.error(res.message || '钉钉连接测试失败')
+    }
+  } catch (error) {
+    ElMessage.error('钉钉连接测试失败: ' + (error.message || '未知错误'))
+  } finally {
+    testingDingtalk.value = null
   }
 }
 
