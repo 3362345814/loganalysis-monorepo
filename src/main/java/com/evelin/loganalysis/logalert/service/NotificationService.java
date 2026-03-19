@@ -43,6 +43,7 @@ public class NotificationService {
     private final NotificationChannelConfigRepository channelConfigRepository;
     private final ObjectMapper objectMapper;
     private final FeishuNotificationService feishuNotificationService;
+    private final DingtalkNotificationService dingtalkNotificationService;
 
     // 默认配置（当数据库没有配置时使用）
     @Value("${alert.notification.dingtalk.webhook-url:}")
@@ -139,7 +140,7 @@ public class NotificationService {
     public void sendNotification(NotificationChannel channel, String title, String content, AlertRule rule) {
         try {
             switch (channel) {
-                case DINGTALK -> sendDingtalkNotification(title, content);
+                case DINGTALK -> sendDingtalkNotification(title, content, rule);
                 case WECHAT -> sendWeixinNotification(title, content);
                 case FEISHU -> sendFeishuNotification(title, content, rule);
                 case EMAIL -> sendEmailNotification(title, content, rule);
@@ -154,33 +155,12 @@ public class NotificationService {
     /**
      * 发送钉钉通知
      */
-    private void sendDingtalkNotification(String title, String content) {
-        Map<String, String> config = getChannelConfig(NotificationChannel.DINGTALK);
-        String webhookUrl = config.getOrDefault("webhookUrl", defaultDingtalkWebhookUrl);
-        String secret = config.getOrDefault("secret", defaultDingtalkSecret);
-        
-        if (webhookUrl == null || webhookUrl.isEmpty()) {
-            log.warn("钉钉 webhook URL 未配置");
-            return;
-        }
-
+    private void sendDingtalkNotification(String title, String content, AlertRule rule) {
         try {
-            Map<String, Object> body = new HashMap<>();
-            body.put("msgtype", "text");
-
-            Map<String, Object> text = new HashMap<>();
-            text.put("content", String.format("【%s】\n%s", title, content));
-            body.put("text", text);
-
-            RestTemplate restTemplate = new RestTemplate();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            restTemplate.postForEntity(webhookUrl, request, String.class);
-            log.info("钉钉通知发送成功");
+            dingtalkNotificationService.sendDingtalkNotification(rule, title, content);
+            log.info("钉钉通知发送请求已提交");
         } catch (Exception e) {
-            log.error("发送钉钉通知失败", e);
+            log.error("发送钉钉通知失败: channel={}, error={}", NotificationChannel.DINGTALK, e.getMessage());
         }
     }
 
