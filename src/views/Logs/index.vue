@@ -483,10 +483,7 @@ const handleScroll = (e) => {
 
 const loadMoreLogsAtTop = async () => {
   if (!filter.value.sourceId || loading.value) return
-  
-  // #region agent debug log
-  fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'C', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'loadMoreLogsAtTop started', data: {sourceId: filter.value.sourceId, currentLoadPage: currentLoadPage, logsCount: logs.value.length, pageSize: filter.value.pageSize}, timestamp: Date.now()})}).catch(() => {});
-  // #endregion
+
   
   try {
     loading.value = true
@@ -500,9 +497,6 @@ const loadMoreLogsAtTop = async () => {
     const currentPage = currentLoadPage
     const nextPage = currentPage + 1
     
-    // #region agent debug log
-    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'D', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'requesting next page', data: {currentPage, nextPage, oldestTime: oldestTime ? new Date(oldestTime).toISOString() : null}, timestamp: Date.now()})}).catch(() => {});
-    // #endregion
     
     // 使用与初始加载一致的 pageSize (1000)
     const params = {
@@ -512,10 +506,6 @@ const loadMoreLogsAtTop = async () => {
     
     const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
     let newLogs = res.data?.content || []
-    
-    // #region agent debug log
-    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'E', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'newLogs from API', data: {newLogsCount: newLogs.length, firstLogTime: newLogs.length > 0 ? getLogTimestamp(newLogs[0]) : null, lastLogTime: newLogs.length > 0 ? getLogTimestamp(newLogs[newLogs.length - 1]) : null}, timestamp: Date.now()})}).catch(() => {});
-    // #endregion
     
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
       newLogs = newLogs.filter(log => {
@@ -529,16 +519,6 @@ const loadMoreLogsAtTop = async () => {
     // 因为后端返回的是 DESC 排序，最新在前，所以后面的页面是更旧的日志
     // 注意：移除时间过滤逻辑，因为后端已经返回了正确页面的数据
     // 前端再做时间过滤会导致数据丢失
-    if (oldLogs.length > 0 && oldestTime) {
-      // #region agent debug log
-      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'post-fix', hypothesisId: 'J', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'skipping time filter', data: {oldLogsCount: oldLogs.length}, timestamp: Date.now()})}).catch(() => {});
-      // #endregion
-      // 不再过滤，让所有数据通过
-    }
-    
-    // #region agent debug log
-    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'F', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'after time filter', data: {newLogsCountAfterFilter: newLogs.length}, timestamp: Date.now()})}).catch(() => {});
-    // #endregion
     
     // 反转新日志（与 loadLogs 保持一致）
     newLogs.reverse()
@@ -549,9 +529,6 @@ const loadMoreLogsAtTop = async () => {
       logs.value = combinedLogs.slice(0, 4000)
       currentLoadPage = nextPage
       
-      // #region agent debug log
-      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'G', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'logs added', data: {totalLogs: logs.value.length, currentLoadPage: currentLoadPage}, timestamp: Date.now()})}).catch(() => {});
-      // #endregion
       
       nextTick(() => {
         if (terminalRef.value) {
@@ -560,10 +537,6 @@ const loadMoreLogsAtTop = async () => {
           terminalRef.value.scrollTop = newScrollHeight - lastScrollHeight
         }
       })
-    } else {
-      // #region agent debug log
-      fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'H', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'no new logs added', data: {reason: 'newLogs.length === 0'}, timestamp: Date.now()})}).catch(() => {});
-      // #endregion
     }
     
     const countRes = await rawLogApi.getCount(filter.value.sourceId)
@@ -572,9 +545,6 @@ const loadMoreLogsAtTop = async () => {
     
   } catch (error) {
     console.error('加载更多日志失败:', error)
-    // #region agent debug log
-    fetch('http://127.0.0.1:7242/ingest/f14522bf-58b3-4c68-8a3e-a6160aca2ee6', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b39d5f'}, body: JSON.stringify({sessionId: 'b39d5f', runId: 'debug', hypothesisId: 'I', location: 'Logs/index.vue:loadMoreLogsAtTop', message: 'error', data: {error: error.message}, timestamp: Date.now()})}).catch(() => {});
-    // #endregion
   } finally {
     loading.value = false
   }
