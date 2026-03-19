@@ -3,8 +3,6 @@ package com.evelin.loganalysis.logalert.dto;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * 告警统计响应DTO

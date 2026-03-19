@@ -1,7 +1,6 @@
 package com.evelin.loganalysis.logcollection.util;
 
 import com.evelin.loganalysis.logcollection.enums.LogFormat;
-import com.evelin.loganalysis.logcollection.model.LogSource;
 
 import java.util.*;
 

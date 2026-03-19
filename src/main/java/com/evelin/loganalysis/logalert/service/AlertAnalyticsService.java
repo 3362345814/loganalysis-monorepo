@@ -32,7 +32,6 @@ public class AlertAnalyticsService {
      * 获取告警统计信息
      */
     public AlertStatisticsResponse getStatistics() {
-        LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
         AlertStatisticsResponse response = new AlertStatisticsResponse();
