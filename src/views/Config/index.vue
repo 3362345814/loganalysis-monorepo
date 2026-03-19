@@ -127,9 +127,37 @@
                 placeholder="请输入飞书 webhook 地址"
                 size="small"
                 :disabled="!row.enabled"
+                style="margin-bottom: 8px;"
               >
                 <template #prepend>Webhook URL</template>
               </el-input>
+              <el-input
+                v-model="row.configParams.secret"
+                placeholder="请输入飞书机器人加签密钥(可选)"
+                size="small"
+                :disabled="!row.enabled"
+                style="margin-bottom: 8px;"
+              >
+                <template #prepend>加签密钥</template>
+              </el-input>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <el-input
+                  v-model="row.configParams.recipients"
+                  placeholder="接收人，多个用逗号分隔(可选)"
+                  size="small"
+                >
+                  <template #prepend>接收人</template>
+                </el-input>
+                <el-button
+                  size="small"
+                  type="primary"
+                  :disabled="!row.enabled || !row.configParams.webhookUrl"
+                  :loading="testingFeishu === row.channel"
+                  @click="handleTestFeishu(row)"
+                >
+                  测试连接
+                </el-button>
+              </div>
             </div>
             <div v-else-if="row.channel === 'SMS'">
               <el-input
@@ -184,10 +212,11 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
-import { notificationChannelApi } from '@/api/alertApi'
+import { notificationChannelApi, feishuApi } from '@/api/alertApi'
 
 const loading = ref(false)
 const saving = ref(false)
+const testingFeishu = ref(null)
 
 const channelList = ref([])
 
@@ -250,6 +279,26 @@ const getChannelText = (channel) => {
     WEBHOOK: 'Webhook'
   }
   return map[channel] || channel
+}
+
+// 测试飞书连接
+const handleTestFeishu = async (row) => {
+  testingFeishu.value = row.channel
+  try {
+    const res = await feishuApi.testConnection({
+      webhookUrl: row.configParams.webhookUrl,
+      secret: row.configParams.secret
+    })
+    if (res.success) {
+      ElMessage.success('飞书连接测试成功')
+    } else {
+      ElMessage.error(res.message || '飞书连接测试失败')
+    }
+  } catch (error) {
+    ElMessage.error('飞书连接测试失败: ' + (error.message || '未知错误'))
+  } finally {
+    testingFeishu.value = null
+  }
 }
 
 onMounted(() => {

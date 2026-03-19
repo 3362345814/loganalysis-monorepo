@@ -199,7 +199,7 @@ const form = reactive({
   alertLevel: 'HIGH',
   alertTitle: '',
   alertMessage: '',
-  notificationChannels: ['EMAIL'],
+  notificationChannels: [],
   cooldownMinutes: 10,
   enabled: true
 })
@@ -334,7 +334,7 @@ const resetForm = () => {
     alertLevel: 'HIGH',
     alertTitle: '',
     alertMessage: '',
-    notificationChannels: ['EMAIL'],
+    notificationChannels: [],
     cooldownMinutes: 10,
     enabled: true
   })

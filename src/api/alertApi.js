@@ -106,3 +106,9 @@ export const alertStatisticsApi = {
   // 按状态统计
   getByStatus: () => service.get('/alert/statistics/by-status')
 }
+
+// 飞书通知 API
+export const feishuApi = {
+  // 测试飞书连接
+  testConnection: (config) => service.post('/alert/feishu/test', config)
+}
