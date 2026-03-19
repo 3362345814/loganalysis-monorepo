@@ -44,6 +44,7 @@ public class NotificationService {
     private final ObjectMapper objectMapper;
     private final FeishuNotificationService feishuNotificationService;
     private final DingtalkNotificationService dingtalkNotificationService;
+    private final WechatWorkNotificationService wechatWorkNotificationService;
 
     // 默认配置（当数据库没有配置时使用）
     @Value("${alert.notification.dingtalk.webhook-url:}")
@@ -141,7 +142,7 @@ public class NotificationService {
         try {
             switch (channel) {
                 case DINGTALK -> sendDingtalkNotification(title, content, rule);
-                case WECHAT -> sendWeixinNotification(title, content);
+                case WECHAT -> sendWeixinNotification(title, content, rule);
                 case FEISHU -> sendFeishuNotification(title, content, rule);
                 case EMAIL -> sendEmailNotification(title, content, rule);
                 case WEBHOOK -> sendWebhookNotification(title, content);
@@ -167,32 +168,12 @@ public class NotificationService {
     /**
      * 发送企业微信通知
      */
-    private void sendWeixinNotification(String title, String content) {
-        Map<String, String> config = getChannelConfig(NotificationChannel.WECHAT);
-        String webhookUrl = config.getOrDefault("webhookUrl", defaultWeixinWebhookUrl);
-        
-        if (webhookUrl == null || webhookUrl.isEmpty()) {
-            log.warn("企业微信 webhook URL 未配置");
-            return;
-        }
-
+    private void sendWeixinNotification(String title, String content, AlertRule rule) {
         try {
-            Map<String, Object> body = new HashMap<>();
-            body.put("msgtype", "text");
-
-            Map<String, Object> text = new HashMap<>();
-            text.put("content", String.format("【%s】\n%s", title, content));
-            body.put("text", text);
-
-            RestTemplate restTemplate = new RestTemplate();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-            restTemplate.postForEntity(webhookUrl, request, String.class);
-            log.info("企业微信通知发送成功");
+            wechatWorkNotificationService.sendWechatWorkNotification(rule, title, content);
+            log.info("企业微信通知发送请求已提交");
         } catch (Exception e) {
-            log.error("发送企业微信通知失败", e);
+            log.error("发送企业微信通知失败: channel={}, error={}", NotificationChannel.WECHAT, e.getMessage());
         }
     }
 
