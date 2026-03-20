@@ -24,13 +24,14 @@ public class AnalysisController {
     private final AnalysisService analysisService;
     
     /**
-     * 触发分析
+     * 触发分析（手动触发，不限制级别）
      */
     @PostMapping
     public Result<AnalysisResultDTO> triggerAnalysis(@RequestBody Map<String, Object> aggregationData) {
         try {
-            log.info("收到分析请求: {}", aggregationData.get("groupId"));
-            AnalysisResultDTO result = analysisService.analyze(aggregationData);
+            log.info("收到手动分析请求: {}", aggregationData.get("groupId"));
+            // 手动触发，设置为 true，不限制日志级别
+            AnalysisResultDTO result = analysisService.analyze(aggregationData, true);
             return Result.success(result);
         } catch (Exception e) {
             log.error("分析失败: {}", e.getMessage(), e);

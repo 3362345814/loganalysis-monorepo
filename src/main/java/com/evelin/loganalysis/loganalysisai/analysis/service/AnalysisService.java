@@ -47,16 +47,31 @@ public class AnalysisService {
      */
     @Transactional
     public AnalysisResultDTO analyze(Map<String, Object> aggregationData) {
+        return analyze(aggregationData, false);
+    }
+
+    /**
+     * 分析聚合组
+     *
+     * @param aggregationData 聚合组数据
+     * @param isManualTrigger 是否为手动触发（手动触发不做级别限制）
+     * @return 分析结果
+     */
+    @Transactional
+    public AnalysisResultDTO analyze(Map<String, Object> aggregationData, boolean isManualTrigger) {
         String aggregationId = String.valueOf(aggregationData.get("groupId"));
         String severity = String.valueOf(aggregationData.getOrDefault("severity", "INFO"));
-        
-        log.info("开始分析聚合组: {}, 严重程度: {}", aggregationId, severity);
-        
-        // 检查严重程度，只有 ERROR 及以上才能分析
-        int severityPriority = getSeverityPriority(severity);
-        if (severityPriority < 2) {
-            log.warn("聚合组 {} 严重程度为 {}，低于 ERROR 阈值，跳过分析", aggregationId, severity);
-            throw new IllegalArgumentException("只有 ERROR 及以上级别才能触发 AI 分析");
+
+        log.info("开始分析聚合组: {}, 严重程度: {}, 触发类型: {}",
+                aggregationId, severity, isManualTrigger ? "手动" : "自动");
+
+        // 自动触发时才检查严重程度，手动触发不限制级别
+        if (!isManualTrigger) {
+            int severityPriority = getSeverityPriority(severity);
+            if (severityPriority < 2) {
+                log.warn("聚合组 {} 严重程度为 {}，低于 ERROR 阈值，跳过自动分析", aggregationId, severity);
+                throw new IllegalArgumentException("只有 ERROR 及以上级别才能触发 AI 分析");
+            }
         }
         
         // 检查是否已有分析结果
