@@ -208,6 +208,17 @@ public class RawLogEventService {
     }
 
     /**
+     * 根据日志源ID和日志级别统计日志数量
+     *
+     * @param sourceId 日志源ID
+     * @param logLevel 日志级别
+     * @return 数量
+     */
+    public long countBySourceIdAndLogLevel(UUID sourceId, String logLevel) {
+        return rawLogEventRepository.countBySourceIdAndLogLevel(sourceId, logLevel);
+    }
+
+    /**
      * 统计指定时间范围内的日志数量
      *
      * @param startTime 开始时间

@@ -422,14 +422,25 @@ public class LogCollectionController {
      * 统计指定日志源的日志数量
      *
      * @param sourceId 日志源ID
+     * @param logLevel 日志级别（可选）
      * @return 日志数量
      */
     @GetMapping("/logs/{sourceId}/count")
-    public Result<Map<String, Object>> countLogsBySource(@PathVariable UUID sourceId) {
-        long count = rawLogEventService.countBySourceId(sourceId);
+    public Result<Map<String, Object>> countLogsBySource(
+            @PathVariable UUID sourceId,
+            @RequestParam(required = false) String logLevel) {
+        long count;
+        if (logLevel != null && !logLevel.isEmpty()) {
+            count = rawLogEventService.countBySourceIdAndLogLevel(sourceId, logLevel);
+        } else {
+            count = rawLogEventService.countBySourceId(sourceId);
+        }
         Map<String, Object> result = new HashMap<>();
         result.put("sourceId", sourceId);
         result.put("count", count);
+        if (logLevel != null) {
+            result.put("logLevel", logLevel);
+        }
         return Result.success(result);
     }
 
