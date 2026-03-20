@@ -28,51 +28,51 @@ public class NginxLogParser implements ParseStrategy {
 
     private static final Pattern NGINX_ACCESS_PATTERN = Pattern.compile(
             "^(\\S+)\\s+"                           // 1. client_ip
-            + "(\\S+)\\s+"                          // 2. remote_user
-            + "\\[([^\\]]+)\\]\\s+"                 // 3. time_local
-            + "\"(\\S+)\\s+(\\S+)\\s+(\\S+)\"\\s+"   // 4. request_method, 5. request_uri, 6. protocol
-            + "(\\d+)\\s+"                          // 7. status
-            + "(\\d+)\\s+"                          // 8. body_bytes_sent
-            + "\"([^\"]*)\"\\s+"                    // 9. http_referer
-            + "\"([^\"]*)\""                        // 10. http_user_agent
+                    + "(\\S+)\\s+"                          // 2. remote_user
+                    + "\\[([^\\]]+)\\]\\s+"                 // 3. time_local
+                    + "\"(\\S+)\\s+(\\S+)\\s+(\\S+)\"\\s+"   // 4. request_method, 5. request_uri, 6. protocol
+                    + "(\\d+)\\s+"                          // 7. status
+                    + "(\\d+)\\s+"                          // 8. body_bytes_sent
+                    + "\"([^\"]*)\"\\s+"                    // 9. http_referer
+                    + "\"([^\"]*)\""                        // 10. http_user_agent
     );
 
     private static final Pattern NGINX_ACCESS_EXTENDED_PATTERN = Pattern.compile(
             "^(\\S+)\\s+"                           // 1. client_ip
-            + "(\\S+)\\s+"                          // 2. remote_user
-            + "\\[([^\\]]+)\\]\\s+"                 // 3. time_local
-            + "\"(\\S+)\\s+(\\S+)\\s+(\\S+)\"\\s+"   // 4. request_method, 5. request_uri, 6. protocol
-            + "(\\d+)\\s+"                          // 7. status
-            + "(\\d+)\\s+"                          // 8. body_bytes_sent
-            + "\"([^\"]*)\"\\s+"                    // 9. http_referer
-            + "\"([^\"]*)\"\\s+"                    // 10. http_user_agent
-            + "(\\S+)\\s+"                          // 11. upstream_addr (if present)
-            + "([\\d.]+)"                           // 12. upstream_response_time
+                    + "(\\S+)\\s+"                          // 2. remote_user
+                    + "\\[([^\\]]+)\\]\\s+"                 // 3. time_local
+                    + "\"(\\S+)\\s+(\\S+)\\s+(\\S+)\"\\s+"   // 4. request_method, 5. request_uri, 6. protocol
+                    + "(\\d+)\\s+"                          // 7. status
+                    + "(\\d+)\\s+"                          // 8. body_bytes_sent
+                    + "\"([^\"]*)\"\\s+"                    // 9. http_referer
+                    + "\"([^\"]*)\"\\s+"                    // 10. http_user_agent
+                    + "(\\S+)\\s+"                          // 11. upstream_addr (if present)
+                    + "([\\d.]+)"                           // 12. upstream_response_time
     );
 
     private static final Pattern NGINX_ACCESS_SIMPLE_PATTERN = Pattern.compile(
             "^(.+?)\\s+"                            // ip or client
-            + "\\[([^\\]]+)\\]\\s+"                 // time
-            + "\"(.*?)\"\\s+"                       // request
-            + "(\\d+)"                              // status
+                    + "\\[([^\\]]+)\\]\\s+"                 // time
+                    + "\"(.*?)\"\\s+"                       // request
+                    + "(\\d+)"                              // status
     );
 
     private static final Pattern NGINX_ERROR_PATTERN = Pattern.compile(
             "^(\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+"  // 1. timestamp
-            + "\\[(\\w+)\\]\\s+"                    // 2. log_level (error, warn, crit, etc.)
-            + "(?:\\d+#\\d+:\\s*)?"                 // optional: pid#tid:
-            + "(?:\\*\\d+:\\s*)?"                   // optional: *connectionId:
-            + "(.*)$"                               // 3. error message
+                    + "\\[(\\w+)\\]\\s+"                    // 2. log_level (error, warn, crit, etc.)
+                    + "(?:\\d+#\\d+:\\s*)?"                 // optional: pid#tid:
+                    + "(?:\\*\\d+:\\s*)?"                   // optional: *connectionId:
+                    + "(.*)$"                               // 3. error message
     );
 
     private static final Pattern NGINX_ERROR_SIMPLE_PATTERN = Pattern.compile(
             "^(\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+"  // 1. timestamp
-            + "\\[(\\w+)\\]\\s+"                    // 2. log_level
-            + "(.*)$"                               // 3. error message
+                    + "\\[(\\w+)\\]\\s+"                    // 2. log_level
+                    + "(.*)$"                               // 3. error message
     );
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)
@@ -94,9 +94,9 @@ public class NginxLogParser implements ParseStrategy {
 
     private boolean isErrorLog(String content) {
         String trimmed = content.trim();
-        if (trimmed.contains("[error]") || trimmed.contains("[warn]") || 
-            trimmed.contains("[crit]") || trimmed.contains("[alert]") || 
-            trimmed.contains("[emerg]") || trimmed.contains("[notice]")) {
+        if (trimmed.contains("[error]") || trimmed.contains("[warn]") ||
+                trimmed.contains("[crit]") || trimmed.contains("[alert]") ||
+                trimmed.contains("[emerg]") || trimmed.contains("[notice]")) {
             return true;
         }
         if (trimmed.matches("^\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\s+\\[\\w+\\]")) {

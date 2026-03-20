@@ -42,7 +42,7 @@ public class JsonLogParser implements ParseStrategy {
     };
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)

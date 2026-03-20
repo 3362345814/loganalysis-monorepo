@@ -10,10 +10,11 @@ public interface ParseStrategy {
     /**
      * 解析日志内容
      *
-     * @param content 原始日志内容
+     * @param content       原始日志内容
+     * @param customPattern
      * @return 解析结果
      */
-    ParseResult parse(String content);
+    ParseResult parse(String content, String customPattern);
 
     /**
      * 获取支持的日志格式

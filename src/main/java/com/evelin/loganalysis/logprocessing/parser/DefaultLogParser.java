@@ -20,18 +20,18 @@ public class DefaultLogParser implements ParseStrategy {
 
     // 尝试匹配各种常见日志格式
     private static final Pattern[] PATTERNS = {
-        // 格式: 2026-01-15 10:30:00.123 INFO Message
-        Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\s+(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(.*)$"),
-        
-        // 格式: [2026-01-15 10:30:00] [INFO] Message
-        Pattern.compile("^\\[(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\]\\s+\\[(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\]\\s+(.*)$"),
-        
-        // 格式: INFO 2026-01-15 10:30:00 Message
-        Pattern.compile("^(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\s+(.*)$"),
+            // 格式: 2026-01-15 10:30:00.123 INFO Message
+            Pattern.compile("^(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\s+(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(.*)$"),
+
+            // 格式: [2026-01-15 10:30:00] [INFO] Message
+            Pattern.compile("^\\[(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\]\\s+\\[(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\]\\s+(.*)$"),
+
+            // 格式: INFO 2026-01-15 10:30:00 Message
+            Pattern.compile("^(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?)\\s+(.*)$"),
     };
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)
@@ -88,7 +88,7 @@ public class DefaultLogParser implements ParseStrategy {
     private ParseResult parseSimple(String content) {
         // 简单解析：尝试检测日志级别
         String level = detectLevel(content);
-        
+
         return ParseResult.builder()
                 .success(true)
                 .timestamp(LocalDateTime.now())
@@ -102,17 +102,17 @@ public class DefaultLogParser implements ParseStrategy {
         try {
             // 尝试各种时间格式
             String[] formats = {
-                "yyyy-MM-dd HH:mm:ss.SSS",
-                "yyyy-MM-dd HH:mm:ss",
-                "yyyy-MM-dd'T'HH:mm:ss",
-                "yyyy-MM-dd'T'HH:mm:ss.SSS"
+                    "yyyy-MM-dd HH:mm:ss.SSS",
+                    "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-dd'T'HH:mm:ss",
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS"
             };
 
             for (String format : formats) {
                 try {
                     return java.time.LocalDateTime.parse(
-                        timestampStr.replace(' ', 'T'),
-                        java.time.format.DateTimeFormatter.ofPattern(format)
+                            timestampStr.replace(' ', 'T'),
+                            java.time.format.DateTimeFormatter.ofPattern(format)
                     );
                 } catch (Exception e) {
                     // 继续尝试下一个格式

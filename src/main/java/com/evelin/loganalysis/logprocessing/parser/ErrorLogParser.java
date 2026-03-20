@@ -47,7 +47,7 @@ public class ErrorLogParser implements ParseStrategy {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
 
         if (content == null || content.isEmpty()) {
             log.warn("[ErrorLogParser] 日志内容为空");

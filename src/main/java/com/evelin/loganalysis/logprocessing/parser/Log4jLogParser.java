@@ -1,25 +1,37 @@
 package com.evelin.loganalysis.logprocessing.parser;
 
+import com.evelin.loganalysis.logprocessing.parser.context.ParseContext;
+import com.evelin.loganalysis.logprocessing.parser.token.LiteralToken;
+import com.evelin.loganalysis.logprocessing.parser.token.PatternTokenizer;
+import com.evelin.loganalysis.logprocessing.parser.token.Token;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Log4j 日志解析器
- * 支持 Log4j 1.x 和 Log4j 2.x 格式
- *
- * Log4j 1.x 格式: 2026-01-15 10:30:02 ERROR [thread] class - message
- * Log4j 2.x 格式: 2026-01-15 10:30:02,123 ERROR [thread] class - message
+ * 自定义日志格式解析器
+ * 支持用户通过 Pattern 字符串（如 "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"）
+ * 自定义日志解析规则
+ * <p>
+ * 同时保留原有的固定格式解析（向后兼容）：
+ * - Log4j 1.x 格式: 2026-01-15 10:30:02 ERROR [thread] class - message
+ * - Log4j 2.x 格式: 2026-01-15 10:30:02,123 ERROR [thread] class - message
  *
  * @author Evelin
  */
 @Slf4j
 @Component
 public class Log4jLogParser implements ParseStrategy {
+
+    // ========== 原有固定格式正则（向后兼容 - 仅用于格式检测）==========
 
     private static final DateTimeFormatter FORMATTER_3_MS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
@@ -30,22 +42,20 @@ public class Log4jLogParser implements ParseStrategy {
     private static final DateTimeFormatter FORMATTER_COMMA_MS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss,SSS");
 
-    // Log4j 1.x 格式正则: yyyy-MM-dd HH:mm:ss [thread] LEVEL class - message
-    // 实际格式: 2026-03-14 03:51:03 [http-nio-8080-exec-9] WARN  com.example.Controller - message
+    // Log4j 1.x 格式正则
     private static final Pattern PATTERN_LOG4J1 = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})"  // 时间戳 (无毫秒)
-                    + "\\s+"                                      // 时间戳后的空格
-                    + "\\[([^\\]]+)\\]"                           // 线程名（带方括号）
-                    + "\\s+"                                      // 线程名后的空格
-                    + "(ERROR|WARN|INFO|DEBUG|TRACE|FATAL)"      // 日志级别
-                    + "\\s+"                                      // 日志级别后的空格
-                    + "([\\w\\.]+)"                              // 类名
-                    + "\\s+-\\s+(.*)$"                           // 消息
+            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})"
+                    + "\\s+"
+                    + "\\[([^\\]]+)\\]"
+                    + "\\s+"
+                    + "(ERROR|WARN|INFO|DEBUG|TRACE|FATAL)"
+                    + "\\s+"
+                    + "([\\w\\.]+)"
+                    + "\\s+-\\s+(.*)$"
     );
 
-    // Log4j 1.x 带毫秒格式正则
     private static final Pattern PATTERN_LOG4J1_MS = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})"  // 时间戳 (3位毫秒)
+            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3})"
                     + "\\s+"
                     + "\\[([^\\]]+)\\]"
                     + "\\s+"
@@ -55,9 +65,8 @@ public class Log4jLogParser implements ParseStrategy {
                     + "\\s+-\\s+(.*)$"
     );
 
-    // Log4j 2.x 格式正则: yyyy-MM-dd HH:mm:ss,SSS [thread] LEVEL class - message
     private static final Pattern PATTERN_LOG4J2 = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}[,\\.]\\d{3})"  // 时间戳 (带毫秒)
+            "^(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}[,\\.]\\d{3})"
                     + "\\s+"
                     + "\\[([^\\]]+)\\]"
                     + "\\s+"
@@ -67,7 +76,6 @@ public class Log4jLogParser implements ParseStrategy {
                     + "\\s+-\\s+(.*)$"
     );
 
-    // Log4j 2.x 简洁格式: LEVEL [thread] class - message (无日期)
     private static final Pattern PATTERN_LOG4J2_SIMPLE = Pattern.compile(
             "^(ERROR|WARN|INFO|DEBUG|TRACE|FATAL)"
                     + "\\s+\\[([^\\]]+)\\]"
@@ -75,19 +83,30 @@ public class Log4jLogParser implements ParseStrategy {
                     + "\\s+-\\s+(.*)$"
     );
 
-    // 类名:行号 格式
     private static final Pattern CLASS_LINE_PATTERN = Pattern.compile(
             "([\\w\\.]+):(\\d+)"
     );
 
+    // ========== 自定义 Pattern 解析相关（Delimiter 方式）==========
+
+    private List<Token> customTokens;
+    private String customPatternStr;
+
+    // 默认 Pattern（用于 SPRING_BOOT 和 LOG4J 格式）
+    public static final String DEFAULT_PATTERN = "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n";
+
+    // ========== ParseStrategy 接口实现 ==========
+
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)
                     .errorMessage("Empty content")
                     .build();
         }
+
+        configure(customPattern);
 
         try {
             String[] lines = content.split("\n");
@@ -97,18 +116,26 @@ public class Log4jLogParser implements ParseStrategy {
 
             String firstLine = lines[0].trim();
 
-            // 尝试各种模式匹配
-            ParseResult result = parseWithPattern(firstLine, content, PATTERN_LOG4J2, FORMATTER_COMMA_MS);
+            // 如果配置了自定义 Pattern，优先使用
+            if (customTokens != null && !customTokens.isEmpty()) {
+                ParseResult result = parseWithCustomPattern(firstLine, content);
+                if (result != null && result.isSuccess()) {
+                    return attachStackTrace(result, lines);
+                }
+            }
+
+            // 尝试固定格式解析（向后兼容）
+            ParseResult result = parseWithFixedPattern(firstLine, content, PATTERN_LOG4J2, FORMATTER_COMMA_MS);
             if (result != null) {
                 return attachStackTrace(result, lines);
             }
 
-            result = parseWithPattern(firstLine, content, PATTERN_LOG4J1_MS, FORMATTER_3_MS);
+            result = parseWithFixedPattern(firstLine, content, PATTERN_LOG4J1_MS, FORMATTER_3_MS);
             if (result != null) {
                 return attachStackTrace(result, lines);
             }
 
-            result = parseWithPattern(firstLine, content, PATTERN_LOG4J1, FORMATTER_NO_MS);
+            result = parseWithFixedPattern(firstLine, content, PATTERN_LOG4J1, FORMATTER_NO_MS);
             if (result != null) {
                 return attachStackTrace(result, lines);
             }
@@ -121,12 +148,143 @@ public class Log4jLogParser implements ParseStrategy {
             return parseFallback(content);
 
         } catch (Exception e) {
-            log.warn("Failed to parse Log4j log: {}", e.getMessage());
+            log.warn("Failed to parse log: {}", e.getMessage());
             return parseFallback(content);
         }
     }
 
-    private ParseResult parseWithPattern(String firstLine, String content, Pattern pattern, DateTimeFormatter formatter) {
+    @Override
+    public String getFormatName() {
+        return "LOG4J";
+    }
+
+    @Override
+    public boolean supports(String content) {
+        if (content == null || content.isEmpty()) {
+            return false;
+        }
+
+        String[] lines = content.split("\n");
+        if (lines.length == 0) {
+            return false;
+        }
+
+        String firstLine = lines[0].trim();
+
+
+        // 尝试固定格式
+        return PATTERN_LOG4J2.matcher(firstLine).matches() ||
+                PATTERN_LOG4J1_MS.matcher(firstLine).matches() ||
+                PATTERN_LOG4J1.matcher(firstLine).matches() ||
+                PATTERN_LOG4J2_SIMPLE.matcher(firstLine).matches();
+    }
+
+    // ========== 自定义 Pattern 配置方法 ==========
+
+    /**
+     * 配置自定义日志格式 Pattern
+     *
+     * @param pattern Log4j/Logback 格式字符串
+     *                例如: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+     */
+    public void configure(String pattern) {
+        if (pattern == null || pattern.isEmpty()) {
+            pattern = DEFAULT_PATTERN;
+        }
+
+        log.info("Configuring Log4jLogParser with pattern: {}", pattern);
+        if (Objects.equals(customPatternStr, pattern)) {
+            return;
+        }
+        this.customPatternStr = pattern;
+
+        PatternTokenizer tokenizer = new PatternTokenizer();
+        this.customTokens = tokenizer.tokenize(pattern);
+
+        // 调试输出
+        debugPrintTokens();
+    }
+
+    /**
+     * 配置自定义日志格式 Pattern（带默认格式）
+     *
+     * @param pattern       Log4j/Logback 格式字符串
+     * @param defaultFormat 默认格式类型（SPRING_BOOT 或 LOG4J）
+     */
+    public void configure(String pattern, String defaultFormat) {
+        if (pattern == null || pattern.isEmpty()) {
+            if ("SPRING_BOOT".equalsIgnoreCase(defaultFormat)) {
+                pattern = DEFAULT_PATTERN;
+            } else {
+                pattern = "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n";
+            }
+        }
+        configure(pattern);
+    }
+
+    /**
+     * 使用自定义 Pattern 解析日志（Delimiter 方式 - 不使用正则）
+     */
+    private ParseResult parseWithCustomPattern(String firstLine, String content) {
+        if (customTokens == null || customTokens.isEmpty()) {
+            return null;
+        }
+
+        try {
+            ParseContext ctx = new ParseContext(firstLine);
+            ParseResult result = ParseResult.builder()
+                    .success(true)
+                    .fields(new HashMap<>())
+                    .build();
+
+            // 遍历所有 token，依次解析
+            for (Token token : customTokens) {
+                if (token instanceof LiteralToken) {
+                    // 跳过 literal，直接匹配
+                    String literal = ((LiteralToken) token).getText();
+                    if (!ctx.skipLiteral(literal)) {
+                        log.debug("Failed to match literal: {}", literal);
+                        return null;
+                    }
+                    continue;
+                }
+
+                // 调用 token 的 parse 方法
+                token.parse(ctx, result);
+            }
+
+            // 设置时间戳（如果没有从 token 中设置）
+            if (result.getTimestamp() == null) {
+                result.setTimestamp(LocalDateTime.now());
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            log.debug("Failed to parse with custom pattern: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 调试输出：打印所有 Token 及其 delimiter
+     */
+    private void debugPrintTokens() {
+        if (log.isDebugEnabled() && customTokens != null) {
+            log.debug("=== Pattern Tokens ===");
+            for (Token token : customTokens) {
+                String type = token.getClass().getSimpleName();
+                String endDelim = token.getEndDelimiter();
+                String leadDelim = token.getLeadingDelimiter();
+                log.debug("{}: endDelimiter={}, leadingDelimiter={}", type, endDelim, leadDelim);
+            }
+            log.debug("======================");
+        }
+    }
+
+    // ========== 原有固定格式解析（向后兼容）==========
+
+    private ParseResult parseWithFixedPattern(String firstLine, String content, Pattern pattern, DateTimeFormatter formatter) {
         Matcher matcher = pattern.matcher(firstLine);
         if (!matcher.matches()) {
             return null;
@@ -271,7 +429,6 @@ public class Log4jLogParser implements ParseStrategy {
             if (stackTrace != null) {
                 result.setStackTrace(stackTrace);
 
-                // 如果消息中没有异常信息，从堆栈中提取
                 if (result.getExceptionType() == null) {
                     String[] stackLines = stackTrace.split("\n");
                     for (String line : stackLines) {
@@ -322,34 +479,10 @@ public class Log4jLogParser implements ParseStrategy {
         return "INFO";
     }
 
-    private java.util.Map<String, Object> parseFields(String content) {
-        java.util.Map<String, Object> fields = new java.util.HashMap<>();
+    private Map<String, Object> parseFields(String content) {
+        Map<String, Object> fields = new HashMap<>();
         fields.put("rawLength", content.length());
         fields.put("hasException", content.contains("Exception") || content.contains("Error"));
         return fields;
-    }
-
-    @Override
-    public String getFormatName() {
-        return "LOG4J";
-    }
-
-    @Override
-    public boolean supports(String content) {
-        if (content == null || content.isEmpty()) {
-            return false;
-        }
-
-        String[] lines = content.split("\n");
-        if (lines.length == 0) {
-            return false;
-        }
-
-        String firstLine = lines[0].trim();
-
-        return PATTERN_LOG4J2.matcher(firstLine).matches() ||
-                PATTERN_LOG4J1_MS.matcher(firstLine).matches() ||
-                PATTERN_LOG4J1.matcher(firstLine).matches() ||
-                PATTERN_LOG4J2_SIMPLE.matcher(firstLine).matches();
     }
 }

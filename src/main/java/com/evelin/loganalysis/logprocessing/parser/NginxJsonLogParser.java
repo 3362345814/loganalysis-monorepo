@@ -19,14 +19,14 @@ import java.util.Map;
 public class NginxJsonLogParser implements ParseStrategy {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     // 常见的时间字段名
     private static final String[] TIME_FIELDS = {
             "time_local", "timestamp", "@timestamp", "time", "datetime", "date"
     };
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)
@@ -38,7 +38,7 @@ public class NginxJsonLogParser implements ParseStrategy {
             // 尝试解析为 JSON
             JsonNode rootNode = objectMapper.readTree(content);
             Map<String, Object> jsonMap = objectMapper.convertValue(rootNode, Map.class);
-            
+
             if (jsonMap != null && !jsonMap.isEmpty()) {
                 return buildParseResult(jsonMap);
             }
@@ -53,7 +53,7 @@ public class NginxJsonLogParser implements ParseStrategy {
 
     private ParseResult buildParseResult(Map<String, Object> jsonMap) {
         Map<String, Object> fields = new HashMap<>();
-        
+
         for (Map.Entry<String, Object> entry : jsonMap.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
@@ -80,22 +80,22 @@ public class NginxJsonLogParser implements ParseStrategy {
 
     private LocalDateTime parseTimeField(String timeField, Object value) {
         if (value == null) return null;
-        
+
         String timeStr = value.toString().trim();
         if (timeStr.isEmpty()) return null;
-        
+
         // 尝试多种格式
         DateTimeFormatter[] formatters = {
-            // Nginx 标准格式: 13/Mar/2026:14:59:16 +0000
-            DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss X").withLocale(java.util.Locale.US),
-            // 另一种: 13/Mar/2026:14:59:16 +00:00
-            DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss XXX").withLocale(java.util.Locale.US),
-            // ISO 格式
-            DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-            // 简单格式
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                // Nginx 标准格式: 13/Mar/2026:14:59:16 +0000
+                DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss X").withLocale(java.util.Locale.US),
+                // 另一种: 13/Mar/2026:14:59:16 +00:00
+                DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss XXX").withLocale(java.util.Locale.US),
+                // ISO 格式
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+                // 简单格式
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         };
-        
+
         for (DateTimeFormatter formatter : formatters) {
             try {
                 ZonedDateTime zdt = ZonedDateTime.parse(timeStr, formatter);
@@ -104,7 +104,7 @@ public class NginxJsonLogParser implements ParseStrategy {
                 // 尝试下一个
             }
         }
-        
+
         log.debug("Failed to parse time field '{}': {}", timeField, timeStr);
         return null;
     }
@@ -137,7 +137,7 @@ public class NginxJsonLogParser implements ParseStrategy {
     private ParseResult parseFallback(String content) {
         Map<String, Object> fields = new HashMap<>();
         fields.put("raw_content", content);
-        
+
         return ParseResult.builder()
                 .success(true)
                 .logType("unknown")

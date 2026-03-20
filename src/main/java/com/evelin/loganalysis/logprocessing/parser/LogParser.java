@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 日志解析器主类
@@ -23,7 +24,6 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class LogParser {
 
-    private final SpringBootLogParser springBootLogParser;
     private final JsonLogParser jsonLogParser;
     private final DefaultLogParser defaultLogParser;
     private final ErrorLogParser errorLogParser;
@@ -31,6 +31,9 @@ public class LogParser {
     private final NginxJsonLogParser nginxJsonLogParser;
     private final AccessLogParser accessLogParser;
     private final Log4jLogParser log4jLogParser;
+
+    // 用于存储每个日志源的 Pattern 配置（sourceId -> pattern）
+    private final Map<String, String> patternConfigCache = new ConcurrentHashMap<>();
 
 
     /**
@@ -46,14 +49,36 @@ public class LogParser {
 
         String content = rawLogEvent.getRawContent();
 
+        // 处理自定义 Pattern 配置
+        String pattern = handlePatternConfig(rawLogEvent);
 
         ParseStrategy strategy = selectStrategy(content, rawLogEvent.getLogFormat(), rawLogEvent.getLogType());
 
-
         // 解析日志
-        ParseResult result = strategy.parse(content);
+        ParseResult result = strategy.parse(content, pattern);
+
+        log.info(result.toString());
 
         return buildParsedLogEvent(rawLogEvent, result);
+    }
+
+    /**
+     * 处理 Pattern 配置
+     * 如果 logFormatPattern 存在，则配置 Log4jLogParser 使用该 pattern
+     */
+    private String handlePatternConfig(RawLogEvent rawLogEvent) {
+        String sourceId = rawLogEvent.getSourceId() != null ? rawLogEvent.getSourceId().toString() : null;
+        String pattern = rawLogEvent.getLogFormatPattern();
+
+        if (sourceId != null && pattern != null && !pattern.isEmpty()) {
+            String cachedPattern = patternConfigCache.get(sourceId);
+            if (!pattern.equals(cachedPattern)) {
+                // Pattern 变更，需要重新配置
+                log.debug("Configuring pattern for source {}: {}", sourceId, pattern);
+                patternConfigCache.put(sourceId, pattern);
+            }
+        }
+        return pattern;
     }
 
     /**
@@ -98,12 +123,7 @@ public class LogParser {
             return nginxLogParser;
         }
 
-        // 其次尝试 Spring Boot 解析
-        if (springBootLogParser.supports(content)) {
-            return springBootLogParser;
-        }
-
-        // 其次尝试 Log4j 解析
+        // 其次尝试 Log4j 解析（支持自定义 Pattern）
         if (log4jLogParser.supports(content)) {
             return log4jLogParser;
         }
@@ -147,18 +167,18 @@ public class LogParser {
             switch (format) {
                 case "JSON":
                     return jsonLogParser;
-                case "NGINX":
                 case "NGINX_JSON":
                     return nginxJsonLogParser;
                 case "NGINX_ERROR":
                     return errorLogParser;
                 case "NGINX_ACCESS":
                     return accessLogParser;
-                case "SPRING_BOOT":
-                    return springBootLogParser;
                 case "LOG4J":
                 case "LOG4J1":
                 case "LOG4J2":
+                case "SPRING_BOOT":
+                case "CUSTOM":
+                    // 这些格式都使用 Log4jLogParser，它支持自定义 Pattern
                     return log4jLogParser;
                 case "PLAIN_TEXT":
                 default:

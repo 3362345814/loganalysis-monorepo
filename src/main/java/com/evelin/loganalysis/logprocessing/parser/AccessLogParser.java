@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 public class AccessLogParser implements ParseStrategy {
 
     private static final Map<String, String> VARIABLE_PATTERNS = new HashMap<>();
-    
+
     static {
         // Nginx 常用变量
         VARIABLE_PATTERNS.put("remote_addr", "([\\d\\.]+)");
@@ -47,7 +47,7 @@ public class AccessLogParser implements ParseStrategy {
      * 配置 log_format
      *
      * @param logFormat nginx log_format 字符串
-     *                   例如: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"
+     *                  例如: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"
      */
     public void configure(String logFormat) {
         if (logFormat == null || logFormat.isEmpty()) {
@@ -55,12 +55,12 @@ public class AccessLogParser implements ParseStrategy {
         }
 
         log.debug("Configuring AccessLogParser with format: {}", logFormat);
-        
+
         this.fieldNames = new ArrayList<>();
-        
+
         // 解析 log_format，提取变量名并构建正则
         String regex = parseLogFormat(logFormat);
-        
+
         try {
             this.pattern = Pattern.compile(regex);
             log.debug("AccessLogParser regex: {}", regex);
@@ -75,12 +75,12 @@ public class AccessLogParser implements ParseStrategy {
      */
     private String parseLogFormat(String logFormat) {
         StringBuilder regex = new StringBuilder("^");
-        
+
         // 按字符遍历，提取变量和字面量
         int i = 0;
         while (i < logFormat.length()) {
             char c = logFormat.charAt(i);
-            
+
             if (c == '$') {
                 // 提取变量名
                 int start = i + 1;
@@ -90,7 +90,7 @@ public class AccessLogParser implements ParseStrategy {
                 }
                 String variableName = logFormat.substring(start, end);
                 i = end;
-                
+
                 // 获取变量的正则模式
                 String varPattern = VARIABLE_PATTERNS.get(variableName);
                 if (varPattern != null) {
@@ -124,7 +124,7 @@ public class AccessLogParser implements ParseStrategy {
                 i++;
             }
         }
-        
+
         regex.append("$");
         return regex.toString();
     }
@@ -134,7 +134,7 @@ public class AccessLogParser implements ParseStrategy {
     }
 
     @Override
-    public ParseResult parse(String content) {
+    public ParseResult parse(String content, String customPattern) {
         if (content == null || content.isEmpty()) {
             return ParseResult.builder()
                     .success(false)
@@ -165,12 +165,12 @@ public class AccessLogParser implements ParseStrategy {
 
     private ParseResult buildParseResult(Matcher matcher) {
         Map<String, Object> fields = new HashMap<>();
-        
+
         int groupCount = matcher.groupCount();
         for (int i = 1; i <= groupCount && i <= fieldNames.size(); i++) {
             String fieldName = fieldNames.get(i - 1);
             String value = matcher.group(i);
-            
+
             // 特殊处理 request 字段
             if ("request".equals(fieldName) && value != null) {
                 // request 包含 method, uri, version，需要进一步解析
@@ -220,11 +220,11 @@ public class AccessLogParser implements ParseStrategy {
         if (content == null || content.isEmpty()) {
             return false;
         }
-        
+
         if (pattern == null) {
             configure(getDefaultLogFormat());
         }
-        
+
         return pattern.matcher(content).matches();
     }
 
