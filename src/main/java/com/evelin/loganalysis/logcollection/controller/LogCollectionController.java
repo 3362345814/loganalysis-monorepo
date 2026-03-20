@@ -449,6 +449,69 @@ public class LogCollectionController {
         return Result.success(result);
     }
 
+    /**
+     * 根据 traceId 查询日志（用于链路追踪）
+     *
+     * @param traceId 链路追踪ID
+     * @param page    页码（从0开始）
+     * @param size    每页大小
+     * @return 分页的原始日志列表
+     */
+    @GetMapping("/logs/trace/{traceId}")
+    public Result<PageResult<RawLogEventResponse>> getLogsByTraceId(
+            @PathVariable String traceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+
+        Page<RawLogEventEntity> logPage = rawLogEventService.findByTraceId(traceId, page, size);
+
+        List<RawLogEventResponse> content = logPage.getContent().stream()
+                .map(RawLogEventResponse::fromEntity)
+                .collect(Collectors.toList());
+
+        PageResult<RawLogEventResponse> result = PageResult.<RawLogEventResponse>builder()
+                .content(content)
+                .page(logPage.getNumber())
+                .size(logPage.getSize())
+                .total(logPage.getTotalElements())
+                .totalPages(logPage.getTotalPages())
+                .first(logPage.isFirst())
+                .last(logPage.isLast())
+                .build();
+
+        return Result.success(result);
+    }
+
+    /**
+     * 根据 traceId 查询所有日志（不分页，用于链路追踪）
+     *
+     * @param traceId 链路追踪ID
+     * @return 原始日志列表
+     */
+    @GetMapping("/logs/trace/{traceId}/all")
+    public Result<List<RawLogEventResponse>> getAllLogsByTraceId(@PathVariable String traceId) {
+        List<RawLogEventEntity> logs = rawLogEventService.findAllByTraceId(traceId);
+        List<RawLogEventResponse> content = logs.stream()
+                .map(RawLogEventResponse::fromEntity)
+                .collect(Collectors.toList());
+        return Result.success(content);
+    }
+
+    /**
+     * 统计指定 traceId 的日志数量
+     *
+     * @param traceId 链路追踪ID
+     * @return 日志数量
+     */
+    @GetMapping("/logs/trace/{traceId}/count")
+    public Result<Map<String, Object>> countLogsByTraceId(@PathVariable String traceId) {
+        long count = rawLogEventService.countByTraceId(traceId);
+        Map<String, Object> result = new HashMap<>();
+        result.put("traceId", traceId);
+        result.put("count", count);
+        return Result.success(result);
+    }
+
     // ==================== 测试接口 ====================
 
     /**

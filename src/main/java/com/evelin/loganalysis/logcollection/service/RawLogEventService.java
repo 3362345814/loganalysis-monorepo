@@ -274,4 +274,37 @@ public class RawLogEventService {
     public long countByAggregationGroupId(String aggregationGroupId) {
         return rawLogEventRepository.countByAggregationGroupId(aggregationGroupId);
     }
+
+    /**
+     * 根据 traceId 查询日志（分页）
+     *
+     * @param traceId 链路追踪ID
+     * @param page    页码（从0开始）
+     * @param size    每页大小
+     * @return 原始日志事件分页
+     */
+    public Page<RawLogEventEntity> findByTraceId(String traceId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return rawLogEventRepository.findByTraceId(traceId, pageable);
+    }
+
+    /**
+     * 根据 traceId 查询所有日志
+     *
+     * @param traceId 链路追踪ID
+     * @return 原始日志事件列表
+     */
+    public List<RawLogEventEntity> findAllByTraceId(String traceId) {
+        return rawLogEventRepository.findAllByTraceIdOrderByOriginalLogTimeAsc(traceId);
+    }
+
+    /**
+     * 统计指定 traceId 的日志数量
+     *
+     * @param traceId 链路追踪ID
+     * @return 数量
+     */
+    public long countByTraceId(String traceId) {
+        return rawLogEventRepository.countByTraceId(traceId);
+    }
 }

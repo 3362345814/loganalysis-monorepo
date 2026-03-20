@@ -191,4 +191,30 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
     @Modifying
     @Query("DELETE FROM RawLogEventEntity r WHERE r.sourceId = :sourceId")
     int deleteBySourceId(@Param("sourceId") UUID sourceId);
+
+    /**
+     * 根据 traceId 查询日志（分页，按日志时间升序）
+     *
+     * @param traceId  链路追踪ID
+     * @param pageable 分页参数
+     * @return 原始日志事件分页
+     */
+    @Query("SELECT r FROM RawLogEventEntity r WHERE r.traceId = :traceId ORDER BY r.originalLogTime ASC NULLS LAST, r.collectionTime ASC")
+    Page<RawLogEventEntity> findByTraceId(@Param("traceId") String traceId, Pageable pageable);
+
+    /**
+     * 根据 traceId 查询所有日志
+     *
+     * @param traceId 链路追踪ID
+     * @return 原始日志事件列表
+     */
+    List<RawLogEventEntity> findAllByTraceIdOrderByOriginalLogTimeAsc(String traceId);
+
+    /**
+     * 统计指定 traceId 的日志数量
+     *
+     * @param traceId 链路追踪ID
+     * @return 数量
+     */
+    long countByTraceId(String traceId);
 }
