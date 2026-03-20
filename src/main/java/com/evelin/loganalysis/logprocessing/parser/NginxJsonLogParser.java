@@ -110,6 +110,18 @@ public class NginxJsonLogParser implements ParseStrategy {
     }
 
     private Object convertValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        // 如果是字符串，去除引号
+        if (value instanceof String) {
+            String str = (String) value;
+            // 去除首尾引号
+            if (str.startsWith("\"") && str.endsWith("\"") && str.length() >= 2) {
+                return str.substring(1, str.length() - 1);
+            }
+            return str;
+        }
         if (value instanceof Double) {
             Double d = (Double) value;
             if (d == Math.floor(d) && !Double.isInfinite(d)) {
@@ -117,7 +129,10 @@ public class NginxJsonLogParser implements ParseStrategy {
             }
             return d;
         }
-        return value;
+        if (value instanceof Integer || value instanceof Long || value instanceof Boolean) {
+            return value;
+        }
+        return value.toString();
     }
 
     @Override

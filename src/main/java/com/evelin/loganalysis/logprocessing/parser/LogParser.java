@@ -205,10 +205,15 @@ public class LogParser {
         fields.put("packageName", parseResult.getFileName());
         fields.put("simpleClassName", parseResult.getMethodName());
 
-        // 从解析结果中提取 traceId
+        // 从解析结果中提取 traceId（支持 trace_id 和 traceId 两种字段名）
         String traceId = null;
         if (fields.containsKey("traceId")) {
             traceId = String.valueOf(fields.get("traceId"));
+        } else if (fields.containsKey("trace_id")) {
+            traceId = String.valueOf(fields.get("trace_id"));
+            // 映射为标准字段名
+            fields.put("traceId", traceId);
+            fields.remove("trace_id");
         }
 
         return ParsedLogEvent.builder()

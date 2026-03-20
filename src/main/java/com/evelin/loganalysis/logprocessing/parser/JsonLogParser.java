@@ -171,10 +171,35 @@ public class JsonLogParser implements ParseStrategy {
         Map<String, Object> fields = new HashMap<>();
         node.fields().forEachRemaining(entry -> {
             if (!isStandardField(entry.getKey())) {
-                fields.put(entry.getKey(), entry.getValue().toString());
+                fields.put(entry.getKey(), extractNodeValue(entry.getValue()));
             }
         });
         return fields;
+    }
+
+    /**
+     * 从 JsonNode 提取实际值，去除 JSON 字符串的引号
+     */
+    private Object extractNodeValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isNumber()) {
+            return node.numberValue();
+        }
+        if (node.isBoolean()) {
+            return node.asBoolean();
+        }
+        if (node.isArray()) {
+            return node.toString();
+        }
+        if (node.isObject()) {
+            return node.toString();
+        }
+        return node.toString();
     }
 
     private boolean isStandardField(String key) {
