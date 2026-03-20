@@ -226,15 +226,20 @@ public class DesensitizationConsumerService {
                         // 解析成功，提取字段
                         ParsedLogEvent parsed = processingResult.getParsedEvent();
                         event.setParsedFields(convertToMap(parsed));
-                        
+
                         // 设置日志原始生成时间
                         if (parsed.getLogTime() != null) {
                             event.setOriginalLogTime(parsed.getLogTime());
                         }
-                        
+
                         // 设置日志级别
                         if (parsed.getLogLevel() != null) {
                             event.setLogLevel(parsed.getLogLevel());
+                        }
+
+                        // 设置 traceId
+                        if (parsed.getTraceId() != null) {
+                            event.setTraceId(parsed.getTraceId());
                         }
 
                         // 如果有聚合结果，更新聚合组ID

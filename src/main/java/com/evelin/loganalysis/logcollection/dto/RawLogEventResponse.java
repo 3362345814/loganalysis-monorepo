@@ -90,6 +90,11 @@ public class RawLogEventResponse {
     private Map<String, Object> parsedFields;
 
     /**
+     * TraceId
+     */
+    private String traceId;
+
+    /**
      * 从实体转换为响应DTO
      *
      * @param entity 实体
@@ -115,6 +120,7 @@ public class RawLogEventResponse {
                 .desensitizedContent(entity.getDesensitizedContent())
                 .masked(entity.getMasked())
                 .parsedFields(entity.getParsedFields())
+                .traceId(entity.getTraceId())
                 .build();
     }
 }

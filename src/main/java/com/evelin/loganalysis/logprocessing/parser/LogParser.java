@@ -205,6 +205,12 @@ public class LogParser {
         fields.put("packageName", parseResult.getFileName());
         fields.put("simpleClassName", parseResult.getMethodName());
 
+        // 从解析结果中提取 traceId
+        String traceId = null;
+        if (fields.containsKey("traceId")) {
+            traceId = String.valueOf(fields.get("traceId"));
+        }
+
         return ParsedLogEvent.builder()
                 .id(IdGenerator.nextId())
                 .sourceId(rawLogEvent.getSourceId() != null ? rawLogEvent.getSourceId().toString() : null)
@@ -223,6 +229,7 @@ public class LogParser {
                 .stackTrace(parseResult.getStackTrace())
                 .exceptionType(parseResult.getExceptionType())
                 .exceptionMessage(parseResult.getExceptionMessage())
+                .traceId(traceId)
                 .isAnomaly(false)
                 .anomalyScore(null)
                 .createdAt(LocalDateTime.now())

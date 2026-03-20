@@ -114,6 +114,11 @@ public class RawLogEvent {
     private String aggregationGroupId;
 
     /**
+     * TraceId（从解析字段中提取，用于链路追踪）
+     */
+    private String traceId;
+
+    /**
      * 创建工厂方法
      */
     public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,

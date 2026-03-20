@@ -39,7 +39,8 @@ import java.util.Map;
         @Index(name = "idx_raw_file_path", columnList = "file_path"),
         @Index(name = "idx_raw_log_level", columnList = "log_level"),
         @Index(name = "idx_raw_log_time", columnList = "log_time"),
-        @Index(name = "idx_raw_aggregation_group_id", columnList = "aggregation_group_id")
+        @Index(name = "idx_raw_aggregation_group_id", columnList = "aggregation_group_id"),
+        @Index(name = "idx_raw_trace_id", columnList = "trace_id")
     }
 )
 public class RawLogEventEntity extends BaseEntity {
@@ -163,6 +164,12 @@ public class RawLogEventEntity extends BaseEntity {
     private String aggregationGroupId;
 
     /**
+     * TraceId（从解析字段中提取，用于链路追踪）
+     */
+    @Column(name = "trace_id", length = 100)
+    private String traceId;
+
+    /**
      * 从 RawLogEvent DTO 创建实体
      *
      * @param dto 原始日志事件DTO
@@ -170,10 +177,10 @@ public class RawLogEventEntity extends BaseEntity {
      */
     public static RawLogEventEntity from(com.evelin.loganalysis.logcollection.model.RawLogEvent dto) {
         Map<String, Object> parsedFields = dto.getParsedFields();
-        
+
         // 优先使用 dto 中直接设置的 logLevel（从 ParsedLogEvent.getLogLevel() 获取）
         String logLevel = dto.getLogLevel();
-        
+
         // 如果没有，则从 parsedFields 中提取
         if (logLevel == null && parsedFields != null) {
             Object level = parsedFields.get("logLevel");
@@ -181,7 +188,7 @@ public class RawLogEventEntity extends BaseEntity {
                 logLevel = level.toString();
             }
         }
-        
+
         // 同样处理 logTime
         LocalDateTime logTime = null;
         if (parsedFields != null) {
@@ -195,7 +202,16 @@ public class RawLogEventEntity extends BaseEntity {
                 logTime = (LocalDateTime) time;
             }
         }
-        
+
+        // 从 parsedFields 中提取 traceId
+        String traceId = dto.getTraceId();
+        if (traceId == null && parsedFields != null) {
+            Object traceIdObj = parsedFields.get("traceId");
+            if (traceIdObj != null) {
+                traceId = traceIdObj.toString();
+            }
+        }
+
         return RawLogEventEntity.builder()
                 .eventId(dto.getEventId())
                 .sourceId(dto.getSourceId())
@@ -216,6 +232,7 @@ public class RawLogEventEntity extends BaseEntity {
                 .logTime(logTime)
                 .parsedFields(parsedFields)
                 .aggregationGroupId(dto.getAggregationGroupId())
+                .traceId(traceId)
                 .build();
     }
 }
