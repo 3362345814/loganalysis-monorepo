@@ -95,18 +95,27 @@ export const logSourceApi = {
 export const rawLogApi = {
   // 根据日志源查询日志
   getBySourceId: (sourceId, params) => service.get(`/collection/logs/${sourceId}`, { params }),
-  
+
   // 查询所有日志
   getAll: (params) => service.get('/collection/logs', { params }),
-  
+
   // 根据ID查询日志
   getById: (id) => service.get(`/collection/log/${id}`),
-  
+
   // 获取日志数量
   getCount: (sourceId) => service.get(`/collection/logs/${sourceId}/count`),
-  
+
   // 清理日志
-  cleanup: (days) => service.delete('/collection/logs/cleanup', { params: { days } })
+  cleanup: (days) => service.delete('/collection/logs/cleanup', { params: { days } }),
+
+  // 根据 traceId 查询日志（用于链路追踪）
+  getByTraceId: (traceId, params) => service.get(`/collection/logs/trace/${traceId}`, { params }),
+
+  // 根据 traceId 查询所有日志（不分页，用于链路追踪）
+  getAllByTraceId: (traceId) => service.get(`/collection/logs/trace/${traceId}/all`),
+
+  // 统计 traceId 相关日志数量
+  countByTraceId: (traceId) => service.get(`/collection/logs/trace/${traceId}/count`)
 }
 
 // 测试日志相关

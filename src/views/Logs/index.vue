@@ -34,51 +34,51 @@
       </el-form>
     </el-card>
 
-    <!-- 终端风格日志展示 -->
-    <el-card class="terminal-card">
-      <div class="terminal-header">
-        <span class="terminal-title">日志终端</span>
-        <span class="log-count">共 {{ total }} 条</span>
-      </div>
-      <div class="terminal-content" ref="terminalRef" @scroll="handleScroll">
-        <div 
-          v-for="(log, index) in logs" 
-          :key="index" 
-          class="log-line"
-          :class="[getLogLevelClass(log.parsedFields?.logLevel), { 'log-highlight': highlightedIndex === index }]"
-          @mouseenter="showParsedInfo(log, $event)"
-          @mouseleave="hideParsedInfo"
-          @click="handleView(log)"
-        >
-          <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
-          <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
-          <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
-            {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
-          </span>
-          <span class="log-message">{{ log.rawContent || log.parsedFields?.message }}</span>
+    <!-- 日志终端和解析信息面板 -->
+    <div class="logs-content" :class="{ 'panel-hidden': !parsedInfoVisible }">
+      <el-card class="terminal-card">
+        <div class="terminal-header">
+          <span class="terminal-title">日志终端</span>
+          <span class="log-count">共 {{ total }} 条</span>
         </div>
-        <div v-if="logs.length === 0 && !loading" class="terminal-empty">
-          暂无日志数据
+        <div class="terminal-content" ref="terminalRef" @scroll="handleScroll">
+          <div
+            v-for="(log, index) in logs"
+            :key="index"
+            class="log-line"
+            :class="[getLogLevelClass(log.parsedFields?.logLevel), {
+              'log-highlight': highlightedIndex === index,
+              'log-selected': selectedLogIndex === index
+            }]"
+            @click="handleLogClick(log, index)"
+          >
+            <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
+            <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
+            <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
+              {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
+            </span>
+            <span class="log-message">{{ log.rawContent || log.parsedFields?.message }}</span>
+          </div>
+          <div v-if="logs.length === 0 && !loading" class="terminal-empty">
+            暂无日志数据
+          </div>
         </div>
-      </div>
+      </el-card>
 
-      <el-popover
-        v-model:visible="parsedInfoVisible"
-        :width="400"
-        trigger="manual"
-        placement="right"
-        :style="{ position: 'fixed', left: popoverX + 'px', top: popoverY + 'px', zIndex: 9999 }"
-      >
-        <template #reference>
-          <div v-if="false"></div>
-        </template>
-        <div class="parsed-info-panel">
-          <div class="parsed-info-header">
-            <span class="parsed-info-title">解析信息</span>
+      <!-- 解析信息面板 -->
+      <div class="parsed-info-sidebar">
+        <div class="parsed-info-header">
+          <span class="parsed-info-title">解析信息</span>
+          <el-button type="primary" link @click="closeParsedInfo">
+            <el-icon><Close /></el-icon>
+          </el-button>
+        </div>
+        <div class="parsed-info-content">
+          <div class="parsed-info-summary">
             <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
           </div>
           <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
-            <el-table-column prop="key" label="字段名" width="140">
+            <el-table-column prop="key" label="字段名" width="120">
               <template #default="{ row }">
                 <span class="field-key">{{ formatFieldKey(row.key) }}</span>
               </template>
@@ -90,8 +90,14 @@
             </el-table-column>
           </el-table>
         </div>
-      </el-popover>
-    </el-card>
+        <div class="parsed-info-footer" v-if="currentHoverTraceId">
+          <el-button type="primary" @click="openTraceTimeline">
+            <el-icon><Link /></el-icon>
+            查看链路追踪
+          </el-button>
+        </div>
+      </div>
+    </div>
 
     <!-- 详情对话框 -->
     <el-dialog v-model="detailVisible" title="日志详情" width="800px">
@@ -151,16 +157,26 @@
           <pre class="log-content">{{ currentLog.desensitizedContent }}</pre>
         </el-descriptions-item>
       </el-descriptions>
+      <template #footer v-if="currentLog?.parsedFields?.traceId">
+        <el-button type="primary" @click="openTraceTimelineFromDetail">
+          <el-icon><Link /></el-icon>
+          查看链路追踪
+        </el-button>
+      </template>
     </el-dialog>
+
+    <!-- 链路追踪时间线弹窗 -->
+    <TraceTimeline v-model="traceTimelineVisible" :traceId="currentTraceId" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { Search, Refresh, Link, Close } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { logSourceApi, projectApi, rawLogApi } from '@/api'
+import TraceTimeline from '@/components/TraceTimeline.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -177,8 +193,12 @@ const detailVisible = ref(false)
 const currentLog = ref(null)
 const parsedInfoVisible = ref(false)
 const parsedInfoFields = ref({})
-const popoverX = ref(0)
-const popoverY = ref(0)
+const selectedLogIndex = ref(-1)
+
+// 链路追踪相关状态
+const currentHoverTraceId = ref('')
+const currentTraceId = ref('')
+const traceTimelineVisible = ref(false)
 
 // 高亮相关状态
 const highlightTime = ref(null)
@@ -615,18 +635,24 @@ const handleSizeChange = (size) => {
   loadLogs()
 }
 
-const handleView = (row) => {
-  // 点击日志时清除高亮状态
-  clearHighlight()
-  currentLog.value = row
-  detailVisible.value = true
-}
-
-// 清除高亮状态
 const clearHighlight = () => {
   highlightId.value = null
   highlightTime.value = null
   highlightedIndex.value = -1
+}
+
+const handleLogClick = (log, index) => {
+  // 清除高亮
+  clearHighlight()
+  selectedLogIndex.value = index
+  showParsedInfo(log)
+}
+
+const handleLogDoubleClick = (log) => {
+  // 双击打开详情弹窗
+  clearHighlight()
+  currentLog.value = log
+  detailVisible.value = true
 }
 
 // 滚动到高亮的日志
@@ -708,7 +734,7 @@ const stopRefresh = () => {
   }
 }
 
-const showParsedInfo = (log, event) => {
+const showParsedInfo = (log) => {
   const parsedFields = log.parsedFields || {}
   
   const info = {}
@@ -725,18 +751,15 @@ const showParsedInfo = (log, event) => {
   
   parsedInfoFields.value = info
   
-  const rect = event.target.getBoundingClientRect()
-  const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
-  const scrollLeft = document.documentElement.scrollLeft || document.body.scrollLeft
-  
-  popoverX.value = rect.right + scrollLeft + 10
-  popoverY.value = rect.top + scrollTop
+  // 提取 traceId 用于链路追踪
+  currentHoverTraceId.value = parsedFields.traceId || ''
   
   parsedInfoVisible.value = true
 }
 
-const hideParsedInfo = () => {
+const closeParsedInfo = () => {
   parsedInfoVisible.value = false
+  selectedLogIndex.value = -1
 }
 
 const formatFieldKey = (key) => {
@@ -778,6 +801,22 @@ const formatFieldValue = (value) => {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+// 打开链路追踪弹窗
+const openTraceTimeline = () => {
+  if (currentHoverTraceId.value) {
+    currentTraceId.value = currentHoverTraceId.value
+    traceTimelineVisible.value = true
+  }
+}
+
+// 从详情弹窗打开链路追踪
+const openTraceTimelineFromDetail = () => {
+  if (currentLog.value?.parsedFields?.traceId) {
+    currentTraceId.value = currentLog.value.parsedFields.traceId
+    traceTimelineVisible.value = true
+  }
 }
 
 watch(() => filter.value.refreshInterval, () => {
@@ -961,11 +1000,6 @@ onUnmounted(() => {
   color: #e6e6e6;
 }
 
-.log-line:hover {
-  background: #1a1a1a;
-  cursor: pointer;
-}
-
 .log-highlight {
   background: rgba(64, 158, 255, 0.3) !important;
   border-left: 3px solid #409eff;
@@ -987,17 +1021,45 @@ onUnmounted(() => {
   padding: 40px;
 }
 
-.parsed-info-panel {
-  padding: 0;
+/* 日志内容区域和解析面板布局 */
+.logs-content {
+  display: grid;
+  grid-template-columns: 1fr 416px;
+  gap: 16px;
+  margin-top: 16px;
+  transition: grid-template-columns 0.25s ease;
+}
+
+.logs-content.panel-hidden {
+  grid-template-columns: 1fr 0px;
+}
+
+.terminal-card {
+  min-width: 0;
+}
+
+/* 解析信息侧边栏 */
+.parsed-info-sidebar {
+  margin-top: 16px;
+  width: 400px;
+  background: #fff;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;
+  overflow: hidden;
 }
 
 .parsed-info-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
-  border-bottom: 1px solid #eee;
+  padding: 12px 16px;
+  border-bottom: 1px solid #ebeef5;
   background: #f5f7fa;
+  border-radius: 4px 4px 0 0;
 }
 
 .parsed-info-title {
@@ -1006,9 +1068,25 @@ onUnmounted(() => {
   color: #333;
 }
 
+.parsed-info-summary {
+  padding: 8px 16px;
+  border-bottom: 1px solid #ebeef5;
+  background: #fafafa;
+}
+
 .parsed-info-count {
   font-size: 12px;
   color: #909399;
+}
+
+.parsed-info-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.parsed-info-panel {
+  padding: 0;
 }
 
 .field-key {
@@ -1041,5 +1119,29 @@ onUnmounted(() => {
   background: #fef0f0;
   border: 1px solid #fde2e2;
   color: #f56c6c;
+}
+
+.parsed-info-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #ebeef5;
+  text-align: center;
+  background: #f5f7fa;
+  border-radius: 0 0 4px 4px;
+}
+
+.parsed-info-footer .el-button {
+  width: 100%;
+}
+
+/* 日志行选中状态 */
+.log-line.log-selected {
+  background: rgba(64, 158, 255, 0.2);
+  border-left: 3px solid #409eff;
+}
+
+/* 日志行 hover */
+.log-line:hover {
+  background: #1a1a1a;
+  cursor: pointer;
 }
 </style>
