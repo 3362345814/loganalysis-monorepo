@@ -149,26 +149,54 @@
         
         <el-form-item label="日志格式" prop="logFormat">
           <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
-            <el-option label="Spring Boot" value="SPRING_BOOT" />
             <el-option label="Log4j" value="LOG4J" />
             <el-option label="Nginx" value="NGINX" />
           </el-select>
           <span class="form-tip">选择日志格式以支持多行日志（如Java堆栈）合并</span>
         </el-form-item>
 
-        <!-- Spring Boot Log 配置 -->
-        <template v-if="form.logFormat === 'SPRING_BOOT'">
-          <el-form-item label="日志路径" prop="paths">
-            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/application.log" />
-            <span class="form-tip">Spring Boot日志只支持单个文件路径，不支持通配符</span>
-          </el-form-item>
-        </template>
-
         <!-- Log4j Log 配置 -->
         <template v-if="form.logFormat === 'LOG4J'">
           <el-form-item label="日志路径" prop="paths">
             <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" />
             <span class="form-tip">Log4j日志只支持单个文件路径，不支持通配符</span>
+          </el-form-item>
+          <el-form-item label="日志格式" prop="logFormatPattern">
+            <el-input 
+              v-model="form.logFormatPattern" 
+              placeholder="如: %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+              type="textarea"
+              :rows="3"
+            />
+            <span class="form-tip">请输入 Log4j/Logback 格式的日志格式字符串</span>
+          </el-form-item>
+          <el-form-item label="格式说明">
+            <div class="pattern-help">
+              <el-alert type="info" :closable="false" show-icon>
+                <template #title>
+                  <div>支持的占位符：</div>
+                  <ul class="pattern-list">
+                    <li><code>%d{format}</code> - 日期时间，如 <code>%d{yyyy-MM-dd HH:mm:ss.SSS}</code></li>
+                    <li><code>%thread</code> - 线程名称</li>
+                    <li><code>%level</code> - 日志级别</li>
+                    <li><code>%-5level</code> - 左对齐宽度5的日志级别</li>
+                    <li><code>%logger{length}</code> - Logger名称，可指定最大长度</li>
+                    <li><code>%logger</code> - Logger名称（完整）</li>
+                    <li><code>%msg</code> 或 <code>%m</code> - 消息内容</li>
+                    <li><code>%n</code> - 换行符</li>
+                    <li><code>%X{key}</code> - MDC 键值</li>
+                  </ul>
+                </template>
+              </el-alert>
+              <div class="pattern-buttons">
+                <el-button size="small" type="primary" plain @click="applySpringBootPattern">
+                  使用 Spring Boot 格式
+                </el-button>
+                <el-button size="small" type="primary" plain @click="applyLog4jPattern">
+                  使用 Log4j 格式
+                </el-button>
+              </div>
+            </div>
           </el-form-item>
         </template>
 
@@ -190,10 +218,6 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="自定义正则" v-if="form.logFormat === 'CUSTOM'">
-          <el-input v-model="form.customPattern" placeholder="请输入自定义正则表达式，如 ^\\d{4}-\\d{2}-\\d{2}" />
-          <span class="form-tip">用于匹配日志开始行，正则需匹配日志行首</span>
-        </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -431,9 +455,8 @@ const form = ref({
   password: '',
   paths: [],
   encoding: 'UTF-8',
-  logFormat: 'SPRING_BOOT',
+  logFormat: 'LOG4J',
   logFormatPattern: '',
-  customPattern: '',
   description: '',
   config: {
     accessLogPath: '',
@@ -447,7 +470,7 @@ const rules = {
     validator: (rule, value, callback) => {
       if (!value || value.length === 0) {
         callback(new Error('请输入日志文件路径'))
-      } else if ((form.value.logFormat === 'SPRING_BOOT' || form.value.logFormat === 'LOG4J') && value.length > 1) {
+      } else if (form.value.logFormat === 'LOG4J' && value.length > 1) {
         callback(new Error('该日志格式只支持单个文件路径'))
       } else if (form.value.logFormat === 'NGINX' && value.length !== 2) {
         callback(new Error('Nginx日志需要两个文件路径（access.log和error.log）'))
@@ -474,11 +497,10 @@ const getStatusType = (status) => {
 
 const getLogFormatText = (format) => {
   const map = {
-    'SPRING_BOOT': 'Spring Boot',
     'LOG4J': 'Log4j',
     'NGINX': 'Nginx'
   }
-  return map[format] || 'Spring Boot'
+  return map[format] || 'Log4j'
 }
 
 const getStatusText = (status) => {
@@ -503,13 +525,12 @@ const formatPaths = (paths) => {
 
 // 日志格式变更处理
 const handleLogFormatChange = (value) => {
-  if (value !== 'CUSTOM') {
-    form.value.customPattern = ''
-  }
-  if (value === 'SPRING_BOOT' || value === 'LOG4J') {
+  if (value === 'LOG4J') {
     form.value.paths = ['']
+    form.value.logFormatPattern = form.value.logFormatPattern || '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
   } else if (value === 'NGINX') {
     form.value.paths = ['', '']
+    form.value.logFormatPattern = ''
   }
 }
 
@@ -585,9 +606,8 @@ const handleCreateSource = () => {
     password: '',
     paths: [],
     encoding: 'UTF-8',
-    logFormat: 'SPRING_BOOT',
-    logFormatPattern: '',
-    customPattern: '',
+    logFormat: 'LOG4J',
+    logFormatPattern: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n',
     description: '',
     desensitizationEnabled: false,
     aggregationLevel: null,
@@ -670,6 +690,16 @@ const addCustomRule = () => {
 // 删除自定义规则
 const removeCustomRule = (index) => {
   form.value.customRules.splice(index, 1)
+}
+
+// 应用 Spring Boot 格式
+const applySpringBootPattern = () => {
+  form.value.logFormatPattern = '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
+}
+
+// 应用 Log4j 格式
+const applyLog4jPattern = () => {
+  form.value.logFormatPattern = '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
 }
 
 const handleSubmit = async () => {
@@ -891,5 +921,33 @@ onMounted(() => {
   padding: 2px 6px;
   border-radius: 3px;
   color: #409eff;
+}
+
+.pattern-help {
+  width: 100%;
+}
+
+.pattern-list {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+}
+
+.pattern-list li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.pattern-buttons {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.pattern-list code {
+  background-color: #f5f7fa;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #409eff;
+  font-size: 12px;
 }
 </style>
