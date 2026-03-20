@@ -89,11 +89,31 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <!-- AI分析结果 -->
+          <div v-if="aiAnalysisLoading" class="ai-analysis-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>正在分析...</span>
+          </div>
+          <div v-else-if="aiAnalysisError" class="ai-analysis-error">
+            <el-alert type="error" :closable="false" show-icon>
+              <template #title>
+                <span>分析失败</span>
+              </template>
+              <template #default>
+                <span>{{ aiAnalysisError }}</span>
+              </template>
+            </el-alert>
+          </div>
         </div>
-        <div class="parsed-info-footer" v-if="currentHoverTraceId">
-          <el-button type="primary" @click="openTraceTimeline">
+        <div class="parsed-info-footer">
+          <el-button type="primary" @click="triggerAIAnalysis" :loading="aiAnalysisLoading">
+            <el-icon><MagicStick /></el-icon>
+            AI分析
+          </el-button>
+          <el-button v-if="currentHoverTraceId" type="primary" @click="openTraceTimeline">
             <el-icon><Link /></el-icon>
-            查看链路追踪
+            链路追踪
           </el-button>
         </div>
       </div>
@@ -173,9 +193,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Refresh, Link, Close } from '@element-plus/icons-vue'
+import { Search, Refresh, Link, Close, Loading, MagicStick } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { logSourceApi, projectApi, rawLogApi } from '@/api'
+import { logSourceApi, projectApi, rawLogApi, analysisApi, analysisConfigApi } from '@/api'
 import TraceTimeline from '@/components/TraceTimeline.vue'
 
 const route = useRoute()
@@ -199,6 +220,13 @@ const selectedLogIndex = ref(-1)
 const currentHoverTraceId = ref('')
 const currentTraceId = ref('')
 const traceTimelineVisible = ref(false)
+
+// AI分析相关状态
+const aiAnalysisLoading = ref(false)
+const aiAnalysisVisible = ref(false)
+const aiAnalysisResult = ref('')
+const aiAnalysisError = ref('')
+const cachedContextSize = ref(10)
 
 // 高亮相关状态
 const highlightTime = ref(null)
@@ -734,26 +762,107 @@ const stopRefresh = () => {
   }
 }
 
+// 加载分析配置（缓存contextSize）
+const loadAnalysisConfig = async () => {
+  try {
+    const res = await analysisConfigApi.get()
+    if (res.data) {
+      cachedContextSize.value = res.data.contextSize || 10
+    }
+  } catch (error) {
+    console.error('加载分析配置失败:', error)
+  }
+}
+
+// 触发AI分析
+const triggerAIAnalysis = async () => {
+  if (!currentLog.value) return
+
+  aiAnalysisLoading.value = true
+  aiAnalysisResult.value = ''
+  aiAnalysisError.value = ''
+
+  try {
+    // 获取上下文：从当前日志列表中提取前后日志
+    const contextSize = cachedContextSize.value
+    const currentIndex = logs.value.findIndex(log => log.id === currentLog.value.id)
+
+    const contextBefore = []
+    const contextAfter = []
+
+    // 提取前日志
+    for (let i = Math.max(0, currentIndex - contextSize); i < currentIndex; i++) {
+      const log = logs.value[i]
+      contextBefore.push({
+        logTime: log.originalLogTime || log.parsedFields?.logTime,
+        logLevel: log.logLevel || log.parsedFields?.logLevel,
+        message: log.rawContent || log.parsedFields?.message
+      })
+    }
+
+    // 提取后日志
+    for (let i = currentIndex + 1; i < Math.min(logs.value.length, currentIndex + contextSize + 1); i++) {
+      const log = logs.value[i]
+      contextAfter.push({
+        logTime: log.originalLogTime || log.parsedFields?.logTime,
+        logLevel: log.logLevel || log.parsedFields?.logLevel,
+        message: log.rawContent || log.parsedFields?.message
+      })
+    }
+
+    // 构建分析数据
+    const analysisData = {
+      severity: currentLog.value.logLevel || currentLog.value.parsedFields?.logLevel || 'INFO',
+      name: `日志分析-${currentLog.value.id}`,
+      eventCount: 1,
+      representativeLog: currentLog.value.rawContent || currentLog.value.parsedFields?.message,
+      relatedLogs: [],
+      contextBefore: contextBefore,
+      contextAfter: contextAfter
+    }
+
+    // 不等待结果，直接提示已触发
+    analysisApi.trigger(analysisData).catch(() => {})
+
+    ElMessage.success('已触发AI分析，请稍后在智能分析页面查看')
+    aiAnalysisLoading.value = false
+    aiAnalysisVisible.value = false
+    return
+  } catch (error) {
+    console.error('AI分析失败:', error)
+    aiAnalysisError.value = error.message || '分析失败'
+    ElMessage.error('AI分析失败: ' + (error.message || '未知错误'))
+    aiAnalysisLoading.value = false
+  }
+}
+
 const showParsedInfo = (log) => {
   const parsedFields = log.parsedFields || {}
-  
+
   const info = {}
-  
+
   for (const key in parsedFields) {
     if (parsedFields[key] !== null && parsedFields[key] !== undefined) {
       info[key] = parsedFields[key]
     }
   }
-  
+
   if (Object.keys(info).length === 0 && log.rawContent) {
     info['rawContent'] = log.rawContent
   }
-  
+
   parsedInfoFields.value = info
-  
+
+  // 设置当前日志，用于AI分析
+  currentLog.value = log
+
   // 提取 traceId 用于链路追踪
   currentHoverTraceId.value = parsedFields.traceId || ''
-  
+
+  // 清除AI分析结果
+  aiAnalysisResult.value = ''
+  aiAnalysisError.value = ''
+
   parsedInfoVisible.value = true
 }
 
@@ -880,6 +989,7 @@ onMounted(() => {
   // 加载项目、日志源和日志
   loadProjects()
   loadSources()
+  loadAnalysisConfig()
 })
 
 onUnmounted(() => {
@@ -1034,6 +1144,12 @@ onUnmounted(() => {
   grid-template-columns: 1fr 0px;
 }
 
+/* 面板隐藏时解析面板完全透明 */
+.logs-content.panel-hidden .parsed-info-sidebar {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .terminal-card {
   min-width: 0;
 }
@@ -1127,10 +1243,26 @@ onUnmounted(() => {
   text-align: center;
   background: #f5f7fa;
   border-radius: 0 0 4px 4px;
+  display: flex;
+  gap: 8px;
 }
 
 .parsed-info-footer .el-button {
-  width: 100%;
+  flex: 1;
+}
+
+/* AI分析结果样式 */
+.ai-analysis-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: #909399;
+}
+
+.ai-analysis-error {
+  padding: 12px 16px;
 }
 
 /* 日志行选中状态 */

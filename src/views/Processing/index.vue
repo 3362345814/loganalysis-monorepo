@@ -226,11 +226,12 @@
 
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button 
-          type="primary" 
+        <el-button
+          type="primary"
           @click="triggerAnalysis(currentGroup)"
           :disabled="currentGroup?.isAnalyzed"
         >
+          <el-icon><MagicStick /></el-icon>
           {{ currentGroup?.isAnalyzed ? '已分析' : '触发AI分析' }}
         </el-button>
       </template>
@@ -264,7 +265,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Refresh, Setting } from '@element-plus/icons-vue'
+import { Refresh, Setting, MagicStick } from '@element-plus/icons-vue'
 import { aggregationApi, analysisApi, analysisConfigApi, projectApi, logSourceApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
@@ -453,7 +454,6 @@ const loadGroupLogs = async () => {
 
 // 触发AI分析
 const triggerAnalysis = async (row) => {
-  // 获取聚合组ID（数据库主键）
   const aggregationId = row.id
   if (!aggregationId) {
     ElMessage.error('无法获取聚合组ID')
@@ -461,7 +461,6 @@ const triggerAnalysis = async (row) => {
   }
 
   try {
-    // 先获取上下文数据，使用配置的contextSize
     ElMessage.info('正在获取日志上下文...')
     const contextSize = analysisConfig.value?.contextSize || 10
     const contextRes = await aggregationApi.getContext(aggregationId, { contextSize: contextSize })
@@ -473,31 +472,25 @@ const triggerAnalysis = async (row) => {
 
     const contextData = contextRes.data
 
-    // 组装完整的分析数据
     const analysisData = {
       aggregationId: aggregationId,
       groupId: row.groupId,
       severity: row.severity || 'INFO',
-      // 基本信息
       name: contextData.name,
       eventCount: contextData.eventCount,
       startTime: contextData.startTime,
       endTime: contextData.endTime,
       representativeLog: contextData.representativeLog,
-      // 相关日志
       relatedLogs: contextData.relatedLogs || [],
-      // 上下文日志
       contextBefore: contextData.contextBefore || [],
       contextAfter: contextData.contextAfter || []
     }
 
-    // 触发分析
-    await analysisApi.trigger(analysisData)
-    ElMessage.success('已触发AI分析，请稍后查看结果')
+    // 不等待结果，直接提示已触发
+    analysisApi.trigger(analysisData).catch(() => {})
+
+    ElMessage.success('已触发AI分析，请稍后在智能分析页面查看')
     detailVisible.value = false
-    // 刷新列表
-    loadAggregationGroups()
-    loadAggSummary()
   } catch (error) {
     console.error('触发分析失败:', error)
     ElMessage.error('触发分析失败: ' + (error.response?.data?.message || error.message || '未知错误'))
