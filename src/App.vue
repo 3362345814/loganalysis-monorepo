@@ -34,10 +34,6 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>智能分析</span>
         </el-menu-item>
-        <el-menu-item index="/llm-config">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>LLM 配置</span>
-        </el-menu-item>
         <el-menu-item index="/alerts">
           <el-icon><Bell /></el-icon>
           <span>告警管理</span>

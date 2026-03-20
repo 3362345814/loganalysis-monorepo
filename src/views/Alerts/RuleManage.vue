@@ -127,8 +127,6 @@
             <el-checkbox label="DINGTALK" :disabled="!enabledChannels.includes('DINGTALK')">钉钉</el-checkbox>
             <el-checkbox label="WECHAT" :disabled="!enabledChannels.includes('WECHAT')">企业微信</el-checkbox>
             <el-checkbox label="FEISHU" :disabled="!enabledChannels.includes('FEISHU')">飞书</el-checkbox>
-            <el-checkbox label="SMS" :disabled="!enabledChannels.includes('SMS')">短信</el-checkbox>
-            <el-checkbox label="SLACK" :disabled="!enabledChannels.includes('SLACK')">Slack</el-checkbox>
             <el-checkbox label="WEBHOOK" :disabled="!enabledChannels.includes('WEBHOOK')">Webhook</el-checkbox>
           </el-checkbox-group>
           <div class="form-tip" v-if="enabledChannels.length === 0">
@@ -388,15 +386,14 @@ const getLevelText = (level) => {
 }
 
 const getChannelText = (channel) => {
-  const map = {
+  const channelMap = {
     EMAIL: '邮件',
     DINGTALK: '钉钉',
     WECHAT: '企微',
     FEISHU: '飞书',
-    SMS: '短信',
     WEBHOOK: 'Webhook'
   }
-  return map[channel] || channel
+  return channelMap[channel] || channel
 }
 
 onMounted(() => {

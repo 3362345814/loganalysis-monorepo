@@ -50,12 +50,6 @@ const routes = [
     meta: { title: '告警规则管理' }
   },
   {
-    path: '/llm-config',
-    name: 'LlmConfig',
-    component: () => import('@/views/LlmConfig/index.vue'),
-    meta: { title: 'LLM 配置' }
-  },
-  {
     path: '/config',
     name: 'Config',
     component: () => import('@/views/Config/index.vue'),
