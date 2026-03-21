@@ -24,10 +24,29 @@ if ($Version -eq 'latest') {
   $Version = $release.tag_name
 }
 
-$archRaw = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-switch ($archRaw) {
-  'x64' { $arch = 'amd64' }
-  'arm64' { $arch = 'arm64' }
+$archRaw = $null
+try {
+  $runtimeArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  if ($null -ne $runtimeArch) {
+    $archRaw = $runtimeArch.ToString()
+  }
+} catch {
+}
+
+if ([string]::IsNullOrWhiteSpace($archRaw)) {
+  $archRaw = $env:PROCESSOR_ARCHITECTURE
+}
+if ([string]::IsNullOrWhiteSpace($archRaw)) {
+  $archRaw = $env:PROCESSOR_ARCHITEW6432
+}
+if ([string]::IsNullOrWhiteSpace($archRaw)) {
+  throw "failed to detect architecture (PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE), PROCESSOR_ARCHITEW6432=$($env:PROCESSOR_ARCHITEW6432))"
+}
+
+$archRaw = $archRaw.ToLowerInvariant()
+switch -Regex ($archRaw) {
+  '^(x64|amd64)$' { $arch = 'amd64'; break }
+  '^arm64$' { $arch = 'arm64'; break }
   default { throw "unsupported architecture: $archRaw" }
 }
 
