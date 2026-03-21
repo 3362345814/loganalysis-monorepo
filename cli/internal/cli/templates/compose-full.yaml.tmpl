@@ -128,7 +128,7 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "{{ .Ports.Elasticsearch }}:9200"
-      - "9300:9300"
+      - "{{ .Ports.ElasticsearchTransport }}:9300"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]

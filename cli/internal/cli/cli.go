@@ -42,16 +42,17 @@ type Paths struct {
 }
 
 type PortsConfig struct {
-	Frontend           int `json:"frontend"`
-	Backend            int `json:"backend"`
-	Postgres           int `json:"postgres"`
-	Redis              int `json:"redis"`
-	RabbitMQ           int `json:"rabbitmq"`
-	RabbitMQManagement int `json:"rabbitmq_management"`
-	Elasticsearch      int `json:"elasticsearch"`
-	Kibana             int `json:"kibana"`
-	MinioAPI           int `json:"minio_api"`
-	MinioConsole       int `json:"minio_console"`
+	Frontend            int `json:"frontend"`
+	Backend             int `json:"backend"`
+	Postgres            int `json:"postgres"`
+	Redis               int `json:"redis"`
+	RabbitMQ            int `json:"rabbitmq"`
+	RabbitMQManagement  int `json:"rabbitmq_management"`
+	Elasticsearch       int `json:"elasticsearch"`
+	ElasticsearchTransport int `json:"elasticsearch_transport"`
+	Kibana              int `json:"kibana"`
+	MinioAPI            int `json:"minio_api"`
+	MinioConsole        int `json:"minio_console"`
 }
 
 type Config struct {
@@ -188,6 +189,7 @@ func defaultConfig(paths Paths) Config {
 			RabbitMQ:           5672,
 			RabbitMQManagement: 15672,
 			Elasticsearch:      9200,
+			ElasticsearchTransport: 9300,
 			Kibana:             5601,
 			MinioAPI:           9000,
 			MinioConsole:       9001,
@@ -234,6 +236,9 @@ func (c *Config) applyDefaults(def Config) {
 	}
 	if c.Ports.Elasticsearch == 0 {
 		c.Ports.Elasticsearch = def.Ports.Elasticsearch
+	}
+	if c.Ports.ElasticsearchTransport == 0 {
+		c.Ports.ElasticsearchTransport = def.Ports.ElasticsearchTransport
 	}
 	if c.Ports.Kibana == 0 {
 		c.Ports.Kibana = def.Ports.Kibana
@@ -647,6 +652,7 @@ func profilePortSlots(profile string, ports *PortsConfig) ([]portSlot, error) {
 			{name: "rabbitmq", value: &ports.RabbitMQ},
 			{name: "rabbitmq_management", value: &ports.RabbitMQManagement},
 			{name: "elasticsearch", value: &ports.Elasticsearch},
+			{name: "elasticsearch_transport", value: &ports.ElasticsearchTransport},
 			{name: "kibana", value: &ports.Kibana},
 			{name: "minio_api", value: &ports.MinioAPI},
 			{name: "minio_console", value: &ports.MinioConsole},
@@ -694,6 +700,7 @@ func (a *runtimeApp) checkPortAvailability() []portFailure {
 		"rabbitmq":            a.cfg.Ports.RabbitMQ,
 		"rabbitmq_management": a.cfg.Ports.RabbitMQManagement,
 		"elasticsearch":       a.cfg.Ports.Elasticsearch,
+		"elasticsearch_transport": a.cfg.Ports.ElasticsearchTransport,
 		"kibana":              a.cfg.Ports.Kibana,
 		"minio_api":           a.cfg.Ports.MinioAPI,
 		"minio_console":       a.cfg.Ports.MinioConsole,
@@ -802,6 +809,8 @@ func (a *runtimeApp) setConfigKey(key, value string) error {
 		return setPort(&a.cfg.Ports.RabbitMQManagement, value)
 	case "ports.elasticsearch":
 		return setPort(&a.cfg.Ports.Elasticsearch, value)
+	case "ports.elasticsearch_transport":
+		return setPort(&a.cfg.Ports.ElasticsearchTransport, value)
 	case "ports.kibana":
 		return setPort(&a.cfg.Ports.Kibana, value)
 	case "ports.minio_api":
@@ -846,6 +855,8 @@ func (a *runtimeApp) getConfigKey(key string) (string, error) {
 		return strconv.Itoa(a.cfg.Ports.RabbitMQManagement), nil
 	case "ports.elasticsearch":
 		return strconv.Itoa(a.cfg.Ports.Elasticsearch), nil
+	case "ports.elasticsearch_transport":
+		return strconv.Itoa(a.cfg.Ports.ElasticsearchTransport), nil
 	case "ports.kibana":
 		return strconv.Itoa(a.cfg.Ports.Kibana), nil
 	case "ports.minio_api":
