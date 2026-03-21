@@ -178,8 +178,8 @@ func defaultConfig(paths Paths) Config {
 		ProjectName:    "loganalysis",
 		DefaultProfile: profileFull,
 		DefaultVersion: "latest",
-		ImageRegistry:  "ghcr.io/cityseason",
-		ReleaseRepo:    "cityseason/graduation_project",
+		ImageRegistry:  "ghcr.io/3362345814",
+		ReleaseRepo:    "3362345814/loganalysis-monorepo",
 		DataDir:        filepath.Join(paths.Root, "data"),
 		Ports: PortsConfig{
 			Frontend:           3000,

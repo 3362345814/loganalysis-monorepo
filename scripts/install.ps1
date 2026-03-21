@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($Repo)) {
-  $Repo = 'cityseason/graduation_project'
+  $Repo = '3362345814/loganalysis-monorepo'
 }
 if ([string]::IsNullOrWhiteSpace($Version)) {
   $Version = 'latest'
@@ -44,10 +44,13 @@ try {
   Invoke-WebRequest -Uri "$baseUrl/$asset" -OutFile $exePath
   Invoke-WebRequest -Uri "$baseUrl/checksums.txt" -OutFile $checksumsPath
 
-  $expected = (Select-String -Path $checksumsPath -Pattern "\s$asset`$").Line.Split(' ')[0]
-  if (-not $expected) {
-    throw "checksum entry not found for $asset"
+  $escapedAsset = [Regex]::Escape($asset)
+  $checksumMatch = Select-String -Path $checksumsPath -Pattern "^\s*([a-fA-F0-9]{64})\s+$escapedAsset$" | Select-Object -First 1
+  if (-not $checksumMatch) {
+    throw "checksum entry not found for $asset in checksums.txt (repo=$Repo version=$Version)"
   }
+
+  $expected = $checksumMatch.Matches[0].Groups[1].Value
 
   $actual = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($expected.ToLowerInvariant() -ne $actual) {

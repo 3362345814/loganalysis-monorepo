@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO="${LOGANALYSIS_REPO:-cityseason/graduation_project}"
+REPO="${LOGANALYSIS_REPO:-3362345814/loganalysis-monorepo}"
 VERSION="${LOGANALYSIS_VERSION:-latest}"
 INSTALL_DIR="${LOGANALYSIS_INSTALL_DIR:-/usr/local/bin}"
 
