@@ -27,16 +27,6 @@ public enum RuleType {
     THRESHOLD,
 
     /**
-     * 日志模式/模板匹配
-     */
-    PATTERN,
-
-    /**
-     * 新异常模式（新出现的异常类型）
-     */
-    NEW_PATTERN,
-
-    /**
      * 组合条件
      */
     COMBINATION

@@ -18,8 +18,6 @@ import co.elastic.clients.elasticsearch.indices.GetMappingRequest;
 import com.evelin.loganalysis.logcollection.dto.EsLogQueryRequest;
 import com.evelin.loganalysis.logcollection.dto.EsLogSearchResponse;
 import com.evelin.loganalysis.logcollection.model.LogIndexDocument;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
@@ -29,7 +27,6 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -264,29 +261,7 @@ public class LogElasticsearchRepository {
         // 排序
         String sortField = StringUtils.hasText(request.getSortField()) ? request.getSortField() : "originalLogTime";
         SortOrder sortOrder = "asc".equalsIgnoreCase(request.getSortOrder()) ? SortOrder.Asc : SortOrder.Desc;
-
-        // 打印查询参数日志
-        log.info("=== ES 查询参数 ===");
-        log.info("sourceId: {}, logLevels: {}, keyword: {}, regex: {}",
-                request.getSourceId(), request.getLogLevels(), request.getKeyword(), request.getRegex());
-        log.info("startTime: {}, endTime: {}, sortField: {}, sortOrder: {}",
-                request.getStartTime(), request.getEndTime(), sortField, sortOrder);
-        log.info("page: {}, size: {}", request.getPage(), request.getSize());
-        log.info("aggregationField: {}, timeInterval: {}",
-                request.getAggregationField(), request.getTimeInterval());
-        log.info("filePath: {}, traceId: {}, aggregationGroupId: {}",
-                request.getFilePath(), request.getTraceId(), request.getAggregationGroupId());
-
-        // 打印构建的查询 JSON（用于调试）
-        try {
-            // 构建查询条件对象并打印
-            Query query = Query.of(q -> q.bool(boolQuery.build()));
-            // 直接使用 ES 的 JSON 序列化方式
-            String queryJson = co.elastic.clients.json.JsonData.of(query.toString()).toString();
-            log.info("=== ES 查询条件 ===\n{}", query);
-        } catch (Exception e) {
-            log.warn("无法将查询转换为 JSON: {}", e.getMessage());
-        }
+        
 
         searchBuilder.sort(s -> s.field(f -> f.field(sortField).order(sortOrder)));
 
@@ -333,25 +308,6 @@ public class LogElasticsearchRepository {
 
         // 执行搜索
         SearchResponse<LogIndexDocument> response = esClient.search(searchBuilder.build(), LogIndexDocument.class);
-
-        // 打印搜索结果统计
-        log.info("=== ES 查询结果 ===");
-        log.info("总命中数: {}, 耗时: {}ms, 返回条数: {}",
-                response.hits().total() != null ? response.hits().total().value() : 0,
-                response.took(),
-                response.hits().hits().size());
-
-        // 打印前几条命中的 logLevel 分布
-        if (response.hits().hits().size() > 0) {
-            Map<String, Long> levelCount = new java.util.HashMap<>();
-            for (Hit<LogIndexDocument> hit : response.hits().hits()) {
-                LogIndexDocument doc = hit.source();
-                if (doc != null && doc.getLogLevel() != null) {
-                    levelCount.merge(doc.getLogLevel(), 1L, Long::sum);
-                }
-            }
-            log.info("本次返回的 logLevel 分布: {}", levelCount);
-        }
 
         // 构建响应
         List<EsLogSearchResponse.LogHit> hits = new ArrayList<>();

@@ -48,4 +48,14 @@ public class AlertRecordResponse {
     private Integer escalationLevel;
     private Map<String, Object> metadata;
     private LocalDateTime createdAt;
+
+    /**
+     * 所属项目ID
+     */
+    private UUID projectId;
+
+    /**
+     * 所属项目名称
+     */
+    private String projectName;
 }

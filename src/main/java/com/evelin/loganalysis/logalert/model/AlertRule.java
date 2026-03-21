@@ -46,7 +46,7 @@ public class AlertRule extends BaseEntity {
     private String description;
 
     /**
-     * 规则类型：KEYWORD, REGEX, LEVEL, THRESHOLD, PATTERN, NEW_PATTERN, COMBINATION
+     * 规则类型：KEYWORD, REGEX, LEVEL, THRESHOLD, COMBINATION
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "rule_type", nullable = false, length = 50)
@@ -137,4 +137,10 @@ public class AlertRule extends BaseEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "config", columnDefinition = "jsonb")
     private Map<String, Object> config;
+
+    /**
+     * 所属项目ID
+     */
+    @Column(name = "project_id")
+    private UUID projectId;
 }

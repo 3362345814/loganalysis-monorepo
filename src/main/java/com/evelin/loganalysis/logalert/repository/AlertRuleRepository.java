@@ -70,4 +70,14 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, UUID> {
      * 统计启用的规则数量
      */
     long countByEnabledTrue();
+
+    /**
+     * 根据项目ID查询规则
+     */
+    Page<AlertRule> findByProjectId(UUID projectId, Pageable pageable);
+
+    /**
+     * 根据项目ID查询所有规则
+     */
+    List<AlertRule> findByProjectId(UUID projectId);
 }

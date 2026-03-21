@@ -39,4 +39,9 @@ public class AlertRuleResponse {
     private String remark;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * 所属项目ID
+     */
+    private UUID projectId;
 }

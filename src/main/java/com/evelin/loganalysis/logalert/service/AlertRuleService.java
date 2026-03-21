@@ -56,6 +56,7 @@ public class AlertRuleService {
                 .status("ACTIVE")
                 .triggerCountToday(0)
                 .config(request.getConfig())
+                .projectId(request.getProjectId())
                 .build();
 
         AlertRule saved = alertRuleRepository.save(rule);
@@ -117,6 +118,9 @@ public class AlertRuleService {
         if (request.getRemark() != null) {
             rule.setRemark(request.getRemark());
         }
+        if (request.getProjectId() != null) {
+            rule.setProjectId(request.getProjectId());
+        }
 
         AlertRule saved = alertRuleRepository.save(rule);
         log.info("更新告警规则成功: {}", saved.getId());
@@ -145,6 +149,13 @@ public class AlertRuleService {
     }
 
     /**
+     * 获取规则实体
+     */
+    public AlertRule getRuleEntity(UUID id) {
+        return alertRuleRepository.findById(id).orElse(null);
+    }
+
+    /**
      * 获取所有规则
      */
     public List<AlertRuleResponse> getAllRules() {
@@ -158,6 +169,14 @@ public class AlertRuleService {
      */
     public Page<AlertRuleResponse> getRules(Pageable pageable) {
         return alertRuleRepository.findAll(pageable)
+                .map(this::toResponse);
+    }
+
+    /**
+     * 根据项目ID分页查询规则
+     */
+    public Page<AlertRuleResponse> getRulesByProjectId(UUID projectId, Pageable pageable) {
+        return alertRuleRepository.findByProjectId(projectId, pageable)
                 .map(this::toResponse);
     }
 
@@ -269,6 +288,7 @@ public class AlertRuleService {
                 .lastTriggeredAt(rule.getLastTriggeredAt())
                 .config(rule.getConfig())
                 .remark(rule.getRemark())
+                .projectId(rule.getProjectId())
                 .createdAt(rule.getCreatedAt())
                 .updatedAt(rule.getUpdatedAt())
                 .build();

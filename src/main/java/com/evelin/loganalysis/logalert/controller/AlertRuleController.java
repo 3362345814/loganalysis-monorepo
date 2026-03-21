@@ -79,6 +79,7 @@ public class AlertRuleController {
      */
     @GetMapping("/page")
     public Result<Page<AlertRuleResponse>> getRules(
+            @RequestParam(required = false) UUID projectId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
@@ -87,7 +88,12 @@ public class AlertRuleController {
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
         Pageable pageable = PageRequest.of(page, size, sort);
-        Page<AlertRuleResponse> response = alertRuleService.getRules(pageable);
+        Page<AlertRuleResponse> response;
+        if (projectId != null) {
+            response = alertRuleService.getRulesByProjectId(projectId, pageable);
+        } else {
+            response = alertRuleService.getRules(pageable);
+        }
         return Result.success(response);
     }
 

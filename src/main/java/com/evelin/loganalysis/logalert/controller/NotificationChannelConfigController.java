@@ -56,6 +56,24 @@ public class NotificationChannelConfigController {
     }
 
     /**
+     * 批量保存或更新渠道配置（UPSERT语义：存在则更新，不存在则新增）
+     */
+    @PostMapping("/batch-upsert")
+    public Result<List<NotificationChannelConfig>> batchUpsert(@RequestBody List<NotificationChannelConfig> configs) {
+        List<NotificationChannelConfig> results = configs.stream().map(config -> {
+            return configRepository.findByChannel(config.getChannel())
+                    .map(existing -> {
+                        existing.setEnabled(config.getEnabled());
+                        existing.setConfigParams(config.getConfigParams());
+                        existing.setDescription(config.getDescription());
+                        return configRepository.save(existing);
+                    })
+                    .orElseGet(() -> configRepository.save(config));
+        }).toList();
+        return Result.success(results);
+    }
+
+    /**
      * 删除渠道配置
      */
     @DeleteMapping("/{id}")

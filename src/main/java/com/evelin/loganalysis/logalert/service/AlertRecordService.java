@@ -7,6 +7,8 @@ import com.evelin.loganalysis.logalert.enums.AlertStatus;
 import com.evelin.loganalysis.logalert.model.AlertRecord;
 import com.evelin.loganalysis.logalert.model.AlertRule;
 import com.evelin.loganalysis.logalert.repository.AlertRecordRepository;
+import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
+import com.evelin.loganalysis.logcommon.model.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -32,6 +34,7 @@ public class AlertRecordService {
 
     private final AlertRecordRepository alertRecordRepository;
     private final AlertRuleService alertRuleService;
+    private final ProjectRepository projectRepository;
 
     private static final String ALERT_ID_PREFIX = "ALT";
     private static final DateTimeFormatter ALERT_ID_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -203,6 +206,14 @@ public class AlertRecordService {
     }
 
     /**
+     * 根据项目ID获取告警（分页）
+     */
+    public Page<AlertRecordResponse> getAlertsByProjectId(UUID projectId, Pageable pageable) {
+        return alertRecordRepository.findByProjectId(projectId, null, null, null, null, pageable)
+                .map(this::toResponse);
+    }
+
+    /**
      * 获取待处理告警
      */
     public List<AlertRecordResponse> getPendingAlerts() {
@@ -247,6 +258,16 @@ public class AlertRecordService {
     }
 
     /**
+     * 根据项目ID复合条件查询告警
+     */
+    public Page<AlertRecordResponse> queryAlertsByProjectId(UUID projectId, String status, String level,
+                                                            LocalDateTime startTime, LocalDateTime endTime,
+                                                            Pageable pageable) {
+        return alertRecordRepository.findByProjectId(projectId, status, level, startTime, endTime, pageable)
+                .map(this::toResponse);
+    }
+
+    /**
      * 生成告警编号
      */
     private String generateAlertId() {
@@ -263,7 +284,7 @@ public class AlertRecordService {
      * 转换实体为响应DTO
      */
     private AlertRecordResponse toResponse(AlertRecord alert) {
-        return AlertRecordResponse.builder()
+        AlertRecordResponse.AlertRecordResponseBuilder builder = AlertRecordResponse.builder()
                 .id(alert.getId())
                 .alertId(alert.getAlertId())
                 .ruleId(alert.getRuleId())
@@ -289,7 +310,22 @@ public class AlertRecordService {
                 .escalated(alert.getEscalated())
                 .escalationLevel(alert.getEscalationLevel())
                 .metadata(alert.getMetadata())
-                .createdAt(alert.getCreatedAt())
-                .build();
+                .createdAt(alert.getCreatedAt());
+
+        // 获取关联规则的项目信息
+        if (alert.getRuleId() != null) {
+            try {
+                AlertRule rule = alertRuleService.getRuleEntity(alert.getRuleId());
+                if (rule != null && rule.getProjectId() != null) {
+                    builder.projectId(rule.getProjectId());
+                    projectRepository.findById(rule.getProjectId())
+                            .ifPresent(project -> builder.projectName(project.getName()));
+                }
+            } catch (Exception e) {
+                log.debug("获取告警项目信息失败: {}", e.getMessage());
+            }
+        }
+
+        return builder.build();
     }
 }

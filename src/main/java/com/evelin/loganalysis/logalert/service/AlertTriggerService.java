@@ -55,7 +55,6 @@ public class AlertTriggerService {
                 case KEYWORD -> matched = matchKeyword(rule.getConditionExpression(), logMessage);
                 case REGEX -> matched = matchRegex(rule.getConditionExpression(), logMessage);
                 case LEVEL -> matched = matchLevel(rule.getConditionExpression(), logLevel);
-                case PATTERN -> matched = matchPattern(rule.getConditionExpression(), logMessage);
                 default -> log.warn("不支持的规则类型: {}", rule.getRuleType());
             }
 
@@ -66,13 +65,13 @@ public class AlertTriggerService {
     }
 
     /**
-     * 关键词匹配
+     * 关键词匹配（大小写不敏感）
      */
     private boolean matchKeyword(String keyword, String logMessage) {
         if (keyword == null || logMessage == null) {
             return false;
         }
-        return logMessage.contains(keyword);
+        return logMessage.toLowerCase().contains(keyword.toLowerCase());
     }
 
     /**
@@ -108,15 +107,6 @@ public class AlertTriggerService {
             }
         }
         return false;
-    }
-
-    /**
-     * 日志模式匹配（更复杂的模式匹配）
-     */
-    private boolean matchPattern(String pattern, String logMessage) {
-        // 可以实现更复杂的模式匹配逻辑
-        // 例如：异常堆栈匹配、特定格式匹配等
-        return matchRegex(pattern, logMessage);
     }
 
     /**

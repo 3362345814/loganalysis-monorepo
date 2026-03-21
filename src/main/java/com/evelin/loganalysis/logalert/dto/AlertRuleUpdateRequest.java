@@ -30,4 +30,9 @@ public class AlertRuleUpdateRequest {
     private Boolean enabled;
     private Map<String, Object> config;
     private String remark;
+
+    /**
+     * 所属项目ID
+     */
+    private UUID projectId;
 }

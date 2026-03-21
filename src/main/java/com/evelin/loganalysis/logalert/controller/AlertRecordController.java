@@ -54,12 +54,18 @@ public class AlertRecordController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "triggeredAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID projectId) {
         Pageable pageable = PageRequest.of(page, size,
                 sortDir.equalsIgnoreCase("asc") ?
                         org.springframework.data.domain.Sort.by(sortBy).ascending() :
                         org.springframework.data.domain.Sort.by(sortBy).descending());
-        Page<AlertRecordResponse> response = alertRecordService.getAlerts(pageable);
+        Page<AlertRecordResponse> response;
+        if (projectId != null) {
+            response = alertRecordService.getAlertsByProjectId(projectId, pageable);
+        } else {
+            response = alertRecordService.getAlerts(pageable);
+        }
         return Result.success(response);
     }
 
@@ -114,6 +120,7 @@ public class AlertRecordController {
      */
     @GetMapping("/query")
     public Result<Page<AlertRecordResponse>> queryAlerts(
+            @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String level,
             @RequestParam(required = false) UUID ruleId,
@@ -126,9 +133,14 @@ public class AlertRecordController {
         String statusStr = status != null ? status.toUpperCase() : null;
         String levelStr = level != null ? level.toUpperCase() : null;
 
-        String ruleIdStr = ruleId != null ? ruleId.toString() : null;
-        Page<AlertRecordResponse> response = alertRecordService.queryAlerts(
-                statusStr, levelStr, ruleIdStr, startTime, endTime, pageable);
+        Page<AlertRecordResponse> response;
+        if (projectId != null) {
+            String ruleIdStr = ruleId != null ? ruleId.toString() : null;
+            response = alertRecordService.queryAlertsByProjectId(projectId, statusStr, levelStr, startTime, endTime, pageable);
+        } else {
+            String ruleIdStr = ruleId != null ? ruleId.toString() : null;
+            response = alertRecordService.queryAlerts(statusStr, levelStr, ruleIdStr, startTime, endTime, pageable);
+        }
         return Result.success(response);
     }
 

@@ -138,4 +138,104 @@ public interface AlertRecordRepository extends JpaRepository<AlertRecord, UUID> 
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime,
             Pageable pageable);
+
+    /**
+     * 根据项目ID查询告警（通过关联的日志源）
+     */
+    @Query(value = "SELECT DISTINCT ar.* FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId " +
+           "AND (COALESCE(:status, '') = '' OR ar.status = :status) " +
+           "AND (COALESCE(:alertLevel, '') = '' OR ar.alert_level = :alertLevel) " +
+           "AND (CAST(:startTime AS timestamp) IS NULL OR ar.triggered_at >= :startTime) " +
+           "AND (CAST(:endTime AS timestamp) IS NULL OR ar.triggered_at <= :endTime) " +
+           "ORDER BY ar.triggered_at DESC",
+           countQuery = "SELECT COUNT(DISTINCT ar.id) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId " +
+           "AND (COALESCE(:status, '') = '' OR ar.status = :status) " +
+           "AND (COALESCE(:alertLevel, '') = '' OR ar.alert_level = :alertLevel) " +
+           "AND (CAST(:startTime AS timestamp) IS NULL OR ar.triggered_at >= :startTime) " +
+           "AND (CAST(:endTime AS timestamp) IS NULL OR ar.triggered_at <= :endTime)",
+           nativeQuery = true)
+    Page<AlertRecord> findByProjectId(
+            @Param("projectId") UUID projectId,
+            @Param("status") String status,
+            @Param("alertLevel") String alertLevel,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            Pageable pageable);
+
+    /**
+     * 根据项目ID统计告警数量
+     */
+    @Query(value = "SELECT COUNT(*) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId",
+           nativeQuery = true)
+    long countByProjectId(@Param("projectId") UUID projectId);
+
+    /**
+     * 根据项目ID统计待处理告警数量
+     */
+    @Query(value = "SELECT COUNT(*) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId AND ar.status = 'PENDING'",
+           nativeQuery = true)
+    long countPendingByProjectId(@Param("projectId") UUID projectId);
+
+    /**
+     * 根据项目ID统计今日告警数量
+     */
+    @Query(value = "SELECT COUNT(*) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId AND ar.triggered_at >= :startOfDay",
+           nativeQuery = true)
+    long countTodayByProjectId(@Param("projectId") UUID projectId,
+                               @Param("startOfDay") LocalDateTime startOfDay);
+
+    /**
+     * 根据项目ID统计各告警级别的告警数量
+     */
+    @Query(value = "SELECT ar.alert_level, COUNT(ar) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId " +
+           "GROUP BY ar.alert_level",
+           nativeQuery = true)
+    List<Object[]> countByAlertLevelByProjectId(@Param("projectId") UUID projectId);
+
+    /**
+     * 根据项目ID统计指定时间范围内的告警数量
+     */
+    @Query(value = "SELECT COUNT(ar) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId " +
+           "AND ar.triggered_at BETWEEN :startTime AND :endTime",
+           nativeQuery = true)
+    long countByTimeRangeByProjectId(@Param("projectId") UUID projectId,
+                                    @Param("startTime") LocalDateTime startTime,
+                                    @Param("endTime") LocalDateTime endTime);
+
+    /**
+     * 根据项目ID查询今日各告警级别的告警数量
+     */
+    @Query(value = "SELECT ar.alert_level, COUNT(ar) FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId AND ar.triggered_at >= :startOfDay " +
+           "GROUP BY ar.alert_level",
+           nativeQuery = true)
+    List<Object[]> countTodayByAlertLevelByProjectId(@Param("projectId") UUID projectId,
+                                                     @Param("startOfDay") LocalDateTime startOfDay);
+
+    /**
+     * 根据项目ID查询指定状态的告警记录列表
+     */
+    @Query(value = "SELECT ar.* FROM alert_records ar " +
+           "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
+           "WHERE arule.project_id = :projectId AND ar.status = :status " +
+           "ORDER BY CASE ar.alert_level WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END, " +
+           "ar.triggered_at DESC",
+           nativeQuery = true)
+    List<AlertRecord> findByStatusByProjectId(@Param("projectId") UUID projectId,
+                                              @Param("status") AlertStatus status);
 }
