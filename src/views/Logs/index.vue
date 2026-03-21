@@ -41,6 +41,14 @@
         <el-form-item label="关键字">
           <el-input v-model="esFilter.keyword" placeholder="输入关键字搜索" clearable style="width: 200px" @input="handleKeywordInput" />
         </el-form-item>
+        <el-form-item label="刷新时间">
+          <el-select v-model="filter.refreshInterval" placeholder="选择刷新间隔" style="width: 140px">
+            <el-option label="不刷新" :value="0" />
+            <el-option label="每隔1秒" :value="1000" />
+            <el-option label="每隔5秒" :value="5000" />
+            <el-option label="每隔10秒" :value="10000" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
@@ -736,7 +744,9 @@ const handleReset = () => {
     logLevel: null,
     dateRange: null,
     page: 1,
-    pageSize: 20
+    pageSize: 20,
+    refreshInterval: 0,
+    logFiles: []
   }
   // 重置 ES 搜索条件
   esFilter.value = {

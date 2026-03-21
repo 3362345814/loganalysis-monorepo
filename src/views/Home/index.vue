@@ -4,8 +4,10 @@
     <el-row :gutter="20" class="stats-row">
       <el-col :span="6">
         <el-card class="stat-card">
-          <div class="stat-icon" style="background: #409EFF">
+          <div class="stat-icon-container">
+            <div class="stat-icon" style="background: #409EFF">
             <el-icon :size="30"><Collection /></el-icon>
+          </div>
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.sources }}</div>
@@ -15,8 +17,10 @@
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card">
-          <div class="stat-icon" style="background: #67C23A">
-            <el-icon :size="30"><Document /></el-icon>
+          <div class="stat-icon-container">
+            <div class="stat-icon" style="background: #67C23A">
+              <el-icon :size="30"><Document /></el-icon>
+            </div>
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.logs }}</div>
@@ -26,8 +30,10 @@
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card">
+          <div class="stat-icon-container">
           <div class="stat-icon" style="background: #E6A23C">
             <el-icon :size="30"><Loading /></el-icon>
+          </div>
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.collecting }}</div>
@@ -37,8 +43,10 @@
       </el-col>
       <el-col :span="6">
         <el-card class="stat-card">
+          <div class="stat-icon-container">
           <div class="stat-icon" style="background: #F56C6C">
             <el-icon :size="30"><Bell /></el-icon>
+          </div>
           </div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.alerts }}</div>
@@ -278,8 +286,15 @@ onMounted(() => {
 
 .stat-card {
   display: flex;
+  justify-content: center;
   align-items: center;
   padding: 20px;
+}
+
+.stat-icon-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .stat-icon {
@@ -287,23 +302,28 @@ onMounted(() => {
   height: 60px;
   border-radius: 10px;
   display: flex;
+  justify-content: center;
   align-items: center;
   justify-content: center;
   color: #fff;
-  margin-right: 15px;
 }
 
 .stat-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .stat-value {
+  text-align: center;
   font-size: 28px;
   font-weight: bold;
   color: #303133;
 }
 
 .stat-label {
+  text-align: center;
   font-size: 14px;
   color: #909399;
   margin-top: 5px;
