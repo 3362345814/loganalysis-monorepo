@@ -1,6 +1,6 @@
 # LogAnalysis Monorepo
 
-一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。  
+一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。\
 本仓库包含：
 
 - 后端服务（Spring Boot）
@@ -113,54 +113,6 @@ loganalysis status
 - 前端：<http://localhost:3000>
 - 后端：<http://localhost:8080>
 
-## Release 页面可复制安装区块
-
-下面这段可以直接粘贴到 GitHub Release 描述（把 `v0.1.4` 替换为当前版本号）：
-
-````markdown
-## 安装（推荐：一键脚本）
-
-### Windows (PowerShell)
-```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.1.4/scripts/install.ps1" | iex
-```
-
-### macOS / Linux
-```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.1.4/scripts/install.sh" | sh
-```
-
-## 验证安装
-
-```bash
-loganalysis version
-loganalysis doctor
-```
-
-## 快速启动
-
-```bash
-loganalysis up --profile minimal --version v0.1.4 --auto-port
-```
-````
-
-## 常用 CLI 命令
-
-```bash
-loganalysis up --profile full --version v0.1.4 --auto-port
-loganalysis down
-loganalysis down --remove-volumes
-loganalysis status
-loganalysis logs backend -f
-loganalysis doctor
-loganalysis config list
-loganalysis config get release_repo
-loganalysis config set release_repo 3362345814/loganalysis-monorepo
-loganalysis upgrade --to v0.1.5
-loganalysis uninstall
-loganalysis uninstall --purge-data
-```
-
 ## 关键配置说明
 
 CLI 运行时文件目录：
@@ -241,7 +193,7 @@ loganalysis config set ports.backend 18080
 
 - `irm` 需要在 PowerShell 中执行，不是 `cmd`
 - 已知脚本边界问题已修复，建议使用最新 tag 的安装脚本
-- 详细说明见 [CLI_WINDOWS_DEPLOY.md](./CLI_WINDOWS_DEPLOY.md)
+- 详细说明见 [CLI\_WINDOWS\_DEPLOY.md](./CLI_WINDOWS_DEPLOY.md)
 
 ### 6) `upgrade` 后仍使用旧仓库
 
