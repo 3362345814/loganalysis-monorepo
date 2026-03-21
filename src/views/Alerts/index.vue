@@ -59,6 +59,11 @@
     <!-- 搜索筛选 -->
     <el-card class="filter-card">
       <el-form :inline="true" :model="filterForm" class="filter-form">
+        <el-form-item label="项目">
+          <el-select v-model="filterForm.projectId" placeholder="全部项目" clearable style="width: 160px" @change="handleProjectChange">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="告警状态">
           <el-select v-model="filterForm.status" placeholder="请选择" clearable style="width: 120px">
             <el-option label="待处理" value="PENDING" />
@@ -110,6 +115,11 @@
 
       <el-table :data="alertList" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="alertId" label="告警编号" width="180" />
+        <el-table-column prop="projectName" label="项目" width="150">
+          <template #default="{ row }">
+            {{ row.projectName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="title" label="告警标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="alertLevel" label="级别" width="100">
           <template #default="{ row }">
@@ -178,6 +188,7 @@
             {{ getStatusText(currentAlert.status) }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="所属项目">{{ currentAlert.projectName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="触发时间">
           {{ formatDateTime(currentAlert.triggeredAt) }}
         </el-descriptions-item>
@@ -257,15 +268,19 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting } from '@element-plus/icons-vue'
 import { alertRecordApi, alertStatisticsApi } from '@/api/alertApi'
-import { logSourceApi } from '@/api'
+import { logSourceApi, projectApi } from '@/api'
 
 const router = useRouter()
+
+// 项目列表
+const projects = ref([])
 
 // 统计数据
 const statistics = ref({})
 
 // 筛选表单
 const filterForm = reactive({
+  projectId: '',
   status: '',
   level: '',
   dateRange: []
@@ -295,7 +310,9 @@ const resolveForm = reactive({
 // 获取统计数据
 const fetchStatistics = async () => {
   try {
-    const res = await alertStatisticsApi.getStatistics()
+    const res = await alertStatisticsApi.getStatistics(
+      filterForm.projectId ? { projectId: filterForm.projectId } : {}
+    )
     statistics.value = res.data
   } catch (error) {
     console.error('获取统计数据失败:', error)
@@ -309,6 +326,7 @@ const fetchAlertList = async () => {
     const params = {
       page: pagination.page - 1,
       size: pagination.size,
+      ...(filterForm.projectId && { projectId: filterForm.projectId }),
       ...(filterForm.status && { status: filterForm.status }),
       ...(filterForm.level && { level: filterForm.level }),
       ...(filterForm.dateRange?.length === 2 && {
@@ -326,6 +344,23 @@ const fetchAlertList = async () => {
   }
 }
 
+// 获取项目列表
+const fetchProjects = async () => {
+  try {
+    const res = await projectApi.getAll()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('获取项目列表失败:', error)
+  }
+}
+
+// 项目选择变化
+const handleProjectChange = () => {
+  pagination.page = 1
+  fetchAlertList()
+  fetchStatistics()
+}
+
 // 搜索
 const handleSearch = () => {
   pagination.page = 1
@@ -334,6 +369,7 @@ const handleSearch = () => {
 
 // 重置
 const handleReset = () => {
+  filterForm.projectId = ''
   filterForm.status = ''
   filterForm.level = ''
   filterForm.dateRange = []
@@ -496,6 +532,7 @@ const formatDateTime = (datetime) => {
 }
 
 onMounted(() => {
+  fetchProjects()
   fetchStatistics()
   fetchAlertList()
 })

@@ -1,5 +1,16 @@
 <template>
   <div class="rule-manage-container">
+    <!-- 项目选择器 -->
+    <el-card class="filter-card">
+      <el-form :inline="true">
+        <el-form-item label="项目">
+          <el-select v-model="selectedProjectId" placeholder="全部项目" clearable style="width: 200px" @change="handleProjectChange">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- 规则列表 -->
     <el-card class="table-card">
       <template #header>
@@ -18,6 +29,11 @@
 
       <el-table :data="ruleList" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="name" label="规则名称" min-width="150" />
+        <el-table-column prop="projectId" label="项目" width="150">
+          <template #default="{ row }">
+            <span>{{ getProjectName(row.projectId) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="ruleType" label="规则类型" width="120">
           <template #default="{ row }">
@@ -77,6 +93,11 @@
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+        <el-form-item label="项目" prop="projectId">
+          <el-select v-model="form.projectId" placeholder="请选择所属项目" style="width: 100%">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="规则名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入规则名称" />
         </el-form-item>
@@ -89,8 +110,6 @@
             <el-option label="正则表达式" value="REGEX" />
             <el-option label="日志级别" value="LEVEL" />
             <el-option label="阈值检测" value="THRESHOLD" />
-            <el-option label="模式匹配" value="PATTERN" />
-            <el-option label="新异常检测" value="NEW_PATTERN" />
           </el-select>
         </el-form-item>
         <el-form-item label="触发条件" prop="conditionExpression">
@@ -154,6 +173,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, QuestionFilled } from '@element-plus/icons-vue'
 import { alertRuleApi, notificationChannelApi } from '@/api/alertApi'
+import { projectApi } from '@/api'
+
+// 项目列表
+const projects = ref([])
+const selectedProjectId = ref('')
 
 // 规则列表
 const ruleList = ref([])
@@ -190,6 +214,7 @@ const formRef = ref(null)
 // 表单
 const form = reactive({
   id: null,
+  projectId: '',
   name: '',
   description: '',
   ruleType: 'KEYWORD',
@@ -228,7 +253,8 @@ const fetchRuleList = async () => {
   try {
     const params = {
       page: pagination.page - 1,
-      size: pagination.size
+      size: pagination.size,
+      ...(selectedProjectId.value && { projectId: selectedProjectId.value })
     }
     const res = await alertRuleApi.getPage(params)
     ruleList.value = res.data.content || []
@@ -238,6 +264,22 @@ const fetchRuleList = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 获取项目列表
+const fetchProjects = async () => {
+  try {
+    const res = await projectApi.getAll()
+    projects.value = res.data || []
+  } catch (error) {
+    console.error('获取项目列表失败:', error)
+  }
+}
+
+// 项目选择变化
+const handleProjectChange = () => {
+  pagination.page = 1
+  fetchRuleList()
 }
 
 // 创建规则
@@ -252,6 +294,7 @@ const handleEdit = (row) => {
   isEdit.value = true
   Object.assign(form, {
     id: row.id,
+    projectId: row.projectId || '',
     name: row.name,
     description: row.description || '',
     ruleType: row.ruleType,
@@ -325,6 +368,7 @@ const handleSubmit = async () => {
 const resetForm = () => {
   Object.assign(form, {
     id: null,
+    projectId: selectedProjectId.value || '',
     name: '',
     description: '',
     ruleType: 'KEYWORD',
@@ -356,8 +400,6 @@ const getRuleTypeText = (type) => {
     REGEX: '正则',
     LEVEL: '级别',
     THRESHOLD: '阈值',
-    PATTERN: '模式',
-    NEW_PATTERN: '新异常',
     COMBINATION: '组合'
   }
   return map[type] || type
@@ -396,7 +438,14 @@ const getChannelText = (channel) => {
   return channelMap[channel] || channel
 }
 
+const getProjectName = (projectId) => {
+  if (!projectId) return '-'
+  const project = projects.value.find(p => p.id === projectId)
+  return project ? project.name : '-'
+}
+
 onMounted(() => {
+  fetchProjects()
   fetchRuleList()
   fetchEnabledChannels()
 })

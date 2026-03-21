@@ -82,8 +82,8 @@ export const notificationChannelApi = {
   // 保存渠道配置
   save: (data) => service.post('/alert/channel-configs', data),
 
-  // 批量保存渠道配置
-  batchSave: (data) => service.post('/alert/channel-configs/batch', data),
+  // 批量保存或更新渠道配置
+  batchUpsert: (data) => service.post('/alert/channel-configs/batch-upsert', data),
 
   // 删除渠道配置
   delete: (id) => service.delete(`/alert/channel-configs/${id}`)
@@ -92,10 +92,13 @@ export const notificationChannelApi = {
 // 告警统计 API
 export const alertStatisticsApi = {
   // 获取统计数据
-  getStatistics: () => service.get('/alert/statistics'),
+  getStatistics: (params) => service.get('/alert/statistics', { params }),
 
   // 获取趋势数据
   getTrend: (params) => service.get('/alert/statistics/trend', { params }),
+
+  // 获取级别分布
+  getLevelDistribution: (params) => service.get('/alert/statistics/level-distribution', { params }),
 
   // 获取今日统计
   getToday: () => service.get('/alert/statistics/today'),

@@ -471,7 +471,7 @@ const handleSaveChannels = async () => {
       ...item,
       configParams: item.configParams ? JSON.stringify(item.configParams) : null
     }))
-    await notificationChannelApi.batchSave(data)
+    await notificationChannelApi.batchUpsert(data)
     ElMessage.success('保存成功')
   } catch (error) {
     console.error('保存配置失败:', error)
