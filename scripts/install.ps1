@@ -1,7 +1,8 @@
 param(
   [string]$Repo = $env:LOGANALYSIS_REPO,
   [string]$Version = $env:LOGANALYSIS_VERSION,
-  [string]$InstallDir = $env:LOGANALYSIS_INSTALL_DIR
+  [string]$InstallDir = $env:LOGANALYSIS_INSTALL_DIR,
+  [string]$Arch = $env:LOGANALYSIS_ARCH
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,30 +25,52 @@ if ($Version -eq 'latest') {
   $Version = $release.tag_name
 }
 
-$archRaw = $null
-try {
-  $runtimeArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-  if ($null -ne $runtimeArch) {
-    $archRaw = $runtimeArch.ToString()
+function Resolve-Arch([string]$raw) {
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    return $null
   }
-} catch {
+  switch -Regex ($raw.Trim().ToLowerInvariant()) {
+    '^(x64|amd64)$' { return 'amd64' }
+    '^arm64$' { return 'arm64' }
+    default { return $null }
+  }
 }
 
-if ([string]::IsNullOrWhiteSpace($archRaw)) {
-  $archRaw = $env:PROCESSOR_ARCHITECTURE
-}
-if ([string]::IsNullOrWhiteSpace($archRaw)) {
-  $archRaw = $env:PROCESSOR_ARCHITEW6432
-}
-if ([string]::IsNullOrWhiteSpace($archRaw)) {
-  throw "failed to detect architecture (PROCESSOR_ARCHITECTURE=$($env:PROCESSOR_ARCHITECTURE), PROCESSOR_ARCHITEW6432=$($env:PROCESSOR_ARCHITEW6432))"
-}
+if (-not [string]::IsNullOrWhiteSpace($Arch)) {
+  $arch = Resolve-Arch $Arch
+  if (-not $arch) {
+    throw "unsupported architecture override: $Arch (expected: amd64|arm64)"
+  }
+} else {
+  $archCandidates = New-Object System.Collections.Generic.List[string]
 
-$archRaw = $archRaw.ToLowerInvariant()
-switch -Regex ($archRaw) {
-  '^(x64|amd64)$' { $arch = 'amd64'; break }
-  '^arm64$' { $arch = 'arm64'; break }
-  default { throw "unsupported architecture: $archRaw" }
+  try {
+    $runtimeArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    if ($null -ne $runtimeArch) {
+      $archCandidates.Add($runtimeArch.ToString())
+    }
+  } catch {
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITEW6432)) {
+    $archCandidates.Add($env:PROCESSOR_ARCHITEW6432)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:PROCESSOR_ARCHITECTURE)) {
+    $archCandidates.Add($env:PROCESSOR_ARCHITECTURE)
+  }
+
+  foreach ($candidate in $archCandidates) {
+    $resolved = Resolve-Arch $candidate
+    if ($resolved) {
+      $arch = $resolved
+      break
+    }
+  }
+
+  if (-not $arch) {
+    $joined = ($archCandidates -join ',')
+    throw "failed to detect supported architecture from candidates: [$joined] (set LOGANALYSIS_ARCH=amd64 or arm64 to override)"
+  }
 }
 
 $asset = "loganalysis-windows-$arch.exe"
