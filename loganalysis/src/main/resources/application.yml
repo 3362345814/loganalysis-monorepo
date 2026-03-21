@@ -1,0 +1,174 @@
+# LogAnalysis 主配置文件
+# 按模块分离配置，使用 spring.config.import 导入
+
+spring:
+  application:
+    name: loganalysis
+
+  # 数据源配置（全局）
+  datasource:
+    url: jdbc:postgresql://localhost:5432/loganalysis
+    username: loganalysis
+    password: loganalysis_123456
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      pool-name: LogAnalysisHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # JPA配置（全局）
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  # Redis配置（全局）
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 10000ms
+      password: loganalysis_123456
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: -1ms
+
+  # RabbitMQ配置（全局）
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: loganalysis
+    password: loganalysis_123456
+    virtual-host: /
+
+  # 邮件配置（全局）
+  mail:
+    default-encoding: UTF-8
+    host: ${smtp.host:localhost}
+    port: ${smtp.port:587}
+    username: ${smtp.username:}
+    password: ${smtp.password:}
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 3000
+          writetimeout: 5000
+
+# 告警通知配置
+alert:
+  notification:
+    email:
+      enabled: true
+      smtp-host: smtp.qq.com
+      smtp-port: 587
+      username: your-email@qq.com
+      password: your-auth-code
+      from: your-email@qq.com
+      recipients: your-recipient@domain.com
+
+  # Jackson配置（全局）
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # 配置导入（模块化配置）
+  config:
+    import:
+      - optional:file:./collector/application.yml
+      - optional:file:./processing/application.yml
+      - optional:file:./analysisai/application.yml
+      - optional:file:./api/application.yml
+      - optional:file:./admin/application.yml
+
+# Server配置（全局）
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Actuator配置（全局）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  health:
+    mail:
+      enabled: false
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Logging配置（全局）
+logging:
+  level:
+    root: INFO
+    com.evelin.loganalysis: DEBUG
+    org.springframework: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# MinIO 对象存储配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: log-archive
+  region: us-east-1
+
+# Elasticsearch 配置
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+  index-prefix: loganalysis-
+  username:
+  password:
+  connect-timeout: 5000
+  socket-timeout: 30000
+
+# 分级存储配置
+storage:
+  strategy:
+    enabled: true
+    cold-storage-type: minio        # 冷存储类型: local / minio
+    bucket: log-archive              # MinIO Bucket 名称
+    hot-data-retention-days: 7       # 热数据保留7天
+    warm-data-retention-days: 30     # 温数据保留30天
+    archive-path: ./logs/archive     # 归档目录（本地存储时使用）
+    archive-max-file-size-mb: 100    # 单个归档文件最大100MB
+    compress-archive: true           # 启用压缩
+    archive-schedule-hours: 24        # 每24小时执行一次归档
+    delete-after-archive: true       # 归档后删除原数据

@@ -1,0 +1,33 @@
+# Log Processing 模块配置
+
+# 日志处理配置
+log:
+  processing:
+    # 是否启用处理管道
+    enabled: true
+    # 批处理大小
+    batch-size: 100
+    # 批处理间隔（毫秒）
+    batch-interval-ms: 1000
+    # 上下文提取：前日志数量
+    context-before-lines: 10
+    # 上下文提取：后日志数量
+    context-after-lines: 10
+    # 聚合组超时时间（分钟）
+    aggregation-timeout-minutes: 60
+    # 相似度阈值
+    similarity-threshold: 0.85
+    # 是否启用敏感信息脱敏
+    desensitization-enabled: true
+    # 是否启用事件识别
+    event-detection-enabled: true
+    # 是否启用日志聚合
+    aggregation-enabled: true
+    # 是否启用告警触发
+    alert-enabled: true
+    # 线程池核心线程数
+    core-pool-size: 4
+    # 线程池最大线程数
+    max-pool-size: 8
+    # 线程池队列容量
+    queue-capacity: 100

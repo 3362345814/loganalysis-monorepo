@@ -1,0 +1,21 @@
+# AnalysisAI 模块配置
+
+# LLM配置
+app:
+  llm:
+    # LLM 提供商：openai / azure / local
+    provider: openai
+    # API密钥
+    api-key: your-api-key
+    # 使用的模型
+    model: gpt-4
+    # 最大token数
+    max-tokens: 2000
+    # 温度参数（0-2，越高越有创意）
+    temperature: 0.3
+
+# Elasticsearch配置（AI分析需要）
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
