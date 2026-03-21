@@ -1,0 +1,119 @@
+services:
+  frontend:
+    image: {{ .FrontendImage }}
+    container_name: {{ .ProjectName }}-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "{{ .Ports.Frontend }}:80"
+    restart: unless-stopped
+    networks:
+      - loganalysis-network
+
+  backend:
+    image: {{ .BackendImage }}
+    container_name: {{ .ProjectName }}-backend
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      STORAGE_STRATEGY_ENABLED: "false"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loganalysis
+      SPRING_DATASOURCE_USERNAME: loganalysis
+      SPRING_DATASOURCE_PASSWORD: loganalysis_123456
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: loganalysis_123456
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: loganalysis
+      SPRING_RABBITMQ_PASSWORD: loganalysis_123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "{{ .Ports.Backend }}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+    networks:
+      - loganalysis-network
+
+  postgres:
+    image: postgres:15
+    container_name: {{ .ProjectName }}-postgres
+    environment:
+      POSTGRES_USER: loganalysis
+      POSTGRES_PASSWORD: loganalysis_123456
+      POSTGRES_DB: loganalysis
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "{{ .Ports.Postgres }}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loganalysis"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: {{ .ProjectName }}-redis
+    command: redis-server --requirepass loganalysis_123456 --appendonly yes
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - redis_data:/data
+    ports:
+      - "{{ .Ports.Redis }}:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "loganalysis_123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: {{ .ProjectName }}-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: loganalysis
+      RABBITMQ_DEFAULT_PASS: loganalysis_123456
+      TZ: Asia/Shanghai
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_logs:/var/log/rabbitmq
+    ports:
+      - "{{ .Ports.RabbitMQ }}:5672"
+      - "{{ .Ports.RabbitMQManagement }}:15672"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  rabbitmq_logs:
+
+networks:
+  loganalysis-network:
+    driver: bridge

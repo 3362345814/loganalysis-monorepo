@@ -1,0 +1,195 @@
+services:
+  frontend:
+    image: {{ .FrontendImage }}
+    container_name: {{ .ProjectName }}-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "{{ .Ports.Frontend }}:80"
+    restart: unless-stopped
+    networks:
+      - loganalysis-network
+
+  backend:
+    image: {{ .BackendImage }}
+    container_name: {{ .ProjectName }}-backend
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/loganalysis
+      SPRING_DATASOURCE_USERNAME: loganalysis
+      SPRING_DATASOURCE_PASSWORD: loganalysis_123456
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: loganalysis_123456
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: loganalysis
+      SPRING_RABBITMQ_PASSWORD: loganalysis_123456
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "{{ .Ports.Backend }}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+    networks:
+      - loganalysis-network
+
+  postgres:
+    image: postgres:15
+    container_name: {{ .ProjectName }}-postgres
+    environment:
+      POSTGRES_USER: loganalysis
+      POSTGRES_PASSWORD: loganalysis_123456
+      POSTGRES_DB: loganalysis
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "{{ .Ports.Postgres }}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loganalysis"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: {{ .ProjectName }}-redis
+    command: redis-server --requirepass loganalysis_123456 --appendonly yes
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - redis_data:/data
+    ports:
+      - "{{ .Ports.Redis }}:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "loganalysis_123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: {{ .ProjectName }}-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: loganalysis
+      RABBITMQ_DEFAULT_PASS: loganalysis_123456
+      TZ: Asia/Shanghai
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_logs:/var/log/rabbitmq
+    ports:
+      - "{{ .Ports.RabbitMQ }}:5672"
+      - "{{ .Ports.RabbitMQManagement }}:15672"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  elasticsearch:
+    image: elasticsearch:8.10.2
+    container_name: {{ .ProjectName }}-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx1g
+      - xpack.security.enabled=false
+      - TZ=Asia/Shanghai
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "{{ .Ports.Elasticsearch }}:9200"
+      - "9300:9300"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  kibana:
+    image: kibana:8.10.2
+    container_name: {{ .ProjectName }}-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - SERVER_PORT=5601
+      - TZ=Asia/Shanghai
+    ports:
+      - "{{ .Ports.Kibana }}:5601"
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+    networks:
+      - loganalysis-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: {{ .ProjectName }}-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      TZ: Asia/Shanghai
+    volumes:
+      - minio_data:/data
+    ports:
+      - "{{ .Ports.MinioAPI }}:9000"
+      - "{{ .Ports.MinioConsole }}:9001"
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+    networks:
+      - loganalysis-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  rabbitmq_logs:
+  elasticsearch_data:
+  minio_data:
+
+networks:
+  loganalysis-network:
+    driver: bridge
