@@ -18,17 +18,31 @@
             <el-option v-for="file in availableLogFiles" :key="file.name" :label="file.name" :value="file.name" />
           </el-select>
         </el-form-item>
-        <el-form-item label="刷新频率">
-          <el-select v-model="filter.refreshInterval" placeholder="刷新频率" style="width: 120px">
-            <el-option label="关闭" :value="0" />
-            <el-option label="1秒" :value="1000" />
-            <el-option label="3秒" :value="3000" />
-            <el-option label="5秒" :value="5000" />
-            <el-option label="10秒" :value="10000" />
+        <el-form-item label="日志级别">
+          <el-select v-model="esFilter.logLevels" placeholder="选择级别" multiple clearable collapse-tags style="width: 180px" @change="handleLogLevelsChange">
+            <el-option label="ERROR" value="ERROR" />
+            <el-option label="WARN" value="WARN" />
+            <el-option label="INFO" value="INFO" />
+            <el-option label="DEBUG" value="DEBUG" />
           </el-select>
         </el-form-item>
+        <el-form-item label="时间范围">
+          <el-date-picker
+            v-model="esFilter.dateRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            style="width: 340px"
+            @change="handleDateRangeChange"
+          />
+        </el-form-item>
+        <el-form-item label="关键字">
+          <el-input v-model="esFilter.keyword" placeholder="输入关键字搜索" clearable style="width: 200px" @input="handleKeywordInput" />
+        </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+          <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
@@ -57,7 +71,7 @@
             <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
               {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
             </span>
-            <span class="log-message">{{ log.rawContent || log.parsedFields?.message }}</span>
+            <span class="log-message" v-html="highlightText(log.rawContent || log.parsedFields?.message, esFilter.keyword)"></span>
           </div>
           <div v-if="logs.length === 0 && !loading" class="terminal-empty">
             暂无日志数据
@@ -196,7 +210,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Search, Refresh, Link, Close, Loading, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { logSourceApi, projectApi, rawLogApi, analysisApi, analysisConfigApi } from '@/api'
+import { logSourceApi, projectApi, rawLogApi, analysisApi, analysisConfigApi, esLogApi } from '@/api'
 import TraceTimeline from '@/components/TraceTimeline.vue'
 
 const route = useRoute()
@@ -245,6 +259,15 @@ const parsedInfoTableData = computed(() => {
   return data
 })
 
+// ES 搜索相关状态
+const esFilter = ref({
+  keyword: '',
+  logLevels: [],
+  dateRange: null,
+  page: 0,
+  size: 100
+})
+
 const filter = ref({
   projectId: null,
   sourceId: null,
@@ -279,6 +302,69 @@ const availableLogFiles = computed(() => {
   if (!isNginxSource.value) return []
   return nginxLogFiles.value
 })
+
+// ES 搜索方法
+const loadEsLogs = async () => {
+  if (!filter.value.sourceId) {
+    logs.value = []
+    total.value = 0
+    return
+  }
+
+  try {
+    loading.value = true
+
+    const params = {
+      sourceId: filter.value.sourceId,
+      page: esFilter.value.page,
+      size: esFilter.value.size
+    }
+
+    if (esFilter.value.keyword) {
+      params.keyword = esFilter.value.keyword
+    }
+    if (esFilter.value.regex) {
+      params.regex = esFilter.value.regex
+    }
+    if (esFilter.value.logLevels && esFilter.value.logLevels.length > 0) {
+      params.logLevels = esFilter.value.logLevels
+    }
+    if (esFilter.value.dateRange && esFilter.value.dateRange.length === 2) {
+      params.startTime = esFilter.value.dateRange[0]
+      params.endTime = esFilter.value.dateRange[1]
+    }
+    if (filter.value.logFiles && filter.value.logFiles.length > 0) {
+      params.filePath = filter.value.logFiles.join(',')
+    }
+
+    const res = await esLogApi.search(params)
+
+    if (res.data && res.data.hits) {
+      // 后端返回 DESC（最新在前），需要反转成 ASC（最早在上，最新在下）
+      const hits = res.data.hits.slice().reverse()
+      logs.value = hits.map(hit => ({
+        id: hit.id || hit.dbId,
+        dbId: hit.dbId,
+        rawContent: hit.rawContent,
+        filePath: hit.filePath,
+        lineNumber: hit.lineNumber,
+        logLevel: hit.logLevel,
+        collectionTime: hit.collectionTime,
+        originalLogTime: hit.originalLogTime,
+        parsedFields: hit.parsedFields || {}
+      }))
+      total.value = res.data.total || res.data.hits.length
+    } else {
+      logs.value = []
+      total.value = 0
+    }
+  } catch (error) {
+    console.error('ES搜索失败:', error)
+    ElMessage.error('ES搜索失败: ' + (error.message || '请检查ES连接'))
+  } finally {
+    loading.value = false
+  }
+}
 
 const loadLogFilesForSource = async () => {
   if (!filter.value.sourceId) {
@@ -620,7 +706,7 @@ const handleSourceChange = () => {
   filter.value.logFiles = []
   if (filter.value.sourceId) {
     loadLogFilesForSource().then(() => {
-      loadLogs()
+      loadEsLogs()
     })
   } else {
     nginxLogFiles.value = []
@@ -632,13 +718,15 @@ const handleLogFileChange = () => {
   if (filter.value.sourceId) {
     localStorage.setItem(`logFiles_${filter.value.sourceId}`, JSON.stringify(filter.value.logFiles))
     filter.value.page = 1
-    loadLogs()
+    esFilter.value.page = 0
+    loadEsLogs()
   }
 }
 
 const handleSearch = () => {
   filter.value.page = 1
-  loadLogs()
+  esFilter.value.page = 0
+  loadEsLogs()
 }
 
 const handleReset = () => {
@@ -650,8 +738,39 @@ const handleReset = () => {
     page: 1,
     pageSize: 20
   }
+  // 重置 ES 搜索条件
+  esFilter.value = {
+    keyword: '',
+    logLevels: [],
+    dateRange: null,
+    page: 0,
+    size: 100
+  }
   logs.value = []
 }
+
+// 时间范围变化时自动搜索
+const handleDateRangeChange = () => {
+  if (filter.value.sourceId) {
+    loadEsLogs()
+  }
+}
+
+// 关键字输入时自动搜索
+const handleKeywordInput = () => {
+  if (filter.value.sourceId) {
+    loadEsLogs()
+  }
+}
+
+// 日志级别变化时自动搜索
+const handleLogLevelsChange = () => {
+  if (filter.value.sourceId) {
+    loadEsLogs()
+  }
+}
+
+
 
 const handlePageChange = (page) => {
   filter.value.page = page
@@ -714,6 +833,15 @@ const formatLogTime = (parsedFields) => {
 const getFileName = (filePath) => {
   if (!filePath) return ''
   return filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+}
+
+// 高亮关键字文本
+const highlightText = (text, keyword) => {
+  if (!text || !keyword) return text
+  // 转义特殊正则字符
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped})`, 'gi')
+  return text.replace(regex, '<mark class="highlight-keyword">$1</mark>')
 }
 
 const formatLogTimeDisplay = (log) => {
@@ -1108,6 +1236,13 @@ onUnmounted(() => {
 
 .log-message {
   color: #e6e6e6;
+}
+
+:deep(.highlight-keyword) {
+  background: #f8e71c;
+  color: #000;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .log-highlight {

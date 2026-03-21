@@ -4,7 +4,30 @@ import { ElMessage } from 'element-plus'
 // 创建 axios 实例
 const service = axios.create({
   baseURL: '/api/v1',
-  timeout: 30000
+  timeout: 30000,
+  paramsSerializer: (params) => {
+    // 正确序列化数组参数，例如 logLevels=ERROR&logLevels=WARN
+    const parts = []
+    for (const key in params) {
+      const value = params[key]
+      if (value !== null && value !== undefined) {
+        if (Array.isArray(value)) {
+          value.forEach(v => {
+            if (v instanceof Date) {
+              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(v.toISOString())}`)
+            } else {
+              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(v)}`)
+            }
+          })
+        } else if (value instanceof Date) {
+          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value.toISOString())}`)
+        } else {
+          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        }
+      }
+    }
+    return parts.join('&')
+  }
 })
 
 // 请求拦截器
@@ -208,28 +231,28 @@ export const analysisApi = {
 export const llmConfigApi = {
   // 获取所有配置
   getAll: () => service.get('/llm-config'),
-  
+
   // 获取启用的配置
   getEnabled: () => service.get('/llm-config/enabled'),
-  
+
   // 获取默认配置
   getDefault: () => service.get('/llm-config/default'),
-  
+
   // 获取当前活跃配置
   getActive: () => service.get('/llm-config/active'),
-  
+
   // 获取单个配置
   getById: (id) => service.get(`/llm-config/${id}`),
-  
+
   // 创建配置
   create: (data) => service.post('/llm-config', data),
-  
+
   // 更新配置
   update: (id, data) => service.put(`/llm-config/${id}`, data),
-  
+
   // 删除配置
   delete: (id) => service.delete(`/llm-config/${id}`),
-  
+
   // 验证 API Key
   validate: (id) => service.post(`/llm-config/${id}/validate`)
 }
@@ -240,7 +263,30 @@ export const llmConfigApi = {
 export const analysisConfigApi = {
   // 获取配置
   get: () => service.get('/analysis-config'),
-  
+
   // 更新配置
   update: (data) => service.put('/analysis-config', data)
+}
+
+// ==================== ES 日志查询 API ====================
+
+// ES 日志查询相关
+export const esLogApi = {
+  // ES 高级搜索
+  search: (params) => service.get('/collection/logs/es/search', { params }),
+
+  // 获取聚合统计
+  stats: (params) => service.get('/collection/logs/es/stats', { params }),
+
+  // 手动触发索引同步 (按日志源)
+  syncBySourceId: (sourceId, params) => service.post(`/collection/logs/es/index/${sourceId}`, null, { params }),
+
+  // 手动触发全量同步
+  syncAll: (params) => service.post('/collection/logs/es/sync-all', null, { params }),
+
+  // 获取 ES 索引信息
+  getInfo: () => service.get('/collection/logs/es/info'),
+
+  // ES 健康检查
+  health: () => service.get('/collection/logs/es/health')
 }

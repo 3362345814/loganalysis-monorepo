@@ -208,6 +208,38 @@
         </el-card>
       </el-tab-pane>
 
+      <!-- AI分析配置 -->
+      <el-tab-pane label="AI分析配置" name="ai">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>AI分析配置</span>
+            </div>
+          </template>
+
+          <el-form :model="analysisConfigForm" label-width="120px" style="max-width: 500px;">
+            <el-form-item label="上下文行数">
+              <el-input-number v-model="analysisConfigForm.contextSize" :min="10" :max="30" />
+              <span style="margin-left: 10px; color: #909399">行 (10-30)</span>
+            </el-form-item>
+            <el-form-item label="自动分析级别">
+              <el-select v-model="analysisConfigForm.autoAnalysisSeverity" style="width: 100%">
+                <el-option label="ERROR 及以上" value="ERROR" />
+                <el-option label="WARNING 及以上" value="WARNING" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="启用自动分析">
+              <el-switch v-model="analysisConfigForm.autoAnalysisEnabled" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveAnalysisConfig" :loading="savingAnalysisConfig">
+                保存配置
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </el-tab-pane>
+
       <!-- LLM 配置 -->
       <el-tab-pane label="LLM 配置" name="llm">
         <el-card>
@@ -322,7 +354,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Plus } from '@element-plus/icons-vue'
 import { notificationChannelApi, feishuApi, dingtalkApi, wechatWorkApi } from '@/api/alertApi'
-import { llmConfigApi } from '@/api'
+import { llmConfigApi, analysisConfigApi } from '@/api'
 
 const activeTab = ref('channel')
 
@@ -333,6 +365,13 @@ const testingDingtalk = ref(null)
 const testingWechatWork = ref(null)
 const channelList = ref([])
 const channelOptions = ['EMAIL', 'DINGTALK', 'WECHAT', 'FEISHU', 'WEBHOOK']
+
+const savingAnalysisConfig = ref(false)
+const analysisConfigForm = ref({
+  contextSize: 10,
+  autoAnalysisSeverity: 'ERROR',
+  autoAnalysisEnabled: true
+})
 
 const loadingLlm = ref(false)
 const submittingLlm = ref(false)
@@ -377,6 +416,32 @@ const getChannelText = (channel) => {
     WEBHOOK: 'Webhook'
   }
   return map[channel] || channel
+}
+
+const loadAnalysisConfig = async () => {
+  try {
+    const res = await analysisConfigApi.get()
+    if (res.data) {
+      analysisConfigForm.value.contextSize = res.data.contextSize || 10
+      analysisConfigForm.value.autoAnalysisSeverity = res.data.autoAnalysisSeverity || 'ERROR'
+      analysisConfigForm.value.autoAnalysisEnabled = res.data.autoAnalysisEnabled !== false
+    }
+  } catch (error) {
+    console.error('加载分析配置失败:', error)
+  }
+}
+
+const saveAnalysisConfig = async () => {
+  savingAnalysisConfig.value = true
+  try {
+    await analysisConfigApi.update(analysisConfigForm.value)
+    ElMessage.success('配置保存成功')
+  } catch (error) {
+    console.error('保存分析配置失败:', error)
+    ElMessage.error('保存失败')
+  } finally {
+    savingAnalysisConfig.value = false
+  }
 }
 
 const fetchConfigs = async () => {
@@ -560,6 +625,7 @@ const handleDeleteLlm = async (row) => {
 onMounted(() => {
   fetchConfigs()
   loadLlmConfigs()
+  loadAnalysisConfig()
 })
 </script>
 

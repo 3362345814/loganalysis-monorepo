@@ -28,7 +28,7 @@
         </el-menu-item>
         <el-menu-item index="/processing">
           <el-icon><Cpu /></el-icon>
-          <span>日志处理</span>
+          <span>日志聚合</span>
         </el-menu-item>
         <el-menu-item index="/analysis">
           <el-icon><DataAnalysis /></el-icon>

@@ -1,78 +1,72 @@
 <template>
   <div class="processing-page">
-    <el-tabs v-model="activeTab" type="border-card">
-      <!-- 日志聚合组 -->
-      <el-tab-pane label="聚合组" name="aggregation">
-        <el-card class="tool-card">
-          <template #header>
-            <div class="card-header">
-              <span>日志聚合组</span>
-              <div>
-                <el-button :icon="Setting" @click="configVisible = true">配置</el-button>
-                <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
-              </div>
-            </div>
-          </template>
+    <el-card class="tool-card">
+      <template #header>
+        <div class="card-header">
+            <span>日志聚合</span>
+            <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
+          </div>
+      </template>
 
-          <!-- 统计卡片 -->
-          <el-row :gutter="20" style="margin-bottom: 20px">
-            <el-col :span="6">
-              <el-statistic title="总聚合组" :value="aggSummary.total || 0" />
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="活跃" :value="aggSummary.active || 0">
-                <template #suffix>
-                  <el-tag type="success" size="small">ACTIVE</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="已过期" :value="aggSummary.expired || 0">
-                <template #suffix>
-                  <el-tag type="info" size="small">EXPIRED</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="已分析" :value="aggSummary.analyzed || 0">
-                <template #suffix>
-                  <el-tag type="warning" size="small">ANALYZED</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-          </el-row>
+      <!-- 统计卡片 -->
+      <el-row :gutter="20" style="margin-bottom: 20px">
+        <el-col :span="6">
+          <el-statistic title="总聚合组" :value="aggSummary.total || 0" />
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="活跃" :value="aggSummary.active || 0">
+            <template #suffix>
+              <el-tag type="success" size="small">ACTIVE</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="已过期" :value="aggSummary.expired || 0">
+            <template #suffix>
+              <el-tag type="info" size="small">EXPIRED</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="已分析" :value="aggSummary.analyzed || 0">
+            <template #suffix>
+              <el-tag type="warning" size="small">ANALYZED</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+      </el-row>
 
-          <!-- 严重程度统计 -->
-          <el-row :gutter="20" style="margin-bottom: 20px">
-            <el-col :span="6">
-              <el-statistic title="严重" :value="aggSummary.severityCounts?.CRITICAL || 0">
-                <template #suffix>
-                  <el-tag type="danger" size="small">CRITICAL</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="错误" :value="aggSummary.severityCounts?.ERROR || 0">
-                <template #suffix>
-                  <el-tag type="danger" size="small">ERROR</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="警告" :value="aggSummary.severityCounts?.WARNING || 0">
-                <template #suffix>
-                  <el-tag type="warning" size="small">WARNING</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="信息" :value="aggSummary.severityCounts?.INFO || 0">
-                <template #suffix>
-                  <el-tag type="info" size="small">INFO</el-tag>
-                </template>
-              </el-statistic>
-            </el-col>
-          </el-row>
+      <!-- 严重程度统计 -->
+      <el-row :gutter="20" style="margin-bottom: 20px">
+        <el-col :span="6">
+          <el-statistic title="严重" :value="aggSummary.severityCounts?.CRITICAL || 0">
+            <template #suffix>
+              <el-tag type="danger" size="small">CRITICAL</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="错误" :value="aggSummary.severityCounts?.ERROR || 0">
+            <template #suffix>
+              <el-tag type="danger" size="small">ERROR</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="警告" :value="aggSummary.severityCounts?.WARNING || 0">
+            <template #suffix>
+              <el-tag type="warning" size="small">WARNING</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+        <el-col :span="6">
+          <el-statistic title="信息" :value="aggSummary.severityCounts?.INFO || 0">
+            <template #suffix>
+              <el-tag type="info" size="small">INFO</el-tag>
+            </template>
+          </el-statistic>
+        </el-col>
+      </el-row>
 
           <!-- 筛选 -->
           <el-form inline style="margin-bottom: 10px">
@@ -155,8 +149,6 @@
             @current-change="loadAggregationGroups"
           />
         </el-card>
-      </el-tab-pane>
-    </el-tabs>
 
     <!-- 聚合组详情对话框 -->
     <el-dialog v-model="detailVisible" title="聚合组详情" width="1000px" top="5vh">
@@ -236,81 +228,19 @@
         </el-button>
       </template>
     </el-dialog>
-
-    <!-- 分析配置对话框 -->
-    <el-dialog v-model="configVisible" title="AI分析配置" width="500px">
-      <el-form :model="configForm" label-width="120px">
-        <el-form-item label="上下文行数">
-          <el-input-number v-model="configForm.contextSize" :min="10" :max="30" />
-          <span style="margin-left: 10px; color: #909399">行 (10-30)</span>
-        </el-form-item>
-        <el-form-item label="自动分析级别">
-          <el-select v-model="configForm.autoAnalysisSeverity" style="width: 100%">
-            <el-option label="ERROR 及以上" value="ERROR" />
-            <el-option label="WARNING 及以上" value="WARNING" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="启用自动分析">
-          <el-switch v-model="configForm.autoAnalysisEnabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="configVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveAnalysisConfig">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Refresh, Setting, MagicStick } from '@element-plus/icons-vue'
-import { aggregationApi, analysisApi, analysisConfigApi, projectApi, logSourceApi } from '@/api'
+import { Refresh, MagicStick } from '@element-plus/icons-vue'
+import { aggregationApi, analysisApi, projectApi, logSourceApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 
 const router = useRouter()
 const route = useRoute()
-
-// 分析配置
-const analysisConfig = ref(null)
-const configVisible = ref(false)
-const configForm = reactive({
-  contextSize: 10,
-  autoAnalysisSeverity: 'ERROR',
-  autoAnalysisEnabled: true
-})
-
-// 加载分析配置
-const loadAnalysisConfig = async () => {
-  try {
-    const res = await analysisConfigApi.get()
-    if (res.data) {
-      analysisConfig.value = res.data
-      configForm.contextSize = res.data.contextSize || 10
-      configForm.autoAnalysisSeverity = res.data.autoAnalysisSeverity || 'ERROR'
-      configForm.autoAnalysisEnabled = res.data.autoAnalysisEnabled !== false
-    }
-  } catch (error) {
-    console.error('加载分析配置失败:', error)
-  }
-}
-
-// 保存分析配置
-const saveAnalysisConfig = async () => {
-  try {
-    await analysisConfigApi.update(configForm)
-    ElMessage.success('配置保存成功')
-    configVisible.value = false
-    loadAnalysisConfig()
-  } catch (error) {
-    console.error('保存分析配置失败:', error)
-    ElMessage.error('保存配置失败')
-  }
-}
-
-const activeTab = ref('aggregation')
 
 // 聚合组数据
 const aggLoading = ref(false)
@@ -462,8 +392,7 @@ const triggerAnalysis = async (row) => {
 
   try {
     ElMessage.info('正在获取日志上下文...')
-    const contextSize = analysisConfig.value?.contextSize || 10
-    const contextRes = await aggregationApi.getContext(aggregationId, { contextSize: contextSize })
+    const contextRes = await aggregationApi.getContext(aggregationId, { contextSize: 10 })
 
     if (!contextRes.data) {
       ElMessage.error('获取上下文失败')
@@ -562,7 +491,6 @@ onMounted(() => {
   loadProjects()
   loadAggSummary()
   loadAggregationGroups()
-  loadAnalysisConfig()
 
   // 检测URL参数，如果传入了highlightGroupId则自动打开对应聚合组详情
   const highlightGroupId = route.query.highlightGroupId

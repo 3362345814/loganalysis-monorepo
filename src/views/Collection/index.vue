@@ -151,6 +151,7 @@
           <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
             <el-option label="Log4j" value="LOG4J" />
             <el-option label="Nginx" value="NGINX" />
+            <el-option label="JSON" value="JSON" />
           </el-select>
           <span class="form-tip">选择日志格式以支持多行日志（如Java堆栈）合并</span>
         </el-form-item>
@@ -188,6 +189,11 @@
                   </ul>
                 </template>
               </el-alert>
+              <el-alert type="warning" :closable="false" show-icon style="margin-top: 10px;">
+                <template #title>
+                  如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+                </template>
+              </el-alert>
               <div class="pattern-buttons">
                 <el-button size="small" type="primary" plain @click="applySpringBootPattern">
                   使用 Spring Boot 格式
@@ -208,6 +214,29 @@
           <el-form-item label="Error日志" prop="paths">
             <el-input v-model="form.paths[1]" placeholder="如: /var/log/nginx/error.log" />
           </el-form-item>
+          <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 15px;">
+            <template #title>
+              如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+            </template>
+          </el-alert>
+        </template>
+
+        <!-- JSON Log 配置 -->
+        <template v-if="form.logFormat === 'JSON'">
+          <el-form-item label="日志路径" prop="paths">
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" />
+            <span class="form-tip">JSON日志只支持单个文件路径，不支持通配符</span>
+          </el-form-item>
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom: 15px;">
+            <template #title>
+              JSON格式日志示例：<code>{"timestamp":"2026-03-19 10:00:00","level":"ERROR","message":"错误信息","traceId":"abc123"}</code>
+            </template>
+          </el-alert>
+          <el-alert type="warning" :closable="false" show-icon>
+            <template #title>
+              如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+            </template>
+          </el-alert>
         </template>
         
         <el-form-item label="编码" prop="encoding">
@@ -498,7 +527,8 @@ const getStatusType = (status) => {
 const getLogFormatText = (format) => {
   const map = {
     'LOG4J': 'Log4j',
-    'NGINX': 'Nginx'
+    'NGINX': 'Nginx',
+    'JSON': 'JSON'
   }
   return map[format] || 'Log4j'
 }

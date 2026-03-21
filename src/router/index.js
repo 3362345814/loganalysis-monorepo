@@ -29,7 +29,7 @@ const routes = [
     path: '/processing',
     name: 'Processing',
     component: () => import('@/views/Processing/index.vue'),
-    meta: { title: '日志处理' }
+    meta: { title: '日志聚合' }
   },
   {
     path: '/analysis',
