@@ -3,6 +3,7 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
 import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
+import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
 import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
 import com.evelin.loganalysis.logprocessing.parser.LogParser;
@@ -34,6 +35,7 @@ public class DesensitizationConsumerService {
     private final RawLogEventService rawLogEventService;
     private final LogParser logParser;
     private final LogProcessingPipeline logProcessingPipeline;
+    private final LogElasticsearchService elasticsearchService;
 
     /**
      * 批量处理大小
@@ -256,9 +258,14 @@ public class DesensitizationConsumerService {
                 }
             }
 
-            // 保存到数据库
-            rawLogEventService.saveAll(toSave);
-            log.info("Saved {} log events to database", toSave.size());
+            // 保存到数据库，获取保存后的实体
+            List<RawLogEventEntity> savedEntities = rawLogEventService.saveAll(toSave);
+            log.info("Saved {} log events to database", savedEntities.size());
+
+            // 异步同步到 Elasticsearch
+            if (!savedEntities.isEmpty()) {
+                elasticsearchService.bulkIndexLogsAsync(savedEntities);
+            }
 
         } catch (Exception e) {
             log.error("Failed to flush batch to database, retrying...", e);

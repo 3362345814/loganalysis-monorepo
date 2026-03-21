@@ -71,11 +71,40 @@ public class NginxJsonLogParser implements ParseStrategy {
             }
         }
 
+        // 根据 HTTP 状态码计算日志级别
+        String level = calculateAccessLevel(getStatusCode(jsonMap));
+
         return ParseResult.builder()
                 .success(true)
                 .logType("nginx_access_json")
+                .level(level)
                 .fields(fields)
                 .build();
+    }
+
+    private int getStatusCode(Map<String, Object> jsonMap) {
+        // 常见的状态码字段名
+        String[] statusFields = {"status", "status_code", "http_status", "httpStatus", "sc_status"};
+        for (String field : statusFields) {
+            Object value = jsonMap.get(field);
+            if (value != null) {
+                try {
+                    return Integer.parseInt(value.toString());
+                } catch (NumberFormatException e) {
+                    // 继续尝试其他字段
+                }
+            }
+        }
+        return 200; // 默认返回成功
+    }
+
+    private String calculateAccessLevel(int statusCode) {
+        if (statusCode >= 500) {
+            return "ERROR";
+        } else if (statusCode >= 400) {
+            return "WARN";
+        }
+        return "INFO";
     }
 
     private LocalDateTime parseTimeField(String timeField, Object value) {

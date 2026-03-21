@@ -57,8 +57,6 @@ public class LogParser {
         // 解析日志
         ParseResult result = strategy.parse(content, pattern);
 
-        log.info(result.toString());
-
         return buildParsedLogEvent(rawLogEvent, result);
     }
 
@@ -164,26 +162,16 @@ public class LogParser {
                 return nginxLogParser;
             }
 
-            switch (format) {
-                case "JSON":
-                    return jsonLogParser;
-                case "NGINX_JSON":
-                    return nginxJsonLogParser;
-                case "NGINX_ERROR":
-                    return errorLogParser;
-                case "NGINX_ACCESS":
-                    return accessLogParser;
-                case "LOG4J":
-                case "LOG4J1":
-                case "LOG4J2":
-                case "SPRING_BOOT":
-                case "CUSTOM":
+            return switch (format) {
+                case "JSON" -> jsonLogParser;
+                case "NGINX_JSON" -> nginxJsonLogParser;
+                case "NGINX_ERROR" -> errorLogParser;
+                case "NGINX_ACCESS" -> accessLogParser;
+                case "LOG4J", "LOG4J1", "LOG4J2", "SPRING_BOOT", "CUSTOM" ->
                     // 这些格式都使用 Log4jLogParser，它支持自定义 Pattern
-                    return log4jLogParser;
-                case "PLAIN_TEXT":
-                default:
-                    return defaultLogParser;
-            }
+                        log4jLogParser;
+                default -> defaultLogParser;
+            };
         } catch (Exception e) {
             log.warn("Unknown log format: {}, using default", logFormat);
             return defaultLogParser;

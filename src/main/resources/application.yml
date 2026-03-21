@@ -148,6 +148,17 @@ minio:
   bucket: log-archive
   region: us-east-1
 
+# Elasticsearch 配置
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+  index-prefix: loganalysis-
+  username:
+  password:
+  connect-timeout: 5000
+  socket-timeout: 30000
+
 # 分级存储配置
 storage:
   strategy:

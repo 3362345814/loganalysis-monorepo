@@ -192,7 +192,6 @@ public class Log4jLogParser implements ParseStrategy {
             pattern = DEFAULT_PATTERN;
         }
 
-        log.info("Configuring Log4jLogParser with pattern: {}", pattern);
         if (Objects.equals(customPatternStr, pattern)) {
             return;
         }
