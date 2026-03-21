@@ -32,11 +32,11 @@ jobs:
         run: |
           if [ "${{ matrix.component }}" = "backend" ]; then
             echo "context=loganalysis" >> "$GITHUB_OUTPUT"
-            echo "dockerfile=loganalysis/Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "dockerfile=Dockerfile" >> "$GITHUB_OUTPUT"
             echo "image=ghcr.io/${{ github.repository_owner }}/loganalysis-backend" >> "$GITHUB_OUTPUT"
           else
             echo "context=loganalysis_frontend" >> "$GITHUB_OUTPUT"
-            echo "dockerfile=loganalysis_frontend/Dockerfile" >> "$GITHUB_OUTPUT"
+            echo "dockerfile=Dockerfile" >> "$GITHUB_OUTPUT"
             echo "image=ghcr.io/${{ github.repository_owner }}/loganalysis-frontend" >> "$GITHUB_OUTPUT"
           fi
 
@@ -51,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.vars.outputs.context }}
-          file: ${{ steps.vars.outputs.dockerfile }}
+          file: ${{ steps.vars.outputs.context }}/${{ steps.vars.outputs.dockerfile }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -91,6 +91,12 @@ jobs:
         with:
           go-version: '1.22.x'
 
+      - name: Verify CLI source exists
+        run: |
+          ls -la
+          ls -la cli
+          ls -la cli/cmd/loganalysis
+
       - name: Build CLI
         working-directory: cli
         env:
@@ -99,7 +105,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           mkdir -p dist
-          go build -trimpath \
+          go build -buildvcs=false -trimpath \
             -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o "dist/loganalysis-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
             ./cmd/loganalysis
