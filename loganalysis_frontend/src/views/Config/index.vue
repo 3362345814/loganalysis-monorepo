@@ -3,7 +3,7 @@
     <el-tabs v-model="activeTab" class="config-tabs" tab-position="top" stretch>
       <!-- 通知渠道配置 -->
       <el-tab-pane label="通知渠道" name="channel">
-        <el-card>
+        <el-card class="tab-content-card animate-fade-in-up">
           <template #header>
             <div class="card-header">
               <span>通知渠道配置</span>
@@ -210,7 +210,7 @@
 
       <!-- AI分析配置 -->
       <el-tab-pane label="AI分析配置" name="ai">
-        <el-card>
+        <el-card class="tab-content-card animate-fade-in-up">
           <template #header>
             <div class="card-header">
               <span>AI分析配置</span>
@@ -242,7 +242,7 @@
 
       <!-- LLM 配置 -->
       <el-tab-pane label="LLM 配置" name="llm">
-        <el-card>
+        <el-card class="tab-content-card animate-fade-in-up">
           <template #header>
             <div class="card-header">
               <span>LLM 配置管理</span>
@@ -680,5 +680,24 @@ onMounted(() => {
 .param-text {
   font-size: 12px;
   color: #909399;
+}
+
+.tab-content-card {
+  animation-fill-mode: forwards;
+}
+
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition: opacity var(--transition-normal), transform var(--transition-normal);
+}
+
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

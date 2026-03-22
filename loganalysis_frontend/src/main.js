@@ -9,10 +9,14 @@ import * as echarts from 'echarts'
 
 import App from './App.vue'
 import router from './router'
+import Skeleton from './components/Skeleton.vue'
+import Loading from './components/Loading.vue'
 
 const app = createApp(App)
 
 app.component('v-chart', ECharts)
+app.component('Skeleton', Skeleton)
+app.component('Loading', Loading)
 
 globalThis.echarts = echarts
 

@@ -21,7 +21,7 @@
       </el-menu>
 
       <div v-show="!isCompact" class="aside-footer">
-        <span class="aside-version">v1.0.0</span>
+        <span class="aside-version">{{ versionInfo.version }}</span>
         <span>Collect · Search · Analyze · Alert</span>
       </div>
     </el-aside>
@@ -59,9 +59,12 @@
       </el-header>
 
       <el-main class="app-main">
-        <router-view v-slot="{ Component }">
-          <transition name="route-fade" mode="out-in">
-            <component :is="Component" />
+        <router-view v-slot="{ Component, route }">
+          <transition
+            :name="route.meta.transition || 'route-fade'"
+            mode="out-in"
+          >
+            <component :is="Component" :key="route.path" />
           </transition>
         </router-view>
       </el-main>
@@ -73,6 +76,7 @@
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import versionInfo from '../../version.json'
 import {
   Bell,
   Collection,
@@ -235,20 +239,21 @@ const handleCommand = (command) => {
 .nav-menu :deep(.el-menu-item) {
   margin: 6px 0;
   height: 46px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: rgba(212, 222, 238, 0.8);
-  transition: background-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .nav-menu :deep(.el-menu-item:hover) {
   color: #f2f7ff;
   background-color: rgba(255, 255, 255, 0.08);
-  transform: translateX(1px);
+  transform: translateX(2px);
 }
 
 .nav-menu :deep(.el-menu-item.is-active) {
   color: #f5f8ff;
   background: linear-gradient(120deg, rgba(47, 128, 255, 0.34), rgba(47, 128, 255, 0.16));
+  box-shadow: 0 4px 12px rgba(47, 128, 255, 0.25);
 }
 
 .nav-menu :deep(.el-menu-item .el-icon) {
@@ -298,10 +303,16 @@ const handleCommand = (command) => {
   align-items: center;
   height: 28px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   color: #1c5ec0;
   background: rgba(47, 128, 255, 0.13);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.route-pill:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(47, 128, 255, 0.2);
 }
 
 .status-pill {
@@ -329,14 +340,15 @@ const handleCommand = (command) => {
   gap: 8px;
   height: 34px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: #2e3f5f;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .user-info:hover {
   background: rgba(31, 102, 210, 0.09);
+  transform: scale(1.02);
 }
 
 .app-main {
@@ -370,7 +382,15 @@ const handleCommand = (command) => {
   }
 
   .app-main {
-    padding: 12px;
+    padding: var(--space-md);
+  }
+
+  .logo-text {
+    display: none;
+  }
+
+  .aside-footer {
+    display: none;
   }
 }
 </style>

@@ -5,7 +5,8 @@
         v-for="(item, index) in metricCards"
         :key="item.key"
         class="metric-item"
-        :style="{ '--metric-accent': item.color, '--metric-delay': `${index * 80}ms` }"
+        :class="`stagger-${index + 1}`"
+        :style="{ '--metric-accent': item.color }"
       >
         <div class="metric-top">
           <span class="metric-icon">
@@ -154,13 +155,12 @@ const quickActions = Object.freeze([
   overflow: hidden;
   padding: 16px 18px;
   border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.92), rgba(245, 249, 255, 0.85));
+  border-radius: var(--radius-xl);
+  background: var(--panel-bg);
   box-shadow: var(--panel-shadow);
   opacity: 0;
-  transform: translateY(10px);
-  animation: metric-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  animation-delay: var(--metric-delay);
+  transform: translateY(12px);
+  animation: fadeInUp var(--duration-slow) var(--ease-smooth) forwards;
 }
 
 .metric-item::before {
@@ -222,25 +222,26 @@ const quickActions = Object.freeze([
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid rgba(44, 87, 152, 0.16);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.72);
   color: #30558c;
   font-size: 13px;
   font-weight: 500;
-  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .action-link:hover {
   border-color: rgba(47, 128, 255, 0.45);
   background: rgba(235, 244, 255, 0.86);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: var(--panel-shadow-hover);
 }
 
 .overview-panel {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-xl);
   padding: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 250, 255, 0.88));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.92));
   box-shadow: var(--panel-shadow);
 }
 
@@ -282,14 +283,15 @@ const quickActions = Object.freeze([
 .chart-panel {
   padding: 14px;
   border: 1px solid rgba(35, 75, 136, 0.12);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.86);
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
 }
 
 .chart-panel:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 28px -22px rgba(25, 55, 103, 0.8);
+  transform: translateY(-3px);
+  box-shadow: var(--panel-shadow-hover);
+  border-color: rgba(47, 128, 255, 0.25);
 }
 
 .chart-panel-top {
@@ -317,14 +319,14 @@ const quickActions = Object.freeze([
   margin-top: 12px;
 }
 
-@keyframes metric-rise {
+@keyframes fadeInUp {
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1280px) {
   .metrics-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -334,7 +336,7 @@ const quickActions = Object.freeze([
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: var(--breakpoint-lg)) {
   .panel-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -349,7 +351,7 @@ const quickActions = Object.freeze([
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: var(--breakpoint-sm)) {
   .metrics-strip,
   .quick-actions {
     grid-template-columns: minmax(0, 1fr);
@@ -360,11 +362,11 @@ const quickActions = Object.freeze([
   }
 
   .overview-panel {
-    padding: 14px;
+    padding: var(--space-md);
   }
 
   .chart-panel {
-    padding: 10px;
+    padding: var(--space-sm);
   }
 
   .chart-panel-top {

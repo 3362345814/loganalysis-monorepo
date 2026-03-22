@@ -1,6 +1,8 @@
 # LogAnalysis Monorepo
 
-一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。  
+**当前版本：{{VERSION}}**（发布日期：{{RELEASE\_DATE}}）
+
+一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。\
 本仓库包含：
 
 - 后端服务（Spring Boot）
@@ -54,13 +56,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.1.4/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/{{VERSION}}/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.1.4/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/{{VERSION}}/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -86,7 +88,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.1.4/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/{{VERSION}}/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -94,7 +96,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.1.4/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/{{VERSION}}/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -104,7 +106,7 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --profile minimal --version v0.1.4 --auto-port
+loganalysis up --profile minimal --version {{VERSION}} --auto-port
 loganalysis status
 ```
 
@@ -116,7 +118,7 @@ loganalysis status
 ## 常用 CLI 命令
 
 ```bash
-loganalysis up --profile full --version v0.1.4 --auto-port
+loganalysis up --profile full --version {{VERSION}} --auto-port
 loganalysis down
 loganalysis down --remove-volumes
 loganalysis status
@@ -125,7 +127,7 @@ loganalysis doctor
 loganalysis config list
 loganalysis config get release_repo
 loganalysis config set release_repo 3362345814/loganalysis-monorepo
-loganalysis upgrade --to v0.1.7
+loganalysis upgrade --to {{VERSION}}
 loganalysis uninstall
 loganalysis uninstall --purge-data
 ```
@@ -210,12 +212,4 @@ loganalysis config set ports.backend 18080
 
 - `irm` 需要在 PowerShell 中执行，不是 `cmd`
 - 已知脚本边界问题已修复，建议使用最新 tag 的安装脚本
-
-### 6) `upgrade` 后仍使用旧仓库
-
-老用户本地若已有历史配置，不会自动覆盖。执行：
-
-```bash
-loganalysis config set release_repo 3362345814/loganalysis-monorepo
-```
 
