@@ -1,1 +1,0 @@
-import{_ as o}from"./_plugin-vue_export-helper-DlAUqK2U.js";import{a as c,c as t,b as s,r as n}from"./index-De7brizj.js";const r={},a={class:"placeholder-page"};function _(p,d){const e=n("el-empty");return c(),t("div",a,[s(e,{description:"功能开发中..."})])}const i=o(r,[["render",_],["__scopeId","data-v-73ee25c4"]]);export{i as default};

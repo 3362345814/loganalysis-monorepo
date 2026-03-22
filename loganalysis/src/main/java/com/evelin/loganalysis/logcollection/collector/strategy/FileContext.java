@@ -1,12 +1,16 @@
 package com.evelin.loganalysis.logcollection.collector.strategy;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 文件读取上下文，封装单个文件的读取状态。
- * 以 SSH 采集为准（不支持 inode、RandomAccessFile 句柄），
  * 但提供 seek 和 read 抽象方法由子类实现具体读取逻辑。
  */
+@Getter
+@Setter
 public class FileContext {
 
     private final String filePath;
@@ -21,52 +25,8 @@ public class FileContext {
         this.filePath = filePath;
     }
 
-    public String getFilePath() {
-        return filePath;
-    }
-
-    public long getFilePointer() {
-        return filePointer;
-    }
-
-    public void setFilePointer(long filePointer) {
-        this.filePointer = filePointer;
-    }
-
-    public long getCurrentFileSize() {
-        return currentFileSize;
-    }
-
-    public void setCurrentFileSize(long currentFileSize) {
-        this.currentFileSize = currentFileSize;
-    }
-
-    public long getCollectedLines() {
-        return collectedLines;
-    }
-
     public void incrementCollectedLines() {
         this.collectedLines++;
-    }
-
-    public void setCollectedLines(long collectedLines) {
-        this.collectedLines = collectedLines;
-    }
-
-    public StringBuilder getMultiLineBuffer() {
-        return multiLineBuffer;
-    }
-
-    public long getMultiLineStartLineNumber() {
-        return multiLineStartLineNumber;
-    }
-
-    public void setMultiLineStartLineNumber(long multiLineStartLineNumber) {
-        this.multiLineStartLineNumber = multiLineStartLineNumber;
-    }
-
-    public AtomicBoolean getActive() {
-        return active;
     }
 
     public boolean isActive() {

@@ -4,7 +4,6 @@ import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
@@ -15,15 +14,14 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 本地文件读取策略实现。

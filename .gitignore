@@ -1,1 +1,4 @@
 .DS_Store
+loganalysis_frontend/dist
+loganalysis_frontend/node_modules
+loganalysis/target

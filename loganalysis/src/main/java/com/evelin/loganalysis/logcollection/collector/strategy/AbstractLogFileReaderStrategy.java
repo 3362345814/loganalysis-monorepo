@@ -4,8 +4,6 @@ import com.evelin.loganalysis.logcollection.collector.LogCollector;
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.config.RabbitMQConfig;
 import com.evelin.loganalysis.logcollection.dto.LogDesensitizationMessage;
-import com.evelin.loganalysis.logcollection.enums.LogFormat;
-import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
@@ -21,7 +19,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 

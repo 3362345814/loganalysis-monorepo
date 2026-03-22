@@ -1,0 +1,92 @@
+:root {
+  color-scheme: light;
+  --bg-base: #eef2f8;
+  --bg-elevated: #f8fbff;
+  --surface: #ffffff;
+  --surface-muted: #f3f7fc;
+  --ink: #19243a;
+  --ink-muted: #66738d;
+  --primary: #2f80ff;
+  --primary-strong: #1e64d8;
+  --success: #2db271;
+  --warning: #f2994a;
+  --danger: #e45b5b;
+  --panel-border: rgba(32, 68, 122, 0.14);
+  --panel-shadow: 0 24px 40px -30px rgba(15, 43, 84, 0.65);
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Avenir Next', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(47, 128, 255, 0.12), transparent 42%),
+    radial-gradient(circle at 86% 8%, rgba(45, 178, 113, 0.1), transparent 36%),
+    var(--bg-base);
+}
+
+#app {
+  min-height: 100svh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.el-card {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--panel-shadow);
+}
+
+.el-button {
+  border-radius: 10px;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--primary);
+  --el-button-border-color: var(--primary);
+  --el-button-hover-bg-color: var(--primary-strong);
+  --el-button-hover-border-color: var(--primary-strong);
+}
+
+.el-table {
+  --el-table-header-bg-color: #f3f7fd;
+  --el-table-border-color: rgba(38, 71, 122, 0.1);
+  --el-table-row-hover-bg-color: rgba(47, 128, 255, 0.07);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.el-tag {
+  border-radius: 999px;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgba(58, 82, 122, 0.3);
+}
