@@ -102,7 +102,7 @@ public class EsLogQueryRequest {
      * 排序字段
      */
     @Builder.Default
-    private String sortField = "collectionTime";
+    private String sortField = "originalLogTime";
 
     /**
      * 排序方向 (asc / desc)

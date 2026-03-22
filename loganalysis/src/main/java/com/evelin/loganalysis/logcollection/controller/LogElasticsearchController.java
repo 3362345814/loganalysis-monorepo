@@ -48,7 +48,7 @@ public class LogElasticsearchController {
             @RequestParam(required = false, defaultValue = "true") boolean highlight,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer size,
-            @RequestParam(required = false, defaultValue = "collectionTime") String sortField,
+            @RequestParam(required = false, defaultValue = "originalLogTime") String sortField,
             @RequestParam(required = false, defaultValue = "desc") String sortOrder
     ) {
         EsLogQueryRequest request = EsLogQueryRequest.builder()

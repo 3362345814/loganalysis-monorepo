@@ -58,7 +58,6 @@ public class LogAggregator {
     public AggregationResult aggregate(ParsedLogEvent event, String sourceId, String sourceName, String aggregationLevel) {
         // 检查是否满足聚合级别要求
         if (!shouldAggregate(event.getLogLevel(), aggregationLevel)) {
-            log.debug("日志级别 {} 不满足聚合级别 {} 要求，跳过聚合", event.getLogLevel(), aggregationLevel);
             return null;
         }
 

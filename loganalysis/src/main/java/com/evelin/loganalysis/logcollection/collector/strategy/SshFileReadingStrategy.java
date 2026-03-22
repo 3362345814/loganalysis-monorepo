@@ -1,10 +1,9 @@
-package com.evelin.loganalysis.logcollection.collector;
+package com.evelin.loganalysis.logcollection.collector.strategy;
 
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
-import com.evelin.loganalysis.logcollection.model.CollectionState;
-import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import com.evelin.loganalysis.logcollection.model.LogSource;
+import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import com.jcraft.jsch.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -13,68 +12,50 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.Charset;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+/**
+ * SSH 远程文件读取策略实现。
+ * <p>
+ * 通过 SFTP 协议下载远程文件到本地临时目录后读取。
+ * 继承自 {@link AbstractLogFileReaderStrategy}，只需实现文件读取特有逻辑。
+ */
 @Slf4j
-public class SshRemoteCollector extends AbstractLogCollector {
+public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
 
+    // ==================== SSH 连接资源 ====================
     private Session session;
     private ChannelSftp channelSftp;
+    private final String tempDir;
 
+    // ==================== 文件上下文 ====================
     private final Map<String, FileContext> fileContextMap = new ConcurrentHashMap<>();
     private String[] filePatterns;
     private boolean isDirectoryMode;
 
-    private String tempDir;
+    // ==================== 构造函数 ====================
 
-    private static class FileContext {
-        private final String filePath;
-        private long filePointer;
-        private long currentFileSize;
-        private long collectedLines;
-        private final StringBuilder multiLineBuffer = new StringBuilder();
-        private long multiLineStartLineNumber;
-        private final AtomicBoolean active = new AtomicBoolean(false);
-
-        FileContext(String filePath) {
-            this.filePath = filePath;
-        }
-
-        synchronized void resetBuffer() {
-            multiLineBuffer.setLength(0);
-            multiLineStartLineNumber = 0;
-        }
-    }
-
-    public SshRemoteCollector(LogSource logSource,
-                              CheckpointManager checkpointManager,
-                              CollectionConfig config,
-                              com.evelin.loganalysis.logcollection.service.RawLogEventService rawLogEventService,
-                              RabbitTemplate rabbitTemplate) {
-        super(logSource, checkpointManager, config, rabbitTemplate);
+    public SshFileReadingStrategy(LogSource logSource,
+                                  CheckpointManager checkpointManager,
+                                  CollectionConfig config,
+                                  RabbitTemplate rabbitTemplate,
+                                  AtomicBoolean running,
+                                  AtomicBoolean paused,
+                                  AtomicLong collectedLines) {
+        super(logSource, checkpointManager, config, rabbitTemplate, running, paused, collectedLines);
         this.tempDir = "/tmp/ssh_log_" + logSource.getId() + "_" + System.currentTimeMillis();
     }
 
-    @Override
-    protected String getThreadNamePrefix() {
-        return "ssh-remote-" + getName();
-    }
-
-    private List<String> getFilePaths() {
-        List<String> pathsList = logSource.getPathsList();
-        if (pathsList != null && !pathsList.isEmpty()) {
-            return pathsList;
-        }
-        String legacyPath = logSource.getPath();
-        if (legacyPath != null && !legacyPath.isEmpty()) {
-            return Collections.singletonList(legacyPath);
-        }
-        return Collections.emptyList();
-    }
+    // ==================== 生命周期方法 ====================
 
     @Override
     protected void doConnect() throws JSchException, SftpException {
@@ -111,11 +92,12 @@ public class SshRemoteCollector extends AbstractLogCollector {
                 session.disconnect();
                 session = null;
             }
-            log.info("SSH disconnected: name={}", getName());
+            log.info("SSH disconnected: name={}", logSource.getName());
         } catch (Exception e) {
-            log.warn("Error disconnecting SSH: name={}", getName(), e);
+            log.warn("Error disconnecting SSH: name={}", logSource.getName(), e);
         }
 
+        // 清理临时目录
         File tempDirFile = new File(tempDir);
         if (tempDirFile.exists()) {
             File[] files = tempDirFile.listFiles();
@@ -150,6 +132,23 @@ public class SshRemoteCollector extends AbstractLogCollector {
         log.info("SSH collector initialized: {} files, directoryMode={}", fileContextMap.size(), isDirectoryMode);
     }
 
+    @Override
+    protected void doReadFiles() throws Exception {
+        for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
+            String filePath = entry.getKey();
+            FileContext ctx = entry.getValue();
+            if (!running.get()) break;
+
+            try {
+                readFromFileContext(ctx, filePath);
+            } catch (Exception e) {
+                log.error("Error processing file: {}", filePath, e);
+            }
+        }
+    }
+
+    // ==================== 文件路径初始化 ====================
+
     private void initMultiPathMode(List<String> filePaths) {
         if (filePaths.size() > 1) {
             isDirectoryMode = false;
@@ -161,77 +160,30 @@ public class SshRemoteCollector extends AbstractLogCollector {
     }
 
     private void loadCheckpointForContext(String filePath) {
-        CollectionCheckpoint checkpoint = checkpointManager.load(
-                logSource.getId().toString(),
-                filePath
-        );
+        CollectionCheckpoint checkpoint = checkpointManager.load(id, filePath);
         FileContext ctx = fileContextMap.get(filePath);
         if (ctx != null && checkpoint != null) {
-            ctx.filePointer = checkpoint.getOffset() != null ? checkpoint.getOffset() : 0L;
-            ctx.currentFileSize = checkpoint.getFileSize() != null ? checkpoint.getFileSize() : 0L;
+            ctx.setFilePointer(checkpoint.getOffset() != null ? checkpoint.getOffset() : 0L);
+            ctx.setCurrentFileSize(checkpoint.getFileSize() != null ? checkpoint.getFileSize() : 0L);
             log.info("Loaded checkpoint for SSH file: path={}, offset={}, size={}",
-                    filePath, ctx.filePointer, ctx.currentFileSize);
+                    filePath, ctx.getFilePointer(), ctx.getCurrentFileSize());
         }
     }
 
+    // ==================== 文件轮转检测 ====================
+
     @Override
-    protected void readLoop() {
-        log.info("SSH read loop started: paths={}", getFilePaths());
+    public void checkFileRotation() {
+        // SSH 采集通过 processRemoteFile 中的文件大小比较检测轮转
+        // 此方法可扩展为通过 SFTP stat 命令检查远程文件
+    }
 
-        long lastCheckpointTime = System.currentTimeMillis();
-        long linesSinceCheckpoint = 0;
+    // ==================== 文件读取 ====================
 
-        while (running.get()) {
-            try {
-                while (paused.get() && running.get()) {
-                    Thread.sleep(100);
-                }
-
-                if (!running.get()) {
-                    break;
-                }
-
-                if (fileContextMap.isEmpty()) {
-                    Thread.sleep(1000);
-                    continue;
-                }
-
-                for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
-                    String filePath = entry.getKey();
-                    FileContext ctx = entry.getValue();
-
-                    if (!running.get()) {
-                        break;
-                    }
-
-                    try {
-                        processRemoteFile(filePath, ctx);
-                    } catch (Exception e) {
-                        log.error("Error processing remote file: {}", filePath, e);
-                    }
-                }
-
-                if (linesSinceCheckpoint >= config.getCheckpointInterval() ||
-                        System.currentTimeMillis() - lastCheckpointTime >= config.getCheckpointIntervalMs()) {
-                    saveAllCheckpointsAsync();
-                    linesSinceCheckpoint = 0;
-                    lastCheckpointTime = System.currentTimeMillis();
-                }
-
-                Thread.sleep(config.getFileRotateCheckIntervalMs() > 0 ?
-                        config.getFileRotateCheckIntervalMs() : 1000);
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Exception e) {
-                log.error("Error in SSH read loop", e);
-                state = CollectionState.ERROR;
-                break;
-            }
-        }
-
-        log.info("SSH read loop stopped: paths={}", getFilePaths());
+    @Override
+    public void readFromFileContext(FileContext fileContext, String filePath) throws Exception {
+        FileContext ctx = fileContext;
+        processRemoteFile(filePath, ctx);
     }
 
     private void processRemoteFile(String filePath, FileContext ctx) throws Exception {
@@ -262,34 +214,33 @@ public class SshRemoteCollector extends AbstractLogCollector {
 
         long currentFileSize = tempFile.length();
 
-        if (currentFileSize < ctx.currentFileSize) {
+        if (currentFileSize < ctx.getCurrentFileSize()) {
             log.info("File rotation detected: path={}, oldSize={}, newSize={}",
-                    filePath, ctx.currentFileSize, currentFileSize);
-            ctx.filePointer = 0;
+                    filePath, ctx.getCurrentFileSize(), currentFileSize);
+            ctx.setFilePointer(0);
             ctx.resetBuffer();
         }
 
-        ctx.currentFileSize = currentFileSize;
+        ctx.setCurrentFileSize(currentFileSize);
 
-        if (ctx.filePointer >= currentFileSize) {
+        if (ctx.getFilePointer() >= currentFileSize) {
             return;
         }
 
         processFileContent(tempFile, ctx, filePath);
 
+        // 处理完成后删除临时文件
         tempFile.delete();
     }
 
     private void processFileContent(File file, FileContext ctx, String filePath) throws IOException {
-        Charset charset = getCharset();
-
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
-            raf.seek(ctx.filePointer);
+            raf.seek(ctx.getFilePointer());
 
             StringBuilder lineBuilder = new StringBuilder();
             byte[] readBuffer = new byte[8192];
-
             int bytesRead;
+
             while ((bytesRead = raf.read(readBuffer, 0, readBuffer.length)) != -1) {
                 if (!running.get()) {
                     break;
@@ -301,7 +252,7 @@ public class SshRemoteCollector extends AbstractLogCollector {
                     readBuffer = trimmedBuffer;
                 }
 
-                ctx.filePointer += bytesRead;
+                ctx.setFilePointer(ctx.getFilePointer() + bytesRead);
 
                 String content = new String(readBuffer, charset);
                 lineBuilder.append(content);
@@ -314,8 +265,7 @@ public class SshRemoteCollector extends AbstractLogCollector {
                     if (!line.isEmpty()) {
                         long currentLineNumber = ++ctx.collectedLines;
                         collectedLines.incrementAndGet();
-
-                        processMultiLineLogForContext(ctx, line, currentLineNumber, filePath);
+                        handleLine(line, currentLineNumber, filePath, ctx.getFilePointer());
                     }
                 }
             }
@@ -325,77 +275,95 @@ public class SshRemoteCollector extends AbstractLogCollector {
                 if (!remainingLine.isEmpty()) {
                     long currentLineNumber = ++ctx.collectedLines;
                     collectedLines.incrementAndGet();
-                    processMultiLineLogForContext(ctx, remainingLine, currentLineNumber, filePath);
+                    handleLine(remainingLine, currentLineNumber, filePath, ctx.getFilePointer());
                 }
             }
 
-            if (!ctx.multiLineBuffer.isEmpty()) {
-                flushMultiLineBufferForContext(ctx, filePath);
+            if (!ctx.getMultiLineBuffer().isEmpty()) {
+                handleLine("", -1, filePath, ctx.getFilePointer());
             }
         }
     }
 
-    private void processMultiLineLogForContext(FileContext ctx, String line, long lineNumber, String filePath) {
-        boolean isLogStart = isLogStart(line);
+    // ==================== 文件操作辅助 ====================
 
-        if (isLogStart) {
-            if (!ctx.multiLineBuffer.isEmpty()) {
-                String logContent = ctx.multiLineBuffer.toString();
-                processLine(logContent, ctx.multiLineStartLineNumber, filePath);
-                ctx.multiLineBuffer.setLength(0);
-                ctx.multiLineStartLineNumber = 0;
-            }
-            ctx.multiLineStartLineNumber = lineNumber;
-            ctx.multiLineBuffer.append(line);
-        } else {
-            if (!ctx.multiLineBuffer.isEmpty()) {
-                ctx.multiLineBuffer.append("\n");
-            }
-            ctx.multiLineBuffer.append(line);
-        }
+    @Override
+    public void closeAllFiles() {
+        // SSH 模式下没有本地文件需要关闭
+        // 资源清理在 disconnect() 中处理
     }
 
-    private void flushMultiLineBufferForContext(FileContext ctx, String filePath) {
-        if (!running.get()) {
-            return;
-        }
-        if (!ctx.multiLineBuffer.isEmpty()) {
-            String logContent = ctx.multiLineBuffer.toString();
-            processLine(logContent, ctx.multiLineStartLineNumber, filePath);
-            ctx.multiLineBuffer.setLength(0);
-            ctx.multiLineStartLineNumber = 0;
-        }
+    @Override
+    public boolean fileExists(String filePath) {
+        // SSH 模式下通过 SFTP 检查文件存在性，返回 true 由 download 过程处理
+        return true;
     }
 
-    private void saveCheckpointForContextAsync(String filePath, FileContext ctx) {
+    @Override
+    public long getFileSize(String filePath) throws IOException {
+        FileContext ctx = fileContextMap.get(filePath);
+        return ctx != null ? ctx.getCurrentFileSize() : 0L;
+    }
+
+    @Override
+    public long getFilePointer(String filePath) {
+        FileContext ctx = fileContextMap.get(filePath);
+        return ctx != null ? ctx.getFilePointer() : 0L;
+    }
+
+    @Override
+    public boolean isFileActive(String filePath) {
+        FileContext ctx = fileContextMap.get(filePath);
+        return ctx != null && ctx.isActive();
+    }
+
+    // ==================== 检查点保存 ====================
+
+    @Override
+    public void saveCheckpoint(String filePath, FileContext ctx) {
         try {
             checkpointManager.save(
-                    logSource.getId().toString(),
+                    id,
                     filePath,
-                    ctx.filePointer,
-                    ctx.currentFileSize,
+                    ctx.getFilePointer(),
+                    ctx.getCurrentFileSize(),
                     "",
-                    java.time.LocalDateTime.now()
+                    LocalDateTime.now()
             );
         } catch (Exception e) {
             log.warn("Failed to save checkpoint for file: {}", filePath, e);
         }
     }
 
-    private void saveAllCheckpointsAsync() {
+    @Override
+    public void saveAllCheckpoints() {
         for (Map.Entry<String, FileContext> entry : fileContextMap.entrySet()) {
             FileContext ctx = entry.getValue();
-            if (ctx.active.get() || ctx.filePointer > 0) {
-                saveCheckpointForContextAsync(entry.getKey(), ctx);
+            if (ctx.isActive() || ctx.getFilePointer() > 0) {
+                saveCheckpoint(entry.getKey(), ctx);
             }
         }
+        flushBuffer(getPrimaryFilePath());
     }
 
+    // ==================== 线程名前缀 ====================
+
     @Override
-    protected void saveCheckpointAsync() {
-        if (!running.get()) {
-            return;
-        }
-        saveAllCheckpointsAsync();
+    protected String getThreadNamePrefix() {
+        return "ssh-file-" + getName();
+    }
+
+    // ==================== 公开访问器 ====================
+
+    public Map<String, FileContext> getFileContextMap() {
+        return fileContextMap;
+    }
+
+    public boolean isDirectoryMode() {
+        return isDirectoryMode;
+    }
+
+    public String getTempDir() {
+        return tempDir;
     }
 }

@@ -222,4 +222,28 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      * @return 数量
      */
     long countByTraceId(String traceId);
+
+    /**
+     * 按 ID 升序查询，用于增量同步（避免时间戳时钟偏移问题）
+     */
+    @Query("SELECT e FROM RawLogEventEntity e WHERE e.id > :id ORDER BY e.id ASC")
+    Page<RawLogEventEntity> findByIdGreaterThanOrderByIdAsc(@Param("id") UUID id, Pageable pageable);
+
+    /**
+     * 查询所有 ID 大于指定值的日志（按 ID 升序）
+     */
+    @Query("SELECT e FROM RawLogEventEntity e WHERE e.id > :id ORDER BY e.id ASC")
+    Page<RawLogEventEntity> findAllByIdGreaterThanOrderByIdAsc(@Param("id") UUID id, Pageable pageable);
+
+    /**
+     * 查询所有日志（按 ID 升序），用于从头开始的同步
+     */
+    @Query("SELECT e FROM RawLogEventEntity e ORDER BY e.id ASC")
+    Page<RawLogEventEntity> findAllOrderByIdAsc(Pageable pageable);
+
+    /**
+     * 获取当前最大的日志 ID
+     */
+    @Query("SELECT MAX(e.id) FROM RawLogEventEntity e")
+    UUID findMaxId();
 }

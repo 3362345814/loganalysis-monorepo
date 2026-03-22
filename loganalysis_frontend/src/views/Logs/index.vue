@@ -273,7 +273,7 @@ const esFilter = ref({
   logLevels: [],
   dateRange: null,
   page: 0,
-  size: 100
+  size: 1000
 })
 
 const filter = ref({
@@ -322,10 +322,23 @@ const loadEsLogs = async () => {
   try {
     loading.value = true
 
-    const params = {
+    const currentHighlightTime = highlightTime.value
+    const currentHighlightId = highlightId.value
+    let params = {
       sourceId: filter.value.sourceId,
       page: esFilter.value.page,
       size: esFilter.value.size
+    }
+
+    if (currentHighlightTime) {
+      const targetDate = new Date(currentHighlightTime)
+      const startTime = new Date(targetDate.getTime() - 30 * 60 * 1000)
+      const endTime = new Date(targetDate.getTime() + 30 * 60 * 1000)
+      params.startTime = startTime.toISOString().slice(0, 19)
+      params.endTime = endTime.toISOString().slice(0, 19)
+    } else if (esFilter.value.dateRange && esFilter.value.dateRange.length === 2) {
+      params.startTime = esFilter.value.dateRange[0]
+      params.endTime = esFilter.value.dateRange[1]
     }
 
     if (esFilter.value.keyword) {
@@ -337,10 +350,6 @@ const loadEsLogs = async () => {
     if (esFilter.value.logLevels && esFilter.value.logLevels.length > 0) {
       params.logLevels = esFilter.value.logLevels
     }
-    if (esFilter.value.dateRange && esFilter.value.dateRange.length === 2) {
-      params.startTime = esFilter.value.dateRange[0]
-      params.endTime = esFilter.value.dateRange[1]
-    }
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
       params.filePath = filter.value.logFiles.join(',')
     }
@@ -348,8 +357,16 @@ const loadEsLogs = async () => {
     const res = await esLogApi.search(params)
 
     if (res.data && res.data.hits) {
-      // 后端返回 DESC（最新在前），需要反转成 ASC（最早在上，最新在下）
-      const hits = res.data.hits.slice().reverse()
+      let hits = res.data.hits.slice().reverse()
+
+      if (filter.value.logFiles && filter.value.logFiles.length > 0) {
+        hits = hits.filter(hit => {
+          const filePath = hit.filePath || ''
+          const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath
+          return filter.value.logFiles.includes(fileName)
+        })
+      }
+
       logs.value = hits.map(hit => ({
         id: hit.id || hit.dbId,
         dbId: hit.dbId,
@@ -362,6 +379,41 @@ const loadEsLogs = async () => {
         parsedFields: hit.parsedFields || {}
       }))
       total.value = res.data.total || res.data.hits.length
+      currentLoadPage = 0
+
+      let foundIndex = -1
+      if (currentHighlightId) {
+        foundIndex = logs.value.findIndex(log => log.id === currentHighlightId)
+      } else if (currentHighlightTime) {
+        const targetTime = new Date(currentHighlightTime).getTime()
+        foundIndex = logs.value.findIndex(log => {
+          const logTime = getLogTimestamp(log)
+          return logTime && Math.abs(logTime - targetTime) < 5000
+        })
+      }
+
+      if (foundIndex !== -1) {
+        highlightedIndex.value = foundIndex
+        nextTick(() => {
+          scrollToHighlightedLog(foundIndex)
+          setTimeout(() => {
+            clearHighlight()
+            if (route.query.highlightId || route.query.highlightTime) {
+              router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+            }
+          }, 3000)
+        })
+      } else {
+        nextTick(() => {
+          if (terminalRef.value) {
+            terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+          }
+          clearHighlight()
+          if (route.query.highlightId || route.query.highlightTime) {
+            router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+          }
+        })
+      }
     } else {
       logs.value = []
       total.value = 0
@@ -462,8 +514,7 @@ const loadSources = async () => {
         highlightTime.value = route.query.highlightTime
       }
 
-      // 加载日志
-      loadLogs()
+      // 加载日志由 watch sourceId 触发（见 onMounted 中设置的 sourceId）
     }
   } catch (error) {
     console.error('加载日志源失败:', error)
@@ -712,14 +763,12 @@ const getLogTimestamp = (log) => {
 const handleSourceChange = () => {
   filter.value.page = 1
   filter.value.logFiles = []
-  if (filter.value.sourceId) {
-    loadLogFilesForSource().then(() => {
-      loadEsLogs()
-    })
-  } else {
+  if (!filter.value.sourceId) {
     nginxLogFiles.value = []
     logs.value = []
+    return
   }
+  loadLogFilesForSource()
 }
 
 const handleLogFileChange = () => {
@@ -784,12 +833,14 @@ const handleLogLevelsChange = () => {
 
 const handlePageChange = (page) => {
   filter.value.page = page
-  loadLogs()
+  esFilter.value.page = page - 1
+  loadEsLogs()
 }
 
 const handleSizeChange = (size) => {
   filter.value.pageSize = size
-  loadLogs()
+  esFilter.value.size = size
+  loadEsLogs()
 }
 
 const clearHighlight = () => {
@@ -888,7 +939,7 @@ const startRefresh = () => {
   stopRefresh()
   if (filter.value.refreshInterval > 0 && filter.value.sourceId) {
     refreshTimer = setInterval(() => {
-      loadLogs()
+      loadEsLogs()
     }, filter.value.refreshInterval)
   }
 }
@@ -1074,9 +1125,7 @@ watch(() => filter.value.refreshInterval, () => {
 
 watch(() => filter.value.sourceId, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) {
-    // 加载日志
-    loadLogs()
-    // 启动定时刷新
+    loadEsLogs()
     startRefresh()
   } else if (!newVal) {
     stopRefresh()

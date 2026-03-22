@@ -146,6 +146,11 @@ elasticsearch:
   password:
   connect-timeout: 5000
   socket-timeout: 30000
+  sync:
+    enabled: true              # 是否启用定时同步
+    interval-ms: 300000        # 同步间隔（毫秒）
+    batch-size: 500            # 每批同步数量
+    max-batch-per-run: 5000    # 单次同步最大数量
 
 # 分级存储配置
 storage:

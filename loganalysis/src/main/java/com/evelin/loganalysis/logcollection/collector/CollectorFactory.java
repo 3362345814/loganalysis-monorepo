@@ -1,21 +1,24 @@
 package com.evelin.loganalysis.logcollection.collector;
 
+import com.evelin.loganalysis.logcollection.collector.strategy.LocalFileReadingStrategy;
+import com.evelin.loganalysis.logcollection.collector.strategy.SshFileReadingStrategy;
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
-import com.evelin.loganalysis.logcollection.service.CheckpointManager;
-import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcollection.enums.LogSourceType;
 import com.evelin.loganalysis.logcollection.model.LogSource;
+import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 日志采集器工厂
  * <p>
- * 负责创建和管理各种类型的日志采集器实例
+ * 使用 Map 注册机制替代 switch，消除条件分支，新增采集类型只需注册无需修改此文件。
  *
  * @author Evelin
  */
@@ -25,19 +28,50 @@ public class CollectorFactory {
 
     private final CheckpointManager checkpointManager;
     private final CollectionConfig collectionConfig;
-    private final RawLogEventService rawLogEventService;
     private final RabbitTemplate rabbitTemplate;
 
     private final Map<String, LogCollector> collectorCache = new ConcurrentHashMap<>();
 
+    /**
+     * 采集器创建器函数式接口
+     */
+    @FunctionalInterface
+    public interface CollectorCreator {
+        LogCollector create(LogSource logSource,
+                           CheckpointManager checkpointManager,
+                           CollectionConfig config,
+                           RabbitTemplate rabbitTemplate,
+                           AtomicBoolean running,
+                           AtomicBoolean paused,
+                           AtomicLong collectedLines);
+    }
+
+    /**
+     * 策略注册表：LogSourceType -> CollectorCreator
+     */
+    private final Map<LogSourceType, CollectorCreator> strategyRegistry = new ConcurrentHashMap<>();
+
     public CollectorFactory(CheckpointManager checkpointManager,
                            CollectionConfig collectionConfig,
-                           RawLogEventService rawLogEventService,
                            RabbitTemplate rabbitTemplate) {
         this.checkpointManager = checkpointManager;
         this.collectionConfig = collectionConfig;
-        this.rawLogEventService = rawLogEventService;
         this.rabbitTemplate = rabbitTemplate;
+
+        // 注册所有采集策略
+        registerStrategies();
+    }
+
+    /**
+     * 注册所有支持的采集策略
+     * <p>
+     * 新增采集类型只需在此方法中添加一行注册，无需修改 create 方法。
+     */
+    private void registerStrategies() {
+        strategyRegistry.put(LogSourceType.LOCAL_FILE, LocalFileReadingStrategy::new);
+        strategyRegistry.put(LogSourceType.SSH, SshFileReadingStrategy::new);
+        log.info("Registered {} collector strategies: {}",
+                strategyRegistry.size(), strategyRegistry.keySet());
     }
 
     /**
@@ -64,36 +98,29 @@ public class CollectorFactory {
     }
 
     /**
-     * 根据日志源类型创建对应的采集器
+     * 根据日志源类型从注册表中获取对应的采集器
      */
     private LogCollector createCollector(LogSource logSource) {
         LogSourceType sourceType = logSource.getSourceType();
+        CollectorCreator creator = strategyRegistry.get(sourceType);
 
-        switch (sourceType) {
-            case LOCAL_FILE:
-                return new LocalFileCollector(
-                        logSource,
-                        checkpointManager,
-                        collectionConfig,
-                        rawLogEventService,
-                        rabbitTemplate
-                );
-
-            case SSH:
-                return new SshRemoteCollector(
-                        logSource,
-                        checkpointManager,
-                        collectionConfig,
-                        rawLogEventService,
-                        rabbitTemplate
-                );
-
-            default:
-                throw new IllegalArgumentException(
-                        "Unsupported source type: " + sourceType +
-                                ". Supported types: LOCAL_FILE, SSH"
-                );
+        if (creator == null) {
+            throw new IllegalArgumentException(
+                    "Unsupported source type: " + sourceType +
+                            ". Supported types: " + strategyRegistry.keySet() +
+                            ". Did you forget to register the strategy?"
+            );
         }
+
+        return creator.create(
+                logSource,
+                checkpointManager,
+                collectionConfig,
+                rabbitTemplate,
+                new AtomicBoolean(false),
+                new AtomicBoolean(false),
+                new AtomicLong(0)
+        );
     }
 
     /**

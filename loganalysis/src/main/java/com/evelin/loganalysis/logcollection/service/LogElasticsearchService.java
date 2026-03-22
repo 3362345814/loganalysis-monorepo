@@ -2,17 +2,18 @@ package com.evelin.loganalysis.logcollection.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;
+import com.evelin.loganalysis.logcollection.config.EsSyncConfig;
 import com.evelin.loganalysis.logcollection.dto.EsLogQueryRequest;
 import com.evelin.loganalysis.logcollection.dto.EsLogSearchResponse;
 import com.evelin.loganalysis.logcollection.model.LogIndexDocument;
 import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.repository.LogElasticsearchRepository;
 import com.evelin.loganalysis.logcollection.repository.RawLogEventRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -20,6 +21,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -29,12 +32,128 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LogElasticsearchService {
 
     private final LogElasticsearchRepository esRepository;
     private final RawLogEventRepository rawLogEventRepository;
     private final ElasticsearchClient esClient;
+    private final EsSyncConfig syncConfig;
+
+    /**
+     * 记录上次同步完成的最后一个日志 ID，用于增量同步
+     * UUID 类型，初始为 null（从头开始同步）
+     */
+    private final AtomicReference<UUID> lastSyncedId = new AtomicReference<>(null);
+
+    /**
+     * 防止定时任务并发执行
+     */
+    private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
+
+    /**
+     * 上次同步时间戳
+     */
+    private final AtomicReference<Long> lastSyncTime = new AtomicReference<>(null);
+
+    public LogElasticsearchService(LogElasticsearchRepository esRepository,
+                                  RawLogEventRepository rawLogEventRepository,
+                                  ElasticsearchClient esClient,
+                                  EsSyncConfig syncConfig) {
+        this.esRepository = esRepository;
+        this.rawLogEventRepository = rawLogEventRepository;
+        this.esClient = esClient;
+        this.syncConfig = syncConfig;
+    }
+
+    /**
+     * 定时增量同步：每次只同步上次同步点之后新增的日志
+     * 通过记录 lastSyncedId 实现增量，避免重复同步
+     * 使用游标分页（id > lastId），避免新插入数据导致跳页或重复
+     */
+    @Scheduled(fixedDelayString = "${elasticsearch.sync.interval-ms:300000}")
+    public void scheduledIncrementalSync() {
+        if (!syncConfig.isEnabled()) {
+            return;
+        }
+
+        if (!syncInProgress.compareAndSet(false, true)) {
+            log.debug("ES incremental sync already in progress, skipping this run");
+            return;
+        }
+
+        long startTime = System.currentTimeMillis();
+        UUID lastId = lastSyncedId.get();
+
+        try {
+            int totalIndexed = 0;
+            int batchSize = syncConfig.getBatchSize();
+            int maxPerRun = syncConfig.getMaxBatchPerRun();
+            UUID currentLastId = lastId;
+            boolean firstRun = (lastId == null);
+
+            // 首次运行（应用重启后内存状态丢失）：
+            // 找到 DB 中最大 ID，从头开始同步，完成后记录 maxId 作为游标
+            if (firstRun) {
+                UUID maxId = rawLogEventRepository.findMaxId();
+                if (maxId == null) {
+                    log.info("ES scheduled sync: no logs in DB yet, skipping");
+                    lastSyncedId.set(UUID.fromString("00000000-0000-0000-0000-000000000000"));
+                    lastSyncTime.set(System.currentTimeMillis());
+                    syncInProgress.set(false);
+                    return;
+                }
+                log.info("ES scheduled sync: first run, DB maxId={}, syncing all from beginning", maxId);
+            }
+
+            while (totalIndexed < maxPerRun) {
+                Page<RawLogEventEntity> entityPage;
+                if (firstRun) {
+                    // 首次运行：从头按 ID 升序遍历全表
+                    entityPage = rawLogEventRepository.findAllOrderByIdAsc(PageRequest.of(0, batchSize));
+                } else {
+                    // 增量：id > currentLastId
+                    entityPage = rawLogEventRepository.findAllByIdGreaterThanOrderByIdAsc(
+                            currentLastId, PageRequest.of(0, batchSize));
+                }
+
+                List<RawLogEventEntity> entities = entityPage.getContent();
+                if (entities.isEmpty()) {
+                    break;
+                }
+
+                int indexed = bulkIndexLogs(entities);
+                if (indexed == 0) {
+                    log.warn("Bulk index returned 0, breaking sync loop");
+                    break;
+                }
+
+                totalIndexed += indexed;
+                currentLastId = entities.get(entities.size() - 1).getId();
+
+                if (!entityPage.hasNext()) {
+                    break;
+                }
+            }
+
+            // 更新同步游标：首次运行全表完成后记录 maxId，增量运行记录 lastId
+            if (firstRun) {
+                lastSyncedId.set(currentLastId);
+                log.info("ES first-run full sync completed, switch to incremental mode, lastId={}", currentLastId);
+            } else if (totalIndexed > 0) {
+                lastSyncedId.set(currentLastId);
+            }
+            lastSyncTime.set(System.currentTimeMillis());
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.info("ES scheduled incremental sync completed: indexed={}, lastId={}, elapsed={}ms, firstRun={}",
+                    totalIndexed, currentLastId, elapsed, firstRun);
+
+        } catch (Exception e) {
+            log.error("ES scheduled incremental sync failed", e);
+        } finally {
+            syncInProgress.set(false);
+        }
+    }
 
     /**
      * 索引单条日志
