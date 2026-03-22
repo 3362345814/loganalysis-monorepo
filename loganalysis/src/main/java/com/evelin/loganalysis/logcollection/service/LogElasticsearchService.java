@@ -224,6 +224,18 @@ public class LogElasticsearchService {
     }
 
     /**
+     * 使用 count API 获取准确的文档总数
+     */
+    public long countDocuments(EsLogQueryRequest request) {
+        try {
+            return esRepository.countDocuments(request);
+        } catch (IOException e) {
+            log.error("Failed to count documents", e);
+            return 0;
+        }
+    }
+
+    /**
      * 获取聚合统计
      */
     public Map<String, Object> getAggregations(EsLogQueryRequest request) {

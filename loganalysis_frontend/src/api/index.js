@@ -281,6 +281,9 @@ export const esLogApi = {
   // ES 高级搜索
   search: (params) => service.get('/collection/logs/es/search', { params }),
 
+  // 获取准确的文档总数（使用 count API）
+  count: (params) => service.get('/collection/logs/es/count', { params }),
+
   // 获取聚合统计
   stats: (params) => service.get('/collection/logs/es/stats', { params }),
 

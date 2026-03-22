@@ -140,4 +140,37 @@ public class LogElasticsearchController {
         Map<String, Object> health = esService.healthCheck();
         return Result.success(health);
     }
+
+    /**
+     * 获取准确的文档总数（使用 count API）
+     */
+    @GetMapping("/count")
+    public Result<Map<String, Object>> getCount(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String regex,
+            @RequestParam(required = false) UUID sourceId,
+            @RequestParam(required = false) List<String> logLevels,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(required = false) String filePath,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String aggregationGroupId
+    ) {
+        EsLogQueryRequest request = EsLogQueryRequest.builder()
+                .keyword(keyword)
+                .regex(regex)
+                .sourceId(sourceId)
+                .logLevels(logLevels)
+                .startTime(startTime)
+                .endTime(endTime)
+                .filePath(filePath)
+                .traceId(traceId)
+                .aggregationGroupId(aggregationGroupId)
+                .build();
+
+        long count = esService.countDocuments(request);
+        Map<String, Object> result = new HashMap<>();
+        result.put("count", count);
+        return Result.success(result);
+    }
 }

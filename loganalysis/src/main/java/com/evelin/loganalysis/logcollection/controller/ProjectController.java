@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcollection.dto.ProjectCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.ProjectResponse;
 import com.evelin.loganalysis.logcollection.service.ProjectService;
 import com.evelin.loganalysis.logcommon.model.Result;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -29,15 +30,10 @@ public class ProjectController {
      * 创建项目
      */
     @PostMapping
-    public Result<ProjectResponse> create(@RequestBody ProjectCreateRequest request) {
-        try {
-            ProjectResponse response = projectService.create(request);
-            log.info("创建项目: {} - {}", response.getId(), response.getName());
-            return Result.success(response);
-        } catch (IllegalArgumentException e) {
-            log.warn("创建项目失败: {}", e.getMessage());
-            return Result.error(e.getMessage());
-        }
+    public Result<ProjectResponse> create(@Valid @RequestBody ProjectCreateRequest request) {
+        ProjectResponse response = projectService.create(request);
+        log.info("创建项目: {} - {}", response.getId(), response.getName());
+        return Result.success(response);
     }
 
     /**
@@ -72,15 +68,13 @@ public class ProjectController {
      * 更新项目
      */
     @PutMapping("/{id}")
-    public Result<ProjectResponse> update(@PathVariable UUID id, @RequestBody ProjectCreateRequest request) {
-        try {
-            Optional<ProjectResponse> updated = projectService.update(id, request);
-            return updated.map(Result::success)
-                    .orElseGet(() -> Result.error("项目不存在: " + id));
-        } catch (IllegalArgumentException e) {
-            log.warn("更新项目失败: {}", e.getMessage());
-            return Result.error(e.getMessage());
-        }
+    public Result<ProjectResponse> update(@PathVariable UUID id, @Valid @RequestBody ProjectCreateRequest request) {
+        Optional<ProjectResponse> updated = projectService.update(id, request);
+        return updated.map(source -> {
+                    log.info("更新项目: {} - {}", id, source.getName());
+                    return Result.success(source);
+                })
+                .orElseGet(() -> Result.error("项目不存在: " + id));
     }
 
     /**

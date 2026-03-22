@@ -9,6 +9,7 @@ import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.core.CountRequest;
 import co.elastic.clients.elasticsearch.core.search.HighlightField;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
@@ -384,6 +385,78 @@ public class LogElasticsearchRepository {
                 .aggregations(aggregations)
                 .took(response.took())
                 .build();
+    }
+
+    /**
+     * 使用 count API 获取准确的文档总数
+     */
+    public long countDocuments(EsLogQueryRequest request) throws IOException {
+        ensureIndexExists();
+
+        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+
+        if (StringUtils.hasText(request.getKeyword())) {
+            boolQuery.must(Query.of(q -> q
+                    .match(m -> m.field("rawContent").query(request.getKeyword()))
+            ));
+        }
+
+        if (request.getSourceId() != null) {
+            boolQuery.filter(Query.of(q -> q
+                    .term(t -> t.field("sourceId").value(request.getSourceId().toString()))
+            ));
+        }
+
+        if (request.getLogLevels() != null && !request.getLogLevels().isEmpty()) {
+            List<FieldValue> levelValues = request.getLogLevels().stream()
+                    .map(FieldValue::of)
+                    .collect(Collectors.toList());
+            boolQuery.filter(Query.of(q -> q
+                    .terms(t -> t.field("logLevel").terms(terms -> terms.value(levelValues)))
+            ));
+        }
+
+        if (request.getStartTime() != null || request.getEndTime() != null) {
+            boolQuery.filter(Query.of(q -> q
+                    .range(r -> {
+                        r.field("originalLogTime");
+                        if (request.getStartTime() != null) {
+                            r.gte(co.elastic.clients.json.JsonData.of(
+                                    DATE_FORMATTER.format(request.getStartTime())));
+                        }
+                        if (request.getEndTime() != null) {
+                            r.lte(co.elastic.clients.json.JsonData.of(
+                                    DATE_FORMATTER.format(request.getEndTime())));
+                        }
+                        return r;
+                    })
+            ));
+        }
+
+        if (StringUtils.hasText(request.getFilePath())) {
+            boolQuery.filter(Query.of(q -> q
+                    .match(m -> m.field("filePath").query(request.getFilePath()))
+            ));
+        }
+
+        if (StringUtils.hasText(request.getTraceId())) {
+            boolQuery.filter(Query.of(q -> q
+                    .term(t -> t.field("traceId").value(request.getTraceId()))
+            ));
+        }
+
+        if (StringUtils.hasText(request.getAggregationGroupId())) {
+            boolQuery.filter(Query.of(q -> q
+                    .term(t -> t.field("aggregationGroupId").value(request.getAggregationGroupId()))
+            ));
+        }
+
+        CountResponse response = esClient.count(CountRequest.of(c -> c
+                .index(INDEX_NAME)
+                .query(Query.of(q -> q.bool(boolQuery.build())))
+        ));
+
+        return response.count();
     }
 
     /**

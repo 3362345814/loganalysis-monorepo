@@ -3,6 +3,8 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.dto.ProjectCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.ProjectResponse;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
+import com.evelin.loganalysis.logcommon.exception.BusinessException;
+import com.evelin.loganalysis.logcommon.constant.ResultCode;
 import com.evelin.loganalysis.logcommon.model.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,12 +38,11 @@ public class ProjectService {
     public ProjectResponse create(ProjectCreateRequest request) {
         // 检查名称是否已存在
         if (projectRepository.existsByName(request.getName())) {
-            throw new IllegalArgumentException("项目名称已存在: " + request.getName());
+            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目名称已存在: " + request.getName());
         }
 
-        // 检查项目代码是否已存在
         if (projectRepository.existsByCode(request.getCode())) {
-            throw new IllegalArgumentException("项目代码已存在: " + request.getCode());
+            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目代码已存在: " + request.getCode());
         }
 
         Project project = new Project();
@@ -73,7 +74,7 @@ public class ProjectService {
                     // 检查名称是否与其他项目重复
                     if (request.getName() != null && !request.getName().equals(project.getName())) {
                         if (projectRepository.existsByName(request.getName())) {
-                            throw new IllegalArgumentException("项目名称已存在: " + request.getName());
+                            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目名称已存在: " + request.getName());
                         }
                         project.setName(request.getName());
                     }
@@ -81,7 +82,7 @@ public class ProjectService {
                     // 检查项目代码是否与其他项目重复
                     if (request.getCode() != null && !request.getCode().equals(project.getCode())) {
                         if (projectRepository.existsByCode(request.getCode())) {
-                            throw new IllegalArgumentException("项目代码已存在: " + request.getCode());
+                            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目代码已存在: " + request.getCode());
                         }
                         project.setCode(request.getCode());
                     }

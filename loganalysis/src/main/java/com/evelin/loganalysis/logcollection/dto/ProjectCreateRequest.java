@@ -1,47 +1,32 @@
 package com.evelin.loganalysis.logcollection.dto;
 
+import jakarta.validation.constraints.*;
 import lombok.Data;
 
-/**
- * 项目创建请求DTO
- *
- * @author Evelin
- */
 @Data
 public class ProjectCreateRequest {
 
-    /**
-     * 项目名称
-     */
+    @NotBlank(message = "项目名称不能为空")
+    @Size(max = 100, message = "项目名称长度不能超过100")
     private String name;
 
-    /**
-     * 项目代码（用于关联日志中的项目标识）
-     */
+    @NotBlank(message = "项目代码不能为空")
+    @Size(max = 50, message = "项目代码长度不能超过50")
+    @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9_]*$", message = "项目代码必须以字母开头，只能包含字母、数字和下划线")
     private String code;
 
-    /**
-     * 项目描述
-     */
+    @Size(max = 500, message = "项目描述长度不能超过500")
     private String description;
 
-    /**
-     * 项目负责人
-     */
+    @Size(max = 100, message = "负责人名称长度不能超过100")
     private String owner;
 
-    /**
-     * 联系人邮箱
-     */
+    @Email(message = "邮箱格式不正确")
+    @Size(max = 255, message = "邮箱长度不能超过255")
     private String email;
 
-    /**
-     * 是否启用
-     */
     private Boolean enabled;
 
-    /**
-     * 备注
-     */
+    @Size(max = 500, message = "备注长度不能超过500")
     private String remark;
 }

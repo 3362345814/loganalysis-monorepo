@@ -356,6 +356,13 @@ const loadEsLogs = async () => {
 
     const res = await esLogApi.search(params)
 
+    // 使用 count API 获取准确的总数
+    const countParams = { ...params }
+    delete countParams.page
+    delete countParams.size
+    const countRes = await esLogApi.count(countParams)
+    total.value = countRes.data?.count ?? 0
+
     if (res.data && res.data.hits) {
       let hits = res.data.hits.slice().reverse()
 
@@ -378,7 +385,6 @@ const loadEsLogs = async () => {
         originalLogTime: hit.originalLogTime,
         parsedFields: hit.parsedFields || {}
       }))
-      total.value = res.data.total || res.data.hits.length
       currentLoadPage = 0
 
       let foundIndex = -1

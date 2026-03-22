@@ -1,7 +1,5 @@
 # LogAnalysis Monorepo
 
-**当前版本：{{VERSION}}**（发布日期：{{RELEASE\_DATE}}）
-
 一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。\
 本仓库包含：
 

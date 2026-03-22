@@ -61,17 +61,6 @@ public class RawLogEventService {
     }
 
     /**
-     * 异步批量保存原始日志事件
-     *
-     * @param events 原始日志事件列表
-     */
-    @Async
-    @Transactional
-    public void saveAllAsync(List<RawLogEvent> events) {
-        saveAll(events);
-    }
-
-    /**
      * 根据ID查询
      *
      * @param id ID

@@ -2,6 +2,8 @@ package com.evelin.loganalysis.logcollection.controller;
 
 import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.collector.LogCollector;
+import com.evelin.loganalysis.logcollection.dto.ConnectionTestRequest;
+import com.evelin.loganalysis.logcollection.dto.ConnectionTestResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
@@ -9,24 +11,18 @@ import com.evelin.loganalysis.logcollection.dto.RawLogEventResponse;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
+import com.evelin.loganalysis.logcollection.service.ConnectionTestService;
 import com.evelin.loganalysis.logcollection.service.LogSourceService;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcommon.model.PageResult;
 import com.evelin.loganalysis.logcommon.model.Result;
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelSftp;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
-import com.jcraft.jsch.SftpException;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
-
-import java.io.File;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -47,6 +43,7 @@ public class LogCollectionController {
     private final LogSourceService logSourceService;
     private final RawLogEventService rawLogEventService;
     private final CollectorFactory collectorFactory;
+    private final ConnectionTestService connectionTestService;
 
     // ==================== 日志源管理 ====================
 
@@ -54,7 +51,7 @@ public class LogCollectionController {
      * 创建日志源
      */
     @PostMapping("/sources")
-    public Result<LogSourceResponse> createSource(@RequestBody LogSourceCreateRequest request) {
+    public Result<LogSourceResponse> createSource(@Valid @RequestBody LogSourceCreateRequest request) {
         LogSourceResponse response = logSourceService.create(request);
         log.info("创建日志源: {} - {}", response.getId(), response.getName());
         return Result.success(response);
@@ -94,7 +91,7 @@ public class LogCollectionController {
     @PutMapping("/sources/{sourceId}")
     public Result<LogSourceResponse> updateSource(
             @PathVariable UUID sourceId,
-            @RequestBody LogSourceUpdateRequest request) {
+            @Valid @RequestBody LogSourceUpdateRequest request) {
         Optional<LogSourceResponse> updated = logSourceService.update(sourceId, request);
         return updated.map(source -> {
             log.info("更新日志源: {} - {}", sourceId, source.getName());
@@ -107,12 +104,9 @@ public class LogCollectionController {
      */
     @DeleteMapping("/sources/{sourceId}")
     public Result<Void> deleteSource(@PathVariable UUID sourceId) {
-        try {
-            logSourceService.delete(sourceId);
-            return Result.success(null);
-        } catch (IllegalArgumentException e) {
-            return Result.error(e.getMessage());
-        }
+        logSourceService.delete(sourceId);
+        log.info("删除日志源: {}", sourceId);
+        return Result.success(null);
     }
 
     /**
@@ -536,185 +530,15 @@ public class LogCollectionController {
      * @return 测试结果
      */
     @PostMapping("/sources/test-ssh")
-    public Result<Map<String, Object>> testSshConnection(@RequestBody Map<String, Object> config) {
-        String host = (String) config.get("host");
-        Integer port = (Integer) config.get("port");
-        String username = (String) config.get("username");
-        String password = (String) config.get("password");
-
-        if (host == null || host.isEmpty()) {
-            return Result.error("主机地址不能为空");
-        }
-        if (username == null || username.isEmpty()) {
-            return Result.error("用户名不能为空");
-        }
-        if (password == null || password.isEmpty()) {
-            return Result.error("密码不能为空");
-        }
-        if (port == null || port < 1 || port > 65535) {
-            port = 22;
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("host", host);
-        result.put("port", port);
-        result.put("username", username);
-
-        try {
-            JSch jsch = new JSch();
-            Session session = jsch.getSession(username, host, port);
-            session.setPassword(password);
-            session.setConfig("StrictHostKeyChecking", "no");
-            session.setTimeout(10000);
-            session.connect();
-
-            Channel channel = session.openChannel("sftp");
-            channel.connect(10000);
-
-            result.put("success", true);
-            result.put("message", "SSH 连接成功，SFTP 服务可用");
-
-            channel.disconnect();
-            session.disconnect();
-
-            log.info("SSH 连接测试成功: host={}, port={}, username={}", host, port, username);
-            return Result.success(result);
-        } catch (JSchException e) {
-            result.put("success", false);
-            result.put("message", "SSH 连接失败: " + e.getMessage());
-            log.warn("SSH 连接测试失败: host={}, port={}, username={}, error={}", host, port, username, e.getMessage());
-            return Result.success(result);
-        } catch (Exception e) {
-            result.put("success", false);
-            result.put("message", "SFTP 连接失败: " + e.getMessage());
-            log.warn("SFTP 连接测试失败: host={}, port={}, username={}, error={}", host, port, username, e.getMessage());
-            return Result.success(result);
-        }
+    public Result<ConnectionTestResponse> testSshConnection(@RequestBody ConnectionTestRequest request) {
+        ConnectionTestResponse response = connectionTestService.testSshConnection(request);
+        return Result.success(response);
     }
 
-    /**
-     * 测试日志路径是否存在（支持 SSH 和本地）
-     *
-     * @param config 测试配置
-     * @return 测试结果
-     */
     @PostMapping("/sources/test-path")
-    public Result<Map<String, Object>> testPathExists(@RequestBody Map<String, Object> config) {
-        String sourceType = (String) config.get("sourceType");
-        @SuppressWarnings("unchecked")
-        List<String> paths = config.get("paths") != null
-                ? (List<String>) config.get("paths")
-                : null;
-
-        if (paths == null || paths.isEmpty()) {
-            return Result.error("日志路径不能为空");
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("paths", paths);
-        result.put("sourceType", sourceType);
-
-        try {
-            if ("SSH".equalsIgnoreCase(sourceType)) {
-                String host = (String) config.get("host");
-                Integer port = (Integer) config.get("port");
-                String username = (String) config.get("username");
-                String password = (String) config.get("password");
-
-                if (host == null || username == null || password == null) {
-                    return Result.error("SSH 配置不完整");
-                }
-                if (port == null) {
-                    port = 22;
-                }
-
-                JSch jsch = new JSch();
-                Session session = jsch.getSession(username, host, port);
-                session.setPassword(password);
-                session.setConfig("StrictHostKeyChecking", "no");
-                session.setTimeout(10000);
-                session.connect();
-
-                Channel channel = session.openChannel("sftp");
-                channel.connect(10000);
-                ChannelSftp sftpChannel = (ChannelSftp) channel;
-
-                Map<String, Boolean> pathResults = new HashMap<>();
-                List<String> existingPaths = new java.util.ArrayList<>();
-                List<String> missingPaths = new java.util.ArrayList<>();
-
-                for (String path : paths) {
-                    if (path == null || path.trim().isEmpty()) {
-                        continue;
-                    }
-                    try {
-                        sftpChannel.stat(path.trim());
-                        pathResults.put(path, true);
-                        existingPaths.add(path);
-                    } catch (SftpException e) {
-                        pathResults.put(path, false);
-                        missingPaths.add(path);
-                    }
-                }
-
-                result.put("success", missingPaths.isEmpty());
-                result.put("pathResults", pathResults);
-                result.put("existingCount", existingPaths.size());
-                result.put("missingCount", missingPaths.size());
-
-                if (missingPaths.isEmpty()) {
-                    result.put("message", "所有路径都存在，共 " + existingPaths.size() + " 个路径");
-                } else {
-                    result.put("message", "部分路径不存在: " + String.join(", ", missingPaths));
-                    result.put("missingPaths", missingPaths);
-                }
-
-                sftpChannel.exit();
-                session.disconnect();
-
-                log.info("SSH 路径验证完成: host={}, paths={}, existing={}, missing={}", host, paths.size(), existingPaths.size(), missingPaths.size());
-            } else {
-                // 本地文件检查
-                Map<String, Boolean> pathResults = new HashMap<>();
-                List<String> existingPaths = new ArrayList<>();
-                List<String> missingPaths = new ArrayList<>();
-
-                for (String path : paths) {
-                    if (path == null || path.trim().isEmpty()) {
-                        continue;
-                    }
-                    File file = new File(path.trim());
-                    boolean exists = file.exists() && file.isFile();
-                    pathResults.put(path, exists);
-                    if (exists) {
-                        existingPaths.add(path);
-                    } else {
-                        missingPaths.add(path);
-                    }
-                }
-
-                result.put("success", missingPaths.isEmpty());
-                result.put("pathResults", pathResults);
-                result.put("existingCount", existingPaths.size());
-                result.put("missingCount", missingPaths.size());
-
-                if (missingPaths.isEmpty()) {
-                    result.put("message", "所有路径都存在，共 " + existingPaths.size() + " 个路径");
-                } else {
-                    result.put("message", "部分路径不存在: " + String.join(", ", missingPaths));
-                    result.put("missingPaths", missingPaths);
-                }
-
-                log.info("本地路径验证完成: paths={}, existing={}, missing={}", paths.size(), existingPaths.size(), missingPaths.size());
-            }
-
-            return Result.success(result);
-        } catch (Exception e) {
-            result.put("success", false);
-            result.put("message", "路径验证失败: " + e.getMessage());
-            log.error("路径验证异常: sourceType={}, paths={}", sourceType, paths, e);
-            return Result.success(result);
-        }
+    public Result<ConnectionTestResponse> testPathExists(@RequestBody ConnectionTestRequest request) {
+        ConnectionTestResponse response = connectionTestService.testPathExists(request);
+        return Result.success(response);
     }
 
     // ==================== 测试接口 ====================

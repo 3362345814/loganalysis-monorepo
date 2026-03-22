@@ -13,6 +13,8 @@ import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
 import com.evelin.loganalysis.logcollection.enums.LogFormat;
 import com.evelin.loganalysis.logcollection.enums.LogSourceType;
 import com.evelin.loganalysis.logcollection.model.LogSource;
+import com.evelin.loganalysis.logcommon.exception.BusinessException;
+import com.evelin.loganalysis.logcommon.constant.ResultCode;
 import com.evelin.loganalysis.logcommon.model.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,7 +53,7 @@ public class LogSourceService {
     @Transactional
     public LogSourceResponse create(LogSourceCreateRequest request) {
         if (logSourceRepository.existsByName(request.getName())) {
-            throw new IllegalArgumentException("日志源名称已存在: " + request.getName());
+            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "日志源名称已存在: " + request.getName());
         }
 
         LogFormat logFormat = null;
@@ -65,7 +67,7 @@ public class LogSourceService {
                 request.getPaths()
             );
             if (!validationResult.isValid()) {
-                throw new IllegalArgumentException(validationResult.getErrorMessage());
+                throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, validationResult.getErrorMessage());
             }
         }
 
@@ -105,7 +107,7 @@ public class LogSourceService {
         if (request.getProjectId() != null) {
             Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
             if (projectOpt.isEmpty()) {
-                throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
+                throw new BusinessException(ResultCode.DATA_NOT_FOUND, "项目不存在: " + request.getProjectId());
             }
             logSource.setProjectId(request.getProjectId());
         }
@@ -195,7 +197,7 @@ public class LogSourceService {
             if (request.getName() != null) {
                 Optional<LogSource> byName = logSourceRepository.findByName(request.getName());
                 if (byName.isPresent() && !byName.get().getId().equals(id)) {
-                    throw new IllegalArgumentException("日志源名称已存在: " + request.getName());
+                    throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "日志源名称已存在: " + request.getName());
                 }
                 existing.setName(request.getName());
             }
@@ -211,7 +213,7 @@ public class LogSourceService {
                         request.getPaths()
                     );
                     if (!validationResult.isValid()) {
-                        throw new IllegalArgumentException(validationResult.getErrorMessage());
+                        throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, validationResult.getErrorMessage());
                     }
                 }
                 
@@ -274,7 +276,7 @@ public class LogSourceService {
             if (request.getProjectId() != null) {
                 Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
                 if (projectOpt.isEmpty()) {
-                    throw new IllegalArgumentException("项目不存在: " + request.getProjectId());
+                    throw new BusinessException(ResultCode.DATA_NOT_FOUND, "项目不存在: " + request.getProjectId());
                 }
                 existing.setProjectId(request.getProjectId());
             } else {
@@ -297,7 +299,7 @@ public class LogSourceService {
     public void delete(UUID id) {
         // 检查日志源是否存在
         LogSource logSource = logSourceRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("日志源不存在: " + id));
+                .orElseThrow(() -> new BusinessException(ResultCode.DATA_NOT_FOUND, "日志源不存在: " + id));
 
         // 统计关联数据数量
         long logCount = rawLogEventRepository.countBySourceId(id);

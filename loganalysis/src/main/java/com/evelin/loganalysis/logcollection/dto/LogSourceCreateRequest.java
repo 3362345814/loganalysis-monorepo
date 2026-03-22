@@ -1,5 +1,6 @@
 package com.evelin.loganalysis.logcollection.dto;
 
+import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.util.List;
@@ -14,108 +15,60 @@ import java.util.UUID;
  */
 @Data
 public class LogSourceCreateRequest {
-    /**
-     * 日志源名称
-     */
+    @NotBlank(message = "名称不能为空")
+    @Size(max = 100, message = "名称长度不能超过100")
     private String name;
 
-    /**
-     * 日志源描述
-     */
+    @Size(max = 500, message = "描述长度不能超过500")
     private String description;
 
-    /**
-     * 日志源类型
-     */
+    @NotBlank(message = "日志源类型不能为空")
     private String sourceType;
 
-    /**
-     * 日志格式
-     */
     private String logFormat;
 
-    /**
-     * 用户自定义的 log_format 字符串（用于 NGINX_ACCESS 等格式）
-     */
+    @Size(max = 500, message = "日志格式模式长度不能超过500")
     private String logFormatPattern;
 
-    /**
-     * 自定义日志格式正则表达式
-     */
+    @Size(max = 1000, message = "自定义正则表达式长度不能超过1000")
     private String customPattern;
 
-    /**
-     * 日志路径列表（JSON格式）
-     * SpringBoot: ["path/to/log/file.log"]
-     * Nginx: ["path/to/access.log", "path/to/error.log"]
-     */
+    @NotEmpty(message = "日志路径不能为空")
     private List<String> paths;
 
-    /**
-     * 主机地址
-     */
+    @Size(max = 255, message = "主机地址长度不能超过255")
     private String host;
 
-    /**
-     * 端口
-     */
+    @Min(value = 1, message = "端口号必须大于0")
+    @Max(value = 65535, message = "端口号不能超过65535")
     private Integer port;
 
-    /**
-     * 用户名
-     */
+    @Size(max = 100, message = "用户名长度不能超过100")
     private String username;
 
-    /**
-     * 密码
-     */
+    @Size(max = 255, message = "密码长度不能超过255")
     private String password;
 
-    /**
-     * 编码
-     */
+    @Size(max = 50, message = "编码长度不能超过50")
     private String encoding;
 
-    /**
-     * 是否启用
-     */
     private Boolean enabled;
 
-    /**
-     * 是否启用脱敏
-     */
     private Boolean desensitizationEnabled;
 
-    /**
-     * 聚合级别配置：只有等于或高于此级别的日志才会被聚合
-     * WARN: 聚合 WARN及以上级别
-     * ERROR: 聚合 ERROR及以上级别
-     */
+    @Size(max = 20, message = "聚合级别长度不能超过20")
     private String aggregationLevel;
 
-    /**
-     * 启用的脱敏规则ID列表
-     */
     private List<String> enabledRuleIds;
 
-    /**
-     * 自定义脱敏规则
-     */
     private List<CustomRule> customRules;
 
-    /**
-     * 额外配置
-     */
     private Map<String, Object> config;
 
-    /**
-     * 备注
-     */
+    @Size(max = 500, message = "备注长度不能超过500")
     private String remark;
 
-    /**
-     * 所属项目ID
-     */
+    @NotNull(message = "所属项目ID不能为空")
     private UUID projectId;
 
     /**
