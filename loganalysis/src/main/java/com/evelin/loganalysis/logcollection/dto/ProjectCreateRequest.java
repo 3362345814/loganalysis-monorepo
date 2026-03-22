@@ -10,11 +10,6 @@ public class ProjectCreateRequest {
     @Size(max = 100, message = "项目名称长度不能超过100")
     private String name;
 
-    @NotBlank(message = "项目代码不能为空")
-    @Size(max = 50, message = "项目代码长度不能超过50")
-    @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9_]*$", message = "项目代码必须以字母开头，只能包含字母、数字和下划线")
-    private String code;
-
     @Size(max = 500, message = "项目描述长度不能超过500")
     private String description;
 

@@ -24,6 +24,8 @@ public class AlertRecordResponse {
     private UUID ruleId;
     private String ruleName;
     private UUID aggregationId;
+    private String logId;
+    private String traceId;
     private List<UUID> sourceIds;
     private AlertLevel alertLevel;
     private String title;

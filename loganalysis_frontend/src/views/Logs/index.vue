@@ -111,28 +111,8 @@
               </template>
             </el-table-column>
           </el-table>
-
-          <!-- AI分析结果 -->
-          <div v-if="aiAnalysisLoading" class="ai-analysis-loading">
-            <el-icon class="is-loading"><Loading /></el-icon>
-            <span>正在分析...</span>
-          </div>
-          <div v-else-if="aiAnalysisError" class="ai-analysis-error">
-            <el-alert type="error" :closable="false" show-icon>
-              <template #title>
-                <span>分析失败</span>
-              </template>
-              <template #default>
-                <span>{{ aiAnalysisError }}</span>
-              </template>
-            </el-alert>
-          </div>
         </div>
         <div class="parsed-info-footer">
-          <el-button type="primary" @click="triggerAIAnalysis" :loading="aiAnalysisLoading">
-            <el-icon><MagicStick /></el-icon>
-            AI分析
-          </el-button>
           <el-button v-if="currentHoverTraceId" type="primary" @click="openTraceTimeline">
             <el-icon><Link /></el-icon>
             链路追踪
@@ -242,13 +222,6 @@ const selectedLogIndex = ref(-1)
 const currentHoverTraceId = ref('')
 const currentTraceId = ref('')
 const traceTimelineVisible = ref(false)
-
-// AI分析相关状态
-const aiAnalysisLoading = ref(false)
-const aiAnalysisVisible = ref(false)
-const aiAnalysisResult = ref('')
-const aiAnalysisError = ref('')
-const cachedContextSize = ref(10)
 
 // 高亮相关状态
 const highlightTime = ref(null)
@@ -388,8 +361,31 @@ const loadEsLogs = async () => {
       currentLoadPage = 0
 
       let foundIndex = -1
+
       if (currentHighlightId) {
         foundIndex = logs.value.findIndex(log => log.id === currentHighlightId)
+        
+        if (foundIndex === -1) {
+          try {
+            const idRes = await rawLogApi.getById(currentHighlightId)
+            if (idRes.data) {
+              logs.value.unshift({
+                id: idRes.data.id || idRes.data.dbId,
+                dbId: idRes.data.dbId,
+                rawContent: idRes.data.rawContent,
+                filePath: idRes.data.filePath,
+                lineNumber: idRes.data.lineNumber,
+                logLevel: idRes.data.logLevel,
+                collectionTime: idRes.data.collectionTime,
+                originalLogTime: idRes.data.originalLogTime,
+                parsedFields: idRes.data.parsedFields || {}
+              })
+              foundIndex = 0
+            }
+          } catch (error) {
+            console.error('获取高亮日志失败:', error)
+          }
+        }
       } else if (currentHighlightTime) {
         const targetTime = new Date(currentHighlightTime).getTime()
         foundIndex = logs.value.findIndex(log => {
@@ -554,12 +550,12 @@ const loadLogs = async () => {
     if (currentHighlightTime) {
       // 计算目标时间范围：向前后各扩展一段时间
       const targetDate = new Date(currentHighlightTime)
-      const startTime = new Date(targetDate.getTime() - 30 * 60 * 1000) // 往前30分钟
-      const endTime = new Date(targetDate.getTime() + 30 * 60 * 1000)   // 往后30分钟
+      const startTime = new Date(targetDate.getTime() - 30 * 60 * 1000)
+      const endTime = new Date(targetDate.getTime() + 30 * 60 * 1000)
       
-        params = {
+      params = {
         page: 0,
-        size: 1000,
+        size: 100,
         startTime: startTime.toISOString().slice(0, 19),
         endTime: endTime.toISOString().slice(0, 19)
       }
@@ -583,37 +579,9 @@ const loadLogs = async () => {
       total.value = allLogs.length
     }
     
-    // 查找并高亮匹配的日志
-    // 优先使用 ID 精确定位（从后端获取），其次使用时间定位
-    const currentHighlightId = highlightId.value
-    let highlightLogData = null
-
-    if (currentHighlightId) {
-      // 先尝试从已加载日志中查找
-      const foundIdx = allLogs.findIndex(log => log.id === currentHighlightId)
-      
-      // 如果没找到，从后端获取该日志
-      if (foundIdx === -1) {
-        try {
-          const idRes = await rawLogApi.getById(currentHighlightId)
-          if (idRes.data) {
-            // 保存获取到的日志数据
-            highlightLogData = idRes.data
-          }
-        } catch (error) {
-          console.error('获取高亮日志失败:', error)
-        }
-      }
-    }
-    
     // 关键修复：将日志反转，最新的日志放在数组末尾（终端下方）
     // 后端返回 DESC（最新在前），我们需要升序显示（最早在上，最新在下）
     allLogs.reverse()
-    
-    // 如果有从后端获取的高亮日志，插入到列表开头
-    if (highlightLogData) {
-      allLogs.unshift(highlightLogData)
-    }
     
     // 初始化当前加载的页码
     currentLoadPage = 0
@@ -969,68 +937,6 @@ const loadAnalysisConfig = async () => {
   }
 }
 
-// 触发AI分析
-const triggerAIAnalysis = async () => {
-  if (!currentLog.value) return
-
-  aiAnalysisLoading.value = true
-  aiAnalysisResult.value = ''
-  aiAnalysisError.value = ''
-
-  try {
-    // 获取上下文：从当前日志列表中提取前后日志
-    const contextSize = cachedContextSize.value
-    const currentIndex = logs.value.findIndex(log => log.id === currentLog.value.id)
-
-    const contextBefore = []
-    const contextAfter = []
-
-    // 提取前日志
-    for (let i = Math.max(0, currentIndex - contextSize); i < currentIndex; i++) {
-      const log = logs.value[i]
-      contextBefore.push({
-        logTime: log.originalLogTime || log.parsedFields?.logTime,
-        logLevel: log.logLevel || log.parsedFields?.logLevel,
-        message: log.rawContent || log.parsedFields?.message
-      })
-    }
-
-    // 提取后日志
-    for (let i = currentIndex + 1; i < Math.min(logs.value.length, currentIndex + contextSize + 1); i++) {
-      const log = logs.value[i]
-      contextAfter.push({
-        logTime: log.originalLogTime || log.parsedFields?.logTime,
-        logLevel: log.logLevel || log.parsedFields?.logLevel,
-        message: log.rawContent || log.parsedFields?.message
-      })
-    }
-
-    // 构建分析数据
-    const analysisData = {
-      severity: currentLog.value.logLevel || currentLog.value.parsedFields?.logLevel || 'INFO',
-      name: `日志分析-${currentLog.value.id}`,
-      eventCount: 1,
-      representativeLog: currentLog.value.rawContent || currentLog.value.parsedFields?.message,
-      relatedLogs: [],
-      contextBefore: contextBefore,
-      contextAfter: contextAfter
-    }
-
-    // 不等待结果，直接提示已触发
-    analysisApi.trigger(analysisData).catch(() => {})
-
-    ElMessage.success('已触发AI分析，请稍后在智能分析页面查看')
-    aiAnalysisLoading.value = false
-    aiAnalysisVisible.value = false
-    return
-  } catch (error) {
-    console.error('AI分析失败:', error)
-    aiAnalysisError.value = error.message || '分析失败'
-    ElMessage.error('AI分析失败: ' + (error.message || '未知错误'))
-    aiAnalysisLoading.value = false
-  }
-}
-
 const showParsedInfo = (log) => {
   const parsedFields = log.parsedFields || {}
 
@@ -1053,10 +959,6 @@ const showParsedInfo = (log) => {
 
   // 提取 traceId 用于链路追踪
   currentHoverTraceId.value = parsedFields.traceId || ''
-
-  // 清除AI分析结果
-  aiAnalysisResult.value = ''
-  aiAnalysisError.value = ''
 
   parsedInfoVisible.value = true
 }
@@ -1496,20 +1398,6 @@ onUnmounted(() => {
 
 .parsed-info-footer .el-button {
   flex: 1;
-}
-
-/* AI分析结果样式 */
-.ai-analysis-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 20px;
-  color: #909399;
-}
-
-.ai-analysis-error {
-  padding: 12px 16px;
 }
 
 /* 日志行选中状态 */

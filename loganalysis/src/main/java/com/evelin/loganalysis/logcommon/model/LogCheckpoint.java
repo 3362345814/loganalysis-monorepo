@@ -17,7 +17,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@Table(name = "checkpoints")
+@Table(name = "checkpoints", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_checkpoint_source_file", columnNames = {"source_id", "file_path"})
+})
 public class LogCheckpoint extends BaseEntity {
 
     /**

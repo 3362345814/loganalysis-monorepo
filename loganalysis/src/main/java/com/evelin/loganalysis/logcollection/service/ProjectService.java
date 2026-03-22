@@ -41,13 +41,17 @@ public class ProjectService {
             throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目名称已存在: " + request.getName());
         }
 
-        if (projectRepository.existsByCode(request.getCode())) {
-            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目代码已存在: " + request.getCode());
+        // 自动生成项目代码
+        String code = generateProjectCode(request.getName());
+        int suffix = 1;
+        String originalCode = code;
+        while (projectRepository.existsByCode(code)) {
+            code = originalCode + suffix++;
         }
 
         Project project = new Project();
         project.setName(request.getName());
-        project.setCode(request.getCode());
+        project.setCode(code);
         project.setDescription(request.getDescription());
         project.setOwner(request.getOwner());
         project.setEmail(request.getEmail());
@@ -55,9 +59,35 @@ public class ProjectService {
         project.setRemark(request.getRemark());
 
         Project saved = projectRepository.save(project);
-        log.info("创建项目成功: {} - {}", saved.getId(), saved.getName());
+        log.info("创建项目成功: {} - {}, 代码: {}", saved.getId(), saved.getName(), saved.getCode());
 
         return toResponse(saved);
+    }
+
+    /**
+     * 根据项目名称生成项目代码
+     */
+    private String generateProjectCode(String name) {
+        if (name == null || name.isEmpty()) {
+            return "PROJ";
+        }
+        // 提取名称中的字母并转大写，最多4个字符
+        StringBuilder code = new StringBuilder();
+        for (char c : name.toCharArray()) {
+            if (Character.isLetter(c)) {
+                code.append(Character.toUpperCase(c));
+                if (code.length() >= 4) break;
+            }
+        }
+        // 如果没有提取到字母，使用固定前缀
+        if (code.length() == 0) {
+            code.append("PROJ");
+        }
+        // 补齐到4位
+        while (code.length() < 4) {
+            code.append("0");
+        }
+        return code.toString();
     }
 
     /**
@@ -79,13 +109,7 @@ public class ProjectService {
                         project.setName(request.getName());
                     }
 
-                    // 检查项目代码是否与其他项目重复
-                    if (request.getCode() != null && !request.getCode().equals(project.getCode())) {
-                        if (projectRepository.existsByCode(request.getCode())) {
-                            throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目代码已存在: " + request.getCode());
-                        }
-                        project.setCode(request.getCode());
-                    }
+                    // 项目代码不允许修改
 
                     if (request.getDescription() != null) {
                         project.setDescription(request.getDescription());

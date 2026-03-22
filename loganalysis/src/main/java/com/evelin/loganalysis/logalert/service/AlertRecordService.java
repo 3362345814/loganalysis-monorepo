@@ -50,6 +50,8 @@ public class AlertRecordService {
                 .alertId(alertId)
                 .ruleId(request.getRuleId())
                 .aggregationId(request.getAggregationId())
+                .logId(request.getLogId())
+                .traceId(request.getTraceId())
                 .sourceIds(request.getSourceIds())
                 .alertLevel(rule.getAlertLevel())
                 .title(request.getTitle() != null ? request.getTitle() : rule.getAlertTitle())
@@ -86,17 +88,20 @@ public class AlertRecordService {
                                                     String triggerCondition, String triggerValue,
                                                     Integer triggerCount, List<String> triggerSources) {
         return createAlertFromRule(rule, title, content, triggerCondition, triggerValue,
-                triggerCount, triggerSources, null, null);
+                triggerCount, triggerSources, null, null, null, null);
     }
 
     @Transactional
     public AlertRecordResponse createAlertFromRule(AlertRule rule, String title, String content,
                                                     String triggerCondition, String triggerValue,
                                                     Integer triggerCount, List<String> triggerSources,
-                                                    UUID aggregationId, List<UUID> sourceIds) {
+                                                    UUID aggregationId, List<UUID> sourceIds,
+                                                    String logId, String traceId) {
         AlertRecordCreateRequest request = new AlertRecordCreateRequest();
         request.setRuleId(rule.getId());
         request.setAggregationId(aggregationId);
+        request.setLogId(logId);
+        request.setTraceId(traceId);
         request.setSourceIds(sourceIds);
         request.setTitle(title);
         request.setContent(content);
@@ -289,6 +294,8 @@ public class AlertRecordService {
                 .alertId(alert.getAlertId())
                 .ruleId(alert.getRuleId())
                 .aggregationId(alert.getAggregationId())
+                .logId(alert.getLogId())
+                .traceId(alert.getTraceId())
                 .sourceIds(alert.getSourceIds())
                 .alertLevel(alert.getAlertLevel())
                 .title(alert.getTitle())

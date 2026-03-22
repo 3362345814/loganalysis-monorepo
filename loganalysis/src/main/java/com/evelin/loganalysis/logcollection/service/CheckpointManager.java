@@ -12,8 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -83,14 +83,19 @@ public class CheckpointManager {
         try {
             LogSource source = new LogSource();
             source.setId(java.util.UUID.fromString(sourceId));
-            Optional<LogCheckpoint> dbCheckpoint = checkpointRepository.findBySourceIdAndFilePath(
+            List<LogCheckpoint> dbCheckpoints = checkpointRepository.findAllBySourceIdAndFilePath(
                     source.getId(), filePath);
 
-            if (dbCheckpoint.isPresent()) {
-                LogCheckpoint checkpoint = dbCheckpoint.get();
-                // 同步到Redis
+            if (!dbCheckpoints.isEmpty()) {
+                LogCheckpoint checkpoint = dbCheckpoints.get(0);
+                if (dbCheckpoints.size() > 1) {
+                    log.warn("Found {} duplicate checkpoints for sourceId={}, filePath={}, keeping the latest one",
+                            dbCheckpoints.size(), sourceId, filePath);
+                    for (int i = 1; i < dbCheckpoints.size(); i++) {
+                        checkpointRepository.delete(dbCheckpoints.get(i));
+                    }
+                }
                 syncToRedis(cacheKey, checkpoint);
-                // 放入内存缓存
                 memoryCache.put(cacheKey, checkpoint);
                 log.debug("Loaded checkpoint from database: sourceId={}, filePath={}, offset={}",
                         sourceId, filePath, checkpoint.getFileOffset());
@@ -123,32 +128,37 @@ public class CheckpointManager {
         String cacheKey = buildCacheKey(sourceId, filePath);
 
         try {
-            // 1. 获取或创建检查点
+            LogSource source = new LogSource();
+            source.setId(java.util.UUID.fromString(sourceId));
+
             LogCheckpoint checkpoint = memoryCache.get(cacheKey);
             if (checkpoint == null) {
-                LogSource source = new LogSource();
-                source.setId(java.util.UUID.fromString(sourceId));
-                checkpoint = checkpointRepository.findBySourceIdAndFilePath(source.getId(), filePath)
-                        .orElseGet(() -> {
-                            LogCheckpoint newCheckpoint = new LogCheckpoint();
-                            newCheckpoint.setSourceId(source);
-                            newCheckpoint.setFilePath(filePath);
-                            return newCheckpoint;
-                        });
+                List<LogCheckpoint> existingCheckpoints = checkpointRepository.findAllBySourceIdAndFilePath(source.getId(), filePath);
+                if (!existingCheckpoints.isEmpty()) {
+                    checkpoint = existingCheckpoints.get(0);
+                    if (existingCheckpoints.size() > 1) {
+                        log.warn("Found {} duplicate checkpoints for sourceId={}, filePath={}, keeping the latest one",
+                                existingCheckpoints.size(), sourceId, filePath);
+                        for (int i = 1; i < existingCheckpoints.size(); i++) {
+                            checkpointRepository.delete(existingCheckpoints.get(i));
+                        }
+                    }
+                } else {
+                    checkpoint = new LogCheckpoint();
+                    checkpoint.setSourceId(source);
+                    checkpoint.setFilePath(filePath);
+                }
             }
 
-            // 2. 更新检查点信息
             checkpoint.setFileOffset(offset);
             checkpoint.setFileSize(fileSize);
             checkpoint.setFileInode(fileInode);
             checkpoint.setFileMtime(fileMtime);
             checkpoint.setUpdatedAt(LocalDateTime.now());
 
-            // 3. 同步到数据库
             checkpointRepository.save(checkpoint);
             memoryCache.put(cacheKey, checkpoint);
 
-            // 4. 异步同步到Redis（不阻塞主流程）
             syncToRedisAsync(cacheKey, checkpoint);
 
         } catch (Exception e) {
@@ -170,13 +180,13 @@ public class CheckpointManager {
         try {
             LogSource source = new LogSource();
             source.setId(java.util.UUID.fromString(sourceId));
-            checkpointRepository.findBySourceIdAndFilePath(source.getId(), filePath)
-                    .ifPresent(checkpointRepository::delete);
+            List<LogCheckpoint> checkpoints = checkpointRepository.findAllBySourceIdAndFilePath(source.getId(), filePath);
+            for (LogCheckpoint checkpoint : checkpoints) {
+                checkpointRepository.delete(checkpoint);
+            }
 
-            // 从内存缓存移除
             memoryCache.remove(cacheKey);
 
-            // 从Redis删除
             try {
                 redisTemplate.delete(cacheKey);
             } catch (Exception e) {
@@ -185,7 +195,7 @@ public class CheckpointManager {
 
             log.info("Deleted checkpoint: sourceId={}, filePath={}", sourceId, filePath);
         } catch (Exception e) {
-            log.error("Failed to delete checkpoint: {}", e.getMessage());
+            log.error("Failed to delete checkpoint: sourceId={}, filePath={}, error={}", sourceId, filePath, e.getMessage());
         }
     }
 

@@ -41,20 +41,6 @@
             <i class="status-dot" />
             系统运行正常
           </span>
-
-          <el-dropdown @command="handleCommand">
-            <span class="user-info">
-              <el-icon><User /></el-icon>
-              <span v-show="!isCompact">管理员</span>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="settings">系统设置</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
         </div>
       </el-header>
 
@@ -75,7 +61,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import versionInfo from '../../version.json'
 import {
   Bell,
@@ -85,8 +70,7 @@ import {
   Document,
   HomeFilled,
   Monitor,
-  Setting,
-  User
+  Setting
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -159,23 +143,6 @@ const currentSection = computed(() => {
 })
 
 const currentTitle = computed(() => route.meta?.title ?? '首页')
-
-const commandMessages = Object.freeze({
-  profile: '个人中心功能开发中',
-  settings: '系统设置功能开发中',
-  logout: '退出成功'
-})
-
-const handleCommand = (command) => {
-  const message = commandMessages[command] ?? '功能开发中'
-
-  if (command === 'logout') {
-    ElMessage.success(message)
-    return
-  }
-
-  ElMessage.info(message)
-}
 </script>
 
 <style scoped>
@@ -332,23 +299,6 @@ const handleCommand = (command) => {
   border-radius: 50%;
   background: #2db271;
   box-shadow: 0 0 0 6px rgba(45, 178, 113, 0.15);
-}
-
-.user-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-  color: #2e3f5f;
-  cursor: pointer;
-  transition: background-color var(--transition-fast), transform var(--transition-fast);
-}
-
-.user-info:hover {
-  background: rgba(31, 102, 210, 0.09);
-  transform: scale(1.02);
 }
 
 .app-main {

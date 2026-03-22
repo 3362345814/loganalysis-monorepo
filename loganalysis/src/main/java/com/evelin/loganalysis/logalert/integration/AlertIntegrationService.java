@@ -33,9 +33,13 @@ public class AlertIntegrationService {
             String logLevel = event.getLogLevel();
             String sourceId = event.getSourceId() != null ? event.getSourceId().toString() : null;
             String sourceName = event.getSourceName();
+            
+            // 获取日志ID（使用eventId）和traceId
+            String logId = event.getEventId();
+            String traceId = parsedEvent != null ? parsedEvent.getTraceId() : null;
 
-            // 调用告警触发引擎检查是否触发告警
-            alertTriggerService.checkAndTrigger(logMessage, logLevel, sourceId, sourceName);
+            // 调用告警触发引擎检查是否触发告警，传入日志ID和traceId
+            alertTriggerService.checkAndTrigger(logMessage, logLevel, sourceId, sourceName, logId, traceId);
         } catch (Exception e) {
             log.error("告警检查失败: {}", event.getEventId(), e);
         }

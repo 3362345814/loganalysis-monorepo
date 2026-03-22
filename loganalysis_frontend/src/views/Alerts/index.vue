@@ -140,19 +140,10 @@
             {{ formatDateTime(row.triggeredAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="assignedToName" label="处理人" width="120" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleView(row)">查看</el-button>
             <el-button
-              v-if="row.status === 'PENDING'"
-              link
-              type="success"
-              size="small"
-              @click="handleAcknowledge(row)"
-            >确认</el-button>
-            <el-button
-              v-if="row.status === 'ACKNOWLEDGED'"
               link
               type="warning"
               size="small"
@@ -202,8 +193,7 @@
         <el-descriptions-item label="触发值" :span="2">
           <div class="content-box">{{ currentAlert.triggerValue }}</div>
         </el-descriptions-item>
-        <el-descriptions-item label="处理人">{{ currentAlert.assignedToName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="解决备注">{{ currentAlert.resolutionNote || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="解决备注" :span="2">{{ currentAlert.resolutionNote || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
         <div style="display: flex; justify-content: space-between; width: 100%;">
@@ -217,23 +207,26 @@
               查看聚合组
             </el-button>
             <el-button
-              v-else-if="currentAlert?.sourceIds?.length > 0"
+              v-if="currentAlert?.logId"
               type="primary"
               plain
-              @click="jumpToLogs"
+              @click="showLogDetail"
             >
-              查看日志
+              查看日志详情
+            </el-button>
+            <el-button
+              v-if="currentAlert?.traceId"
+              type="primary"
+              plain
+              @click="openTraceTimeline"
+            >
+              链路追踪
             </el-button>
           </div>
           <div>
             <el-button @click="detailDialogVisible = false">关闭</el-button>
             <el-button
-              v-if="currentAlert?.status === 'PENDING'"
-              type="primary"
-              @click="handleAcknowledge(currentAlert)"
-            >确认告警</el-button>
-            <el-button
-              v-if="currentAlert?.status === 'ACKNOWLEDGED'"
+              v-if="currentAlert?.status !== 'RESOLVED'"
               type="success"
               @click="handleResolve(currentAlert)"
             >解决告警</el-button>
@@ -259,16 +252,48 @@
         <el-button type="primary" @click="confirmResolve">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 日志解析详情对话框 -->
+    <el-dialog v-model="parsedInfoVisible" title="日志解析信息" width="600px" top="10vh">
+      <div class="parsed-info-content">
+        <div class="parsed-info-summary">
+          <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
+        </div>
+        <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
+          <el-table-column prop="key" label="字段名" width="120">
+            <template #default="{ row }">
+              <span class="field-key">{{ formatFieldKey(row.key) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="value" label="值">
+            <template #default="{ row }">
+              <span class="field-value">{{ formatFieldValue(row.value) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="parsedInfoVisible = false">关闭</el-button>
+        <el-button v-if="currentHoverTraceId" type="primary" @click="openTraceTimeline">
+          <el-icon><TraceIcon /></el-icon>
+          链路追踪
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 链路追踪时间线弹窗 -->
+    <TraceTimeline v-model="traceTimelineVisible" :traceId="currentAlert?.traceId" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting } from '@element-plus/icons-vue'
+import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting, MagicStick, Link as TraceIcon, Loading } from '@element-plus/icons-vue'
 import { alertRecordApi, alertStatisticsApi } from '@/api/alertApi'
-import { logSourceApi, projectApi } from '@/api'
+import { logSourceApi, projectApi, analysisApi, rawLogApi } from '@/api'
+import TraceTimeline from '@/components/TraceTimeline.vue'
 
 const router = useRouter()
 
@@ -306,6 +331,15 @@ const resolveDialogVisible = ref(false)
 const resolveForm = reactive({
   resolutionNote: ''
 })
+
+// 链路追踪相关状态
+const traceTimelineVisible = ref(false)
+
+// 日志详情相关状态
+const parsedInfoVisible = ref(false)
+const parsedInfoFields = ref({})
+const currentLog = ref(null)
+const currentHoverTraceId = ref('')
 
 // 获取统计数据
 const fetchStatistics = async () => {
@@ -436,6 +470,104 @@ const jumpToLogs = async () => {
     ElMessage.warning('无法获取日志源信息')
   }
 }
+
+// 打开链路追踪弹窗
+const openTraceTimeline = () => {
+  if (currentAlert.value?.traceId) {
+    traceTimelineVisible.value = true
+  } else {
+    ElMessage.warning('该告警没有traceId')
+  }
+}
+
+// 显示日志详情面板
+const showLogDetail = async () => {
+  try {
+    let logData = null
+    
+    if (currentAlert.value?.logId) {
+      const idRes = await rawLogApi.getById(currentAlert.value.logId)
+      if (idRes.data) {
+        logData = idRes.data
+      }
+    }
+    
+    if (!logData) {
+      ElMessage.warning('无法获取日志详情')
+      return
+    }
+    
+    const parsedFields = logData.parsedFields || {}
+    
+    const info = {}
+    for (const key in parsedFields) {
+      if (parsedFields[key] !== null && parsedFields[key] !== undefined) {
+        info[key] = parsedFields[key]
+      }
+    }
+    
+    if (Object.keys(info).length === 0 && logData.rawContent) {
+      info['rawContent'] = logData.rawContent
+    }
+    
+    parsedInfoFields.value = info
+    currentLog.value = logData
+    currentHoverTraceId.value = parsedFields.traceId || currentAlert.value?.traceId || ''
+    parsedInfoVisible.value = true
+  } catch (error) {
+    console.error('获取日志详情失败:', error)
+    ElMessage.error('获取日志详情失败')
+  }
+}
+
+// 关闭解析信息面板
+const closeParsedInfo = () => {
+  parsedInfoVisible.value = false
+}
+
+// 格式化字段名
+const formatFieldKey = (key) => {
+  const keyMap = {
+    logTime: '日志时间',
+    logLevel: '日志级别',
+    threadName: '线程名',
+    loggerName: '日志器',
+    className: '类名',
+    message: '消息',
+    exceptionType: '异常类型',
+    exceptionMessage: '异常信息',
+    traceId: 'TraceId',
+    spanId: 'SpanId',
+    requestId: '请求ID',
+    userId: '用户ID',
+    ip: 'IP地址',
+    url: '请求URL',
+    method: '请求方法',
+    statusCode: '状态码',
+    responseTime: '响应时间',
+    errorStack: '错误堆栈'
+  }
+  return keyMap[key] || key
+}
+
+// 格式化字段值
+const formatFieldValue = (value) => {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+// 获取解析信息表格数据
+const parsedInfoTableData = computed(() => {
+  const data = []
+  for (const key in parsedInfoFields.value) {
+    data.push({
+      key: key,
+      value: parsedInfoFields.value[key]
+    })
+  }
+  return data
+})
 
 // 确认告警
 const handleAcknowledge = async (row) => {
@@ -633,6 +765,45 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 13px;
   white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ai-analysis-loading {
+  padding: 20px;
+  text-align: center;
+  color: #409eff;
+}
+
+.ai-analysis-error {
+  margin-top: 16px;
+}
+
+.ai-analysis-result {
+  margin-top: 16px;
+}
+
+.parsed-info-content {
+  padding: 16px;
+}
+
+.parsed-info-summary {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.parsed-info-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.field-key {
+  font-weight: 500;
+  color: #606266;
+}
+
+.field-value {
+  color: #303133;
   word-break: break-all;
 }
 </style>

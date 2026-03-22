@@ -144,7 +144,9 @@ public class LogProcessingPipeline {
 
             // 步骤7: 告警检查
             if (processingConfig.isAlertEnabled()) {
-                checkAlertTrigger(parsedEvent);
+                // 注意：此处传入 null，因为 Pipeline 不负责保存日志
+                // 保存日志由 AsyncSaveService 异步完成，保存后可获取日志ID
+                checkAlertTrigger(parsedEvent, null);
             }
 
             result.setProcessTimeMs(System.currentTimeMillis() - startTime);
@@ -230,23 +232,25 @@ public class LogProcessingPipeline {
      * 检查并触发告警
      *
      * @param parsedEvent 解析后的日志事件
+     * @param logId 日志ID（可选）
      */
-    private void checkAlertTrigger(ParsedLogEvent parsedEvent) {
+    private void checkAlertTrigger(ParsedLogEvent parsedEvent, String logId) {
         try {
             String logMessage = parsedEvent.getMessage();
             String logLevel = parsedEvent.getLogLevel();
             String sourceId = parsedEvent.getSourceId();
             String sourceName = parsedEvent.getSourceName();
+            String traceId = parsedEvent.getTraceId();
 
-            // 调用告警触发服务检查规则
-            alertTriggerService.checkAndTrigger(logMessage, logLevel, sourceId, sourceName);
+            // 调用告警触发服务检查规则，传入日志ID和traceId
+            alertTriggerService.checkAndTrigger(logMessage, logLevel, sourceId, sourceName, logId, traceId);
 
             // 如果检测到异常事件，也触发告警（基于异常检测结果）
             if (parsedEvent.isAnomaly()) {
                 String anomalyMessage = String.format("[异常检测] %s (置信度: %.2f)",
                         parsedEvent.getAnomalyReason() != null ? parsedEvent.getAnomalyReason() : "检测到异常",
                         parsedEvent.getAnomalyScore());
-                alertTriggerService.checkAndTrigger(anomalyMessage, logLevel, sourceId, sourceName);
+                alertTriggerService.checkAndTrigger(anomalyMessage, logLevel, sourceId, sourceName, logId, traceId);
             }
         } catch (Exception e) {
             log.error("执行告警检查失败: {}", e.getMessage(), e);

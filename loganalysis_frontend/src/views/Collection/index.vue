@@ -391,9 +391,6 @@
         <el-form-item label="项目名称" prop="name">
           <el-input v-model="projectForm.name" placeholder="请输入项目名称" />
         </el-form-item>
-        <el-form-item label="项目代码" prop="code">
-          <el-input v-model="projectForm.code" placeholder="用于关联日志中的项目标识" />
-        </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="projectForm.description" type="textarea" :rows="2" placeholder="项目描述" />
         </el-form-item>
@@ -498,7 +495,6 @@ const filteredProjects = computed(() => {
 
 const projectForm = reactive({
   name: '',
-  code: '',
   description: '',
   owner: '',
   email: '',
@@ -506,8 +502,7 @@ const projectForm = reactive({
 })
 
 const projectRules = {
-  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
-  code: [{ required: true, message: '请输入项目代码', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
 }
 
 const form = ref({
@@ -633,7 +628,7 @@ const loadProjects = async () => {
 
 const handleCreateProject = () => {
   isProjectEdit.value = false
-  Object.assign(projectForm, { name: '', code: '', description: '', owner: '', email: '', enabled: true })
+  Object.assign(projectForm, { name: '', description: '', owner: '', email: '', enabled: true })
   projectDialogVisible.value = true
 }
 

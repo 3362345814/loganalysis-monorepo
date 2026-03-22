@@ -27,8 +27,18 @@ public interface CheckpointRepository extends JpaRepository<LogCheckpoint, UUID>
      * @param filePath 文件路径
      * @return 检查点信息
      */
-    @Query("SELECT c FROM LogCheckpoint c WHERE c.sourceId.id = :sourceId AND c.filePath = :filePath")
+    @Query("SELECT c FROM LogCheckpoint c WHERE c.sourceId.id = :sourceId AND c.filePath = :filePath ORDER BY c.updatedAt DESC")
     Optional<LogCheckpoint> findBySourceIdAndFilePath(@Param("sourceId") UUID sourceId, @Param("filePath") String filePath);
+
+    /**
+     * 根据日志源ID和文件路径查找所有检查点（用于处理重复数据）
+     *
+     * @param sourceId 日志源ID
+     * @param filePath 文件路径
+     * @return 检查点列表
+     */
+    @Query("SELECT c FROM LogCheckpoint c WHERE c.sourceId.id = :sourceId AND c.filePath = :filePath ORDER BY c.updatedAt DESC")
+    List<LogCheckpoint> findAllBySourceIdAndFilePath(@Param("sourceId") UUID sourceId, @Param("filePath") String filePath);
 
     /**
      * 根据日志源ID查找所有检查点

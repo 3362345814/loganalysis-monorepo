@@ -15,6 +15,8 @@ public class AlertRecordCreateRequest {
 
     private UUID ruleId;
     private UUID aggregationId;
+    private String logId;
+    private String traceId;
     private List<UUID> sourceIds;
     private String title;
     private String content;

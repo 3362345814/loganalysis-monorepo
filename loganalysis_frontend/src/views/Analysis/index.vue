@@ -96,7 +96,6 @@
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="aggregationName" label="聚合组名称" min-width="150" />
         <el-table-column prop="rootCause" label="根因分析" min-width="250">
           <template #default="{ row }">
             <el-tooltip :content="row.rootCause" placement="top" :show-after="500">

@@ -43,9 +43,6 @@
         <el-form-item label="项目名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入项目名称" />
         </el-form-item>
-        <el-form-item label="项目代码" prop="code">
-          <el-input v-model="form.code" placeholder="用于关联日志中的项目标识" />
-        </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="项目描述" />
         </el-form-item>
@@ -82,7 +79,6 @@ const formRef = ref(null)
 
 const form = reactive({
   name: '',
-  code: '',
   description: '',
   owner: '',
   email: '',
@@ -90,8 +86,7 @@ const form = reactive({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
-  code: [{ required: true, message: '请输入项目代码', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
 }
 
 onMounted(() => {

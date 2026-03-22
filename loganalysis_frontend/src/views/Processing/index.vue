@@ -200,7 +200,7 @@
         <el-table-column prop="sourceName" label="日志源" width="120" show-overflow-tooltip />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="jumpToLogDetail(row)">查看</el-button>
+            <el-button type="primary" link @click="showParsedInfo(row)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -228,16 +228,73 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 解析信息面板 -->
+    <el-dialog v-model="parsedInfoVisible" title="日志解析信息" width="600px" top="10vh">
+      <div class="parsed-info-content">
+        <div class="parsed-info-summary">
+          <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
+        </div>
+        <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
+          <el-table-column prop="key" label="字段名" width="120">
+            <template #default="{ row }">
+              <span class="field-key">{{ formatFieldKey(row.key) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="value" label="值">
+            <template #default="{ row }">
+              <span class="field-value">{{ formatFieldValue(row.value) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="aiAnalysisLoading" class="ai-analysis-loading">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>正在分析...</span>
+        </div>
+        <div v-else-if="aiAnalysisError" class="ai-analysis-error">
+          <el-alert type="error" :closable="false" show-icon>
+            <template #title>
+              <span>分析失败</span>
+            </template>
+            <template #default>
+              <span>{{ aiAnalysisError }}</span>
+            </template>
+          </el-alert>
+        </div>
+        <div v-else-if="aiAnalysisResult" class="ai-analysis-result">
+          <el-alert type="success" :closable="false" show-icon>
+            <template #title>
+              <span>AI分析结果</span>
+            </template>
+            <template #default>
+              <span>{{ aiAnalysisResult }}</span>
+            </template>
+          </el-alert>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="parsedInfoVisible = false">关闭</el-button>
+        <el-button v-if="currentHoverTraceId" type="primary" @click="openTraceTimeline">
+          <el-icon><TraceIcon /></el-icon>
+          链路追踪
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 链路追踪时间线弹窗 -->
+    <TraceTimeline v-model="traceTimelineVisible" :traceId="currentHoverTraceId" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Refresh, MagicStick } from '@element-plus/icons-vue'
-import { aggregationApi, analysisApi, projectApi, logSourceApi } from '@/api'
-import { ElMessage } from 'element-plus'
+import { Refresh, MagicStick, Close, MagicStick as AiIcon, Link as TraceIcon, Loading } from '@element-plus/icons-vue'
+import { aggregationApi, analysisApi, projectApi, logSourceApi, rawLogApi } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
+import TraceTimeline from '@/components/TraceTimeline.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -247,6 +304,18 @@ const aggLoading = ref(false)
 const aggGroups = ref([])
 const aggTotal = ref(0)
 const aggSummary = ref({})
+
+// 解析信息面板状态
+const parsedInfoVisible = ref(false)
+const parsedInfoFields = ref({})
+const currentLog = ref(null)
+const currentHoverTraceId = ref('')
+const aiAnalysisLoading = ref(false)
+const aiAnalysisResult = ref('')
+const aiAnalysisError = ref('')
+
+// 链路追踪相关状态
+const traceTimelineVisible = ref(false)
 
 const projects = ref([])
 
@@ -432,59 +501,97 @@ const retryAnalysis = async (row) => {
   await triggerAnalysis(row)
 }
 
-// 跳转到日志详情页面
-const jumpToLogDetail = async (row) => {
-  // 优先使用 row 的信息，如果没有则从 currentGroup 获取
-  const sourceId = row.sourceId || currentGroup.value?.sourceId
-  const sourceName = row.sourceName || currentGroup.value?.sourceName
-
-  if (!sourceId) {
-    ElMessage.warning('无法获取日志源信息')
-    return
-  }
-
-  // 获取项目ID - 尝试从 currentGroup 获取，如果没有则通过 API 查询
-  let projectId = currentGroup.value?.projectId
-
-  // 如果没有项目ID，尝试通过日志源API获取
-  if (!projectId) {
-    try {
-      const sourceRes = await logSourceApi.getById(sourceId)
-      if (sourceRes.data && sourceRes.data.projectId) {
-        projectId = sourceRes.data.projectId
+// 显示日志解析信息面板
+const showParsedInfo = async (row) => {
+  try {
+    let logData = row
+    
+    if (!logData.parsedFields || Object.keys(logData.parsedFields).length === 0) {
+      const idRes = await rawLogApi.getById(row.id)
+      if (idRes.data) {
+        logData = idRes.data
       }
-    } catch (error) {
-      console.warn('获取日志源项目ID失败:', error)
     }
+    
+    const parsedFields = logData.parsedFields || {}
+    
+    const info = {}
+    for (const key in parsedFields) {
+      if (parsedFields[key] !== null && parsedFields[key] !== undefined) {
+        info[key] = parsedFields[key]
+      }
+    }
+    
+    if (Object.keys(info).length === 0 && logData.rawContent) {
+      info['rawContent'] = logData.rawContent
+    }
+    
+    parsedInfoFields.value = info
+    currentLog.value = logData
+    currentHoverTraceId.value = parsedFields.traceId || ''
+    aiAnalysisResult.value = ''
+    aiAnalysisError.value = ''
+    parsedInfoVisible.value = true
+  } catch (error) {
+    console.error('获取日志详情失败:', error)
+    ElMessage.error('获取日志详情失败')
   }
+}
 
-  // 构建查询参数 - 使用日志ID精确定位
-  const queryParams = {
-    sourceId: sourceId,
-    sourceName: sourceName
+// 关闭解析信息面板
+const closeParsedInfo = () => {
+  parsedInfoVisible.value = false
+}
+
+// 格式化字段名
+const formatFieldKey = (key) => {
+  const keyMap = {
+    logTime: '日志时间',
+    logLevel: '日志级别',
+    threadName: '线程名',
+    loggerName: '日志器',
+    className: '类名',
+    message: '消息',
+    exceptionType: '异常类型',
+    exceptionMessage: '异常信息',
+    traceId: 'TraceId',
+    spanId: 'SpanId',
+    requestId: '请求ID',
+    userId: '用户ID',
+    ip: 'IP地址',
+    url: '请求URL',
+    method: '请求方法',
+    statusCode: '状态码',
+    responseTime: '响应时间',
+    errorStack: '错误堆栈'
   }
+  return keyMap[key] || key
+}
 
-  // 添加项目ID
-  if (projectId) {
-    queryParams.projectId = projectId
+// 格式化字段值
+const formatFieldValue = (value) => {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+// 获取解析信息表格数据
+const parsedInfoTableData = computed(() => {
+  const data = []
+  for (const key in parsedInfoFields.value) {
+    data.push({
+      key: key,
+      value: parsedInfoFields.value[key]
+    })
   }
+  return data
+})
 
-  // 使用日志ID精确定位（优先使用ID，其次使用时间作为后备）
-  if (row.id) {
-    queryParams.highlightId = row.id
-  } else if (row.logTime || row.originalLogTime) {
-    // 如果没有ID，使用时间作为后备
-    queryParams.highlightTime = row.logTime || row.originalLogTime
+// 打开链路追踪
+const openTraceTimeline = () => {
+  if (currentHoverTraceId.value) {
+    traceTimelineVisible.value = true
   }
-
-  // 跳转到日志显示页面
-  router.push({
-    path: '/logs',
-    query: queryParams
-  })
-
-  // 关闭详情对话框
-  detailVisible.value = false
 }
 
 onMounted(() => {
@@ -556,5 +663,52 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.parsed-info-content {
+  padding: 16px;
+}
+
+.parsed-info-summary {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.parsed-info-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.field-key {
+  font-weight: 500;
+  color: #606266;
+}
+
+.field-value {
+  color: #303133;
+  word-break: break-all;
+}
+
+.parsed-info-footer {
+  padding: 16px;
+  border-top: 1px solid #ebeef5;
+  display: flex;
+  gap: 12px;
+}
+
+.ai-analysis-loading {
+  margin-top: 16px;
+  padding: 20px;
+  text-align: center;
+  color: #409eff;
+}
+
+.ai-analysis-error {
+  margin-top: 16px;
+}
+
+.ai-analysis-result {
+  margin-top: 16px;
 }
 </style>

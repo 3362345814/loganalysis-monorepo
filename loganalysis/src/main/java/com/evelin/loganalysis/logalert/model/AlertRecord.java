@@ -53,6 +53,18 @@ public class AlertRecord extends BaseEntity {
     private UUID aggregationId;
 
     /**
+     * 关联的日志ID（用于链路追踪）
+     */
+    @Column(name = "log_id", length = 100)
+    private String logId;
+
+    /**
+     * 链路追踪ID
+     */
+    @Column(name = "trace_id", length = 100)
+    private String traceId;
+
+    /**
      * 关联的日志源ID列表
      */
     @JdbcTypeCode(SqlTypes.JSON)

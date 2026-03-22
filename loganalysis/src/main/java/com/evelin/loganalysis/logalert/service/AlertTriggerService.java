@@ -33,8 +33,10 @@ public class AlertTriggerService {
      * @param logLevel   日志级别
      * @param sourceId   日志源ID
      * @param sourceName 日志源名称
+     * @param logId     日志ID（可选）
+     * @param traceId   链路追踪ID（可选）
      */
-    public void checkAndTrigger(String logMessage, String logLevel, String sourceId, String sourceName) {
+    public void checkAndTrigger(String logMessage, String logLevel, String sourceId, String sourceName, String logId, String traceId) {
         List<AlertRule> enabledRules = alertRuleService.getEnabledRules();
 
         for (AlertRule rule : enabledRules) {
@@ -59,9 +61,16 @@ public class AlertTriggerService {
             }
 
             if (matched) {
-                triggerAlert(rule, logMessage, logLevel, sourceId, sourceName);
+                triggerAlert(rule, logMessage, logLevel, sourceId, sourceName, logId, traceId);
             }
         }
+    }
+
+    /**
+     * 检查日志是否触发告警规则（无logId和traceId版本）
+     */
+    public void checkAndTrigger(String logMessage, String logLevel, String sourceId, String sourceName) {
+        checkAndTrigger(logMessage, logLevel, sourceId, sourceName, null, null);
     }
 
     /**
@@ -113,7 +122,7 @@ public class AlertTriggerService {
      * 触发告警
      */
     private void triggerAlert(AlertRule rule, String logMessage, String logLevel,
-                              String sourceId, String sourceName) {
+                              String sourceId, String sourceName, String logId, String traceId) {
         try {
             String title = rule.getAlertTitle();
             String content = rule.getAlertMessage();
@@ -148,7 +157,9 @@ public class AlertTriggerService {
                     1,
                     List.of(sourceName),
                     null,  // aggregationId - 暂时不传
-                    sourceIdList
+                    sourceIdList,
+                    logId,
+                    traceId
             );
 
             // 发送通知
