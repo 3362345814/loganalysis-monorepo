@@ -61,7 +61,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
-import versionInfo from '../../version.json'
+import versionInfo from './version.json'
 import {
   Bell,
   Collection,
