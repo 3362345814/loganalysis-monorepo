@@ -145,12 +145,6 @@ CLI 运行时文件目录：
 - `backend_image` / `frontend_image`：可直接指定完整镜像名覆盖默认值
 - `ports.*`：各组件端口
 
-如果你的镜像发布在其他 GHCR 命名空间，先设置：
-
-```bash
-loganalysis config set image_registry ghcr.io/<your-owner>
-```
-
 ## 从源码运行（开发者）
 
 ### CLI
@@ -209,5 +203,4 @@ loganalysis config set ports.backend 18080
 ### 5) Windows 下报 `Null 值表达式`、`irm 不是命令`
 
 - `irm` 需要在 PowerShell 中执行，不是 `cmd`
-- 已知脚本边界问题已修复，建议使用最新 tag 的安装脚本
 
