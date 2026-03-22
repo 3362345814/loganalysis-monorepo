@@ -126,9 +126,19 @@
         </el-form-item>
         <el-form-item label="类型" prop="sourceType">
           <el-select v-model="form.sourceType" placeholder="请选择类型">
-            <el-option label="本地文件" value="LOCAL_FILE" />
             <el-option label="SSH远程" value="SSH" />
+            <el-option label="本地文件" value="LOCAL_FILE" />
           </el-select>
+          <el-alert
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-top: 8px; padding: 8px 12px;"
+          >
+            <template #title>
+              提示：如果项目使用 CLI 部署（运行在 Docker 容器中），则只能使用 SSH 方式采集日志
+            </template>
+          </el-alert>
         </el-form-item>
         
         <!-- SSH配置 -->
@@ -145,6 +155,19 @@
           <el-form-item label="密码" prop="password">
             <el-input v-model="form.password" type="password" placeholder="SSH密码" show-password />
           </el-form-item>
+          <el-form-item>
+            <el-button
+              type="info"
+              :icon="Connection"
+              :loading="testingSsh"
+              @click="handleTestSsh"
+            >
+              测试SSH连接
+            </el-button>
+            <span v-if="sshTestResult !== null" class="test-result" :class="sshTestResult ? 'success' : 'error'">
+              {{ sshTestResult ? '连接成功' : '连接失败' }}
+            </span>
+          </el-form-item>
         </template>
         
         <el-form-item label="日志格式" prop="logFormat">
@@ -159,8 +182,11 @@
         <!-- Log4j Log 配置 -->
         <template v-if="form.logFormat === 'LOG4J'">
           <el-form-item label="日志路径" prop="paths">
-            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" />
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" @blur="handleAutoTestPath" />
             <span class="form-tip">Log4j日志只支持单个文件路径，不支持通配符</span>
+            <span v-if="pathTestResult !== null" class="test-result" :class="pathTestResult ? 'success' : 'error'">
+              {{ pathTestMessage }}
+            </span>
           </el-form-item>
           <el-form-item label="日志格式" prop="logFormatPattern">
             <el-input 
@@ -209,11 +235,14 @@
         <!-- Nginx Log 配置 -->
         <template v-if="form.logFormat === 'NGINX'">
           <el-form-item label="Access日志" prop="paths">
-            <el-input v-model="form.paths[0]" placeholder="如: /var/log/nginx/access.log" />
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/nginx/access.log" @blur="handleAutoTestPath" />
           </el-form-item>
           <el-form-item label="Error日志" prop="paths">
-            <el-input v-model="form.paths[1]" placeholder="如: /var/log/nginx/error.log" />
+            <el-input v-model="form.paths[1]" placeholder="如: /var/log/nginx/error.log" @blur="handleAutoTestPath" />
           </el-form-item>
+          <span v-if="pathTestResult !== null" class="test-result" :class="pathTestResult ? 'success' : 'error'" style="margin-left: 100px;">
+            {{ pathTestMessage }}
+          </span>
           <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 15px;">
             <template #title>
               如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
@@ -224,8 +253,11 @@
         <!-- JSON Log 配置 -->
         <template v-if="form.logFormat === 'JSON'">
           <el-form-item label="日志路径" prop="paths">
-            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" />
+            <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" @blur="handleAutoTestPath" />
             <span class="form-tip">JSON日志只支持单个文件路径，不支持通配符</span>
+            <span v-if="pathTestResult !== null" class="test-result" :class="pathTestResult ? 'success' : 'error'">
+              {{ pathTestMessage }}
+            </span>
           </el-form-item>
           <el-alert type="info" :closable="false" show-icon style="margin-bottom: 15px;">
             <template #title>
@@ -424,7 +456,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Refresh, Edit, Delete, VideoPlay, VideoPause, FolderOpened, WarningFilled, Search, Folder, Check } from '@element-plus/icons-vue'
+import { Plus, Refresh, Edit, Delete, VideoPlay, VideoPause, FolderOpened, WarningFilled, Search, Folder, Check, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { logSourceApi, projectApi } from '@/api'
@@ -447,6 +479,11 @@ const isProjectEdit = ref(false)
 const projectSubmitting = ref(false)
 const projectSelectDialogVisible = ref(false)
 const projectSearchText = ref('')
+const testingSsh = ref(false)
+const sshTestResult = ref(null)
+const testingPath = ref(false)
+const pathTestResult = ref(null)
+const pathTestMessage = ref('')
 
 const filteredProjects = computed(() => {
   if (!projectSearchText.value) {
@@ -477,7 +514,7 @@ const form = ref({
   id: null,
   name: '',
   projectId: null,
-  sourceType: 'LOCAL_FILE',
+  sourceType: 'SSH',
   host: '',
   port: 22,
   username: '',
@@ -487,6 +524,10 @@ const form = ref({
   logFormat: 'LOG4J',
   logFormatPattern: '',
   description: '',
+  desensitizationEnabled: false,
+  aggregationLevel: 'WARN',
+  enabledRuleIds: [],
+  customRules: [],
   config: {
     accessLogPath: '',
     errorLogPath: ''
@@ -625,11 +666,17 @@ const handleCreateSource = () => {
     return
   }
   isEdit.value = false
+  // 重置测试结果
+  testingSsh.value = false
+  sshTestResult.value = null
+  testingPath.value = false
+  pathTestResult.value = null
+  pathTestMessage.value = ''
   form.value = {
     id: null,
     name: '',
     projectId: currentProject.value.id,
-    sourceType: 'LOCAL_FILE',
+    sourceType: 'SSH',
     host: '',
     port: 22,
     username: '',
@@ -640,7 +687,7 @@ const handleCreateSource = () => {
     logFormatPattern: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n',
     description: '',
     desensitizationEnabled: false,
-    aggregationLevel: null,
+    aggregationLevel: 'WARN',
     enabledRuleIds: [],
     customRules: [],
     config: {
@@ -675,7 +722,13 @@ const selectProject = (project) => {
 
 const handleEdit = (row) => {
   isEdit.value = true
-  
+  // 重置测试结果
+  testingSsh.value = false
+  sshTestResult.value = null
+  testingPath.value = false
+  pathTestResult.value = null
+  pathTestMessage.value = ''
+
   let parsedPaths = []
   if (row.paths && Array.isArray(row.paths)) {
     parsedPaths = row.paths
@@ -730,6 +783,88 @@ const applySpringBootPattern = () => {
 // 应用 Log4j 格式
 const applyLog4jPattern = () => {
   form.value.logFormatPattern = '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
+}
+
+// 测试SSH连接
+const handleTestSsh = async () => {
+  if (!form.value.host) {
+    ElMessage.warning('请输入主机地址')
+    return
+  }
+  if (!form.value.username) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (!form.value.password) {
+    ElMessage.warning('请输入密码')
+    return
+  }
+
+  testingSsh.value = true
+  sshTestResult.value = null
+  try {
+    const config = {
+      host: form.value.host,
+      port: form.value.port || 22,
+      username: form.value.username,
+      password: form.value.password
+    }
+    const res = await logSourceApi.testSshConnection(config)
+    sshTestResult.value = res.data.success
+    if (res.data.success) {
+      ElMessage.success(res.data.message || 'SSH连接成功')
+    } else {
+      ElMessage.error(res.data.message || 'SSH连接失败')
+    }
+  } catch (error) {
+    sshTestResult.value = false
+    ElMessage.error(error.message || 'SSH连接测试失败')
+  } finally {
+    testingSsh.value = false
+  }
+}
+
+// 测试日志路径是否存在（自动验证）
+const handleAutoTestPath = async () => {
+  // 防抖：300ms 内不重复验证
+  if (handleAutoTestPath.lastTime && Date.now() - handleAutoTestPath.lastTime < 300) {
+    return
+  }
+  handleAutoTestPath.lastTime = Date.now()
+
+  const paths = form.value.paths.filter(p => p && p.trim())
+  if (paths.length === 0) {
+    return
+  }
+
+  // 如果是 SSH 类型但没有配置 SSH，则跳过
+  if (form.value.sourceType === 'SSH') {
+    if (!form.value.host || !form.value.username || !form.value.password) {
+      return
+    }
+  }
+
+  testingPath.value = true
+  pathTestResult.value = null
+  pathTestMessage.value = ''
+  try {
+    const config = {
+      sourceType: form.value.sourceType,
+      paths: paths,
+      host: form.value.host,
+      port: form.value.port || 22,
+      username: form.value.username,
+      password: form.value.password
+    }
+    const res = await logSourceApi.testPathExists(config)
+    pathTestResult.value = res.data.success
+    pathTestMessage.value = res.data.message || (res.data.success ? '路径存在' : '路径不存在')
+  } catch (error) {
+    pathTestResult.value = false
+    pathTestMessage.value = error.message || '验证失败'
+  } finally {
+    testingPath.value = false
+  }
 }
 
 const handleSubmit = async () => {
@@ -979,5 +1114,20 @@ onMounted(() => {
   border-radius: 3px;
   color: #409eff;
   font-size: 12px;
+}
+
+.test-result {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.test-result.success {
+  color: #67c23a;
+}
+
+.test-result.error {
+  color: #f56c6c;
 }
 </style>

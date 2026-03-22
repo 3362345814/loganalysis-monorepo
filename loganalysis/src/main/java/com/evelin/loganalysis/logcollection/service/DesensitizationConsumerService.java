@@ -221,6 +221,12 @@ public class DesensitizationConsumerService {
             // 处理每条日志：解析、脱敏、事件检测、聚合、自动分析
             for (RawLogEvent event : toSave) {
                 try {
+                    // 如果启用了脱敏且已有脱敏结果，则直接用脱敏内容替换原始内容
+                    // 这样保存到数据库的就是脱敏后的日志，不保存原始日志
+                    if (Boolean.TRUE.equals(event.getMasked()) && event.getDesensitizedContent() != null) {
+                        event.setRawContent(event.getDesensitizedContent());
+                    }
+
                     // 调用完整的处理管道
                     var processingResult = logProcessingPipeline.process(event);
 

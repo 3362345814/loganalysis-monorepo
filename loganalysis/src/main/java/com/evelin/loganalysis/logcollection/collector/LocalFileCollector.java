@@ -672,7 +672,7 @@ public class LocalFileCollector extends AbstractLogCollector {
             }
         }
 
-        if (!ctx.multiLineBuffer.isEmpty() && ctx.multiLineBuffer.length() > 0) {
+        if (!ctx.multiLineBuffer.isEmpty() && !ctx.multiLineBuffer.isEmpty()) {
             flushMultiLineBufferForContext(ctx, filePath);
         }
     }

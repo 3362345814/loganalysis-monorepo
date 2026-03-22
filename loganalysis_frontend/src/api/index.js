@@ -91,27 +91,33 @@ export const projectApi = {
 export const logSourceApi = {
   // 获取所有日志源
   getAll: () => service.get('/collection/sources'),
-  
+
   // 根据项目ID获取日志源
   getByProjectId: (projectId) => service.get(`/collection/sources/project/${projectId}`),
-  
+
   // 获取单个日志源
   getById: (id) => service.get(`/collection/sources/${id}`),
-  
+
   // 创建日志源
   create: (data) => service.post('/collection/sources', data),
-  
+
   // 更新日志源
   update: (id, data) => service.put(`/collection/sources/${id}`, data),
-  
+
   // 删除日志源
   delete: (id) => service.delete(`/collection/sources/${id}`),
-  
+
   // 启动采集器
   startCollector: (id) => service.post(`/collection/collectors/${id}/start`),
-  
+
   // 停止采集器
-  stopCollector: (id) => service.post(`/collection/collectors/${id}/stop`)
+  stopCollector: (id) => service.post(`/collection/collectors/${id}/stop`),
+
+  // 测试SSH连接
+  testSshConnection: (config) => service.post('/collection/sources/test-ssh', config),
+
+  // 测试日志路径是否存在
+  testPathExists: (config) => service.post('/collection/sources/test-path', config)
 }
 
 // 原始日志相关

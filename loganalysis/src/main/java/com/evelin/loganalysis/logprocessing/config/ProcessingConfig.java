@@ -49,8 +49,10 @@ public class ProcessingConfig {
 
     /**
      * 是否启用敏感信息脱敏
+     * 注意：此配置已弃用，脱敏现在由日志源级别配置控制
+     * 脱敏逻辑统一在 DesensitizationConsumerService 中处理
      */
-    private boolean desensitizationEnabled = true;
+    private boolean desensitizationEnabled = false;
 
     /**
      * 是否启用事件识别

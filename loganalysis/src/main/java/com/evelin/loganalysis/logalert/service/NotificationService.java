@@ -62,24 +62,6 @@ public class NotificationService {
     @Value("${alert.notification.feishu.secret:}")
     private String defaultFeishuSecret;
 
-    @Value("${alert.notification.email.enabled:false}")
-    private boolean emailEnabled;
-
-    @Value("${alert.notification.email.smtp-host:}")
-    private String defaultSmtpHost;
-
-    @Value("${alert.notification.email.smtp-port:587}")
-    private int defaultSmtpPort;
-
-    @Value("${alert.notification.email.from:}")
-    private String defaultEmailFrom;
-
-    @Value("${alert.notification.email.username:}")
-    private String defaultEmailUsername;
-
-    @Value("${alert.notification.email.password:}")
-    private String defaultEmailPassword;
-
     /**
      * 获取渠道配置（优先从数据库读取，否则使用默认配置）
      */
@@ -194,18 +176,18 @@ public class NotificationService {
      */
     private void sendEmailNotification(String title, String content, AlertRule rule) {
         Map<String, String> config = getChannelConfig(NotificationChannel.EMAIL);
-        boolean isEnabled = "true".equals(config.get("_enabled")) || emailEnabled;
+        boolean isEnabled = "true".equals(config.get("_enabled"));
 
         if (!isEnabled) {
             log.warn("邮件通知未启用");
             return;
         }
 
-        String smtpHost = config.getOrDefault("smtpHost", defaultSmtpHost);
-        String smtpPort = config.getOrDefault("smtpPort", String.valueOf(defaultSmtpPort));
-        String username = config.getOrDefault("username", defaultEmailUsername);
-        String password = config.getOrDefault("password", defaultEmailPassword);
-        String from = config.getOrDefault("from", defaultEmailFrom);
+        String smtpHost = config.get("smtpHost");
+        String smtpPort = config.getOrDefault("smtpPort", "587");
+        String username = config.get("username");
+        String password = config.get("password");
+        String from = config.get("from");
         String recipientsStr = config.get("recipients");
 
         log.info("邮件配置 - smtpHost: {}, smtpPort: {}, username: {}, from: {}, recipients: {}", 

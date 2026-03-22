@@ -320,7 +320,7 @@ public class SshRemoteCollector extends AbstractLogCollector {
                 }
             }
 
-            if (lineBuilder.length() > 0) {
+            if (!lineBuilder.isEmpty()) {
                 String remainingLine = lineBuilder.toString();
                 if (!remainingLine.isEmpty()) {
                     long currentLineNumber = ++ctx.collectedLines;
