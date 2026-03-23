@@ -177,27 +177,21 @@ loganalysis status
 
 关键参数：
 
-- `--profile db|minimal|full`：部署档位（默认取 `config.default_profile`，初始为 `full`）
 - `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`，初始为 `latest`）
 - `--auto-port`：自动检测并避让端口冲突，且会把新端口写回配置文件
 
 示例：
 
 ```bash
-# 最小可用栈（推荐开发机）
-loganalysis up --profile minimal --version {{VERSION}}
+# 默认最新版本
+loganalysis up 
 
-# 完整栈 + 自动避让端口
-loganalysis up --profile full --version {{VERSION}} --auto-port
+# 自动避让端口（推荐）
+loganalysis up --auto-port
 
-# 仅拉起数据库依赖
-loganalysis up --profile db --version {{VERSION}}
+# 手动指定版本 + 自动避让端口
+loganalysis up -version {{VERSION}} --auto-port
 ```
-
-说明：
-
-- `--auto-port` 仅处理当前 profile 用到的端口（例如 `db` 只处理 `postgres/redis`）。
-- 启动成功后会更新 `~/.loganalysis/state.json` 记录当前 profile/version。
 
 ### 2) `down`
 
@@ -372,7 +366,6 @@ loganalysis -h
 ### 基础项
 
 - `project_name`：compose project 名（容器名前缀）
-- `default_profile`：默认 profile（`db|minimal|full`）
 - `default_version`：默认镜像 tag
 - `image_registry`：镜像仓库前缀
 - `backend_image`：后端完整镜像名（设置后优先于 `image_registry`）
