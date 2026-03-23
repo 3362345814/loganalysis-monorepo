@@ -54,13 +54,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.2.0/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.2.1/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.2.0/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.2.1/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -86,7 +86,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.2.0/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.2.1/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -94,7 +94,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.2.0/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.2.1/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -104,7 +104,7 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --profile minimal --version v0.2.0 --auto-port
+loganalysis up --profile minimal --version v0.2.1 --auto-port
 loganalysis status
 ```
 
@@ -116,7 +116,7 @@ loganalysis status
 ## 常用 CLI 命令
 
 ```bash
-loganalysis up --profile full --version v0.2.0 --auto-port
+loganalysis up --profile full --version v0.2.1 --auto-port
 loganalysis down
 loganalysis down --remove-volumes
 loganalysis status
@@ -125,7 +125,7 @@ loganalysis doctor
 loganalysis config list
 loganalysis config get release_repo
 loganalysis config set release_repo 3362345814/loganalysis-monorepo
-loganalysis upgrade --to v0.2.0
+loganalysis upgrade --to v0.2.1
 loganalysis uninstall
 loganalysis uninstall --purge-data
 ```
@@ -144,12 +144,6 @@ CLI 运行时文件目录：
 - `image_registry`：镜像仓库前缀（默认 `ghcr.io/3362345814`）
 - `backend_image` / `frontend_image`：可直接指定完整镜像名覆盖默认值
 - `ports.*`：各组件端口
-
-如果你的镜像发布在其他 GHCR 命名空间，先设置：
-
-```bash
-loganalysis config set image_registry ghcr.io/<your-owner>
-```
 
 ## 从源码运行（开发者）
 
@@ -209,5 +203,4 @@ loganalysis config set ports.backend 18080
 ### 5) Windows 下报 `Null 值表达式`、`irm 不是命令`
 
 - `irm` 需要在 PowerShell 中执行，不是 `cmd`
-- 已知脚本边界问题已修复，建议使用最新 tag 的安装脚本
 
