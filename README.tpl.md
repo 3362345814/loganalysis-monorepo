@@ -1,37 +1,98 @@
 # LogAnalysis Monorepo
 
-一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。\
+一个面向生产场景的日志采集、检索、聚合、智能分析与告警平台。
 本仓库包含：
 
 - 后端服务（Spring Boot）
 - 前端控制台（Vue 3 + Element Plus）
 - 跨平台运维 CLI（Go，基于 Docker Compose 一键部署）
 
-## 核心功能
+当前文档对应版本：`{{VERSION}}`（发布于 `{{RELEASE_DATE}}`）
 
-- 项目管理：多项目隔离，按项目管理采集源和日志数据
-- 日志采集：支持本地/远程日志源采集、启动停止采集器、采集状态查询
-- 日志查询：按条件检索、分页查询、Trace 维度追踪
-- 日志聚合：聚合组管理、上下文查看、未分析项管理
-- 智能分析：对聚合日志进行根因分析与建议生成（支持 LLM 配置）
-- 告警中心：规则管理、告警记录流转、趋势统计、级别分布
-- 通知渠道：钉钉 / 飞书 / 企业微信通知配置与测试
-- 一键部署运维：`up/down/status/logs/doctor/upgrade/uninstall`
+## 系统功能全景
 
-## 架构组件
+### 1) 项目与多租户隔离
 
-- `frontend`：Web 控制台
-- `backend`：API 服务（默认 `8080`）
-- `postgres`：关系型存储
-- `redis`：缓存/状态
-- `rabbitmq`：消息队列
-- `elasticsearch`、`kibana`、`minio`：`full` profile 下启用
+- 项目管理：支持项目创建、更新、启用/停用、删除
+- 资源隔离：日志源、日志查询、聚合与告警均可按项目维度隔离
+- 页面入口：`项目管理`、`日志采集`、`日志查询`、`告警管理` 都支持项目筛选
 
-CLI 提供 3 个部署 profile：
+### 2) 日志采集与接入治理
 
-- `db`：仅数据库依赖（Postgres + Redis）
-- `minimal`：核心可用栈（前后端 + Postgres + Redis + RabbitMQ）
-- `full`：完整栈（在 `minimal` 基础上增加 ES/Kibana/MinIO）
+- 日志源管理：创建/编辑/删除日志源，支持启用状态切换
+- 采集器生命周期：支持 `启动`、`停止`、`状态查询`、队列状态查看
+- 日志格式：`LOG4J(可自定义)`、`NGINX`、`JSON`
+- 接入前验证：支持 SSH 连通性测试、路径可达性测试
+- 采集增强：支持聚合、敏感信息脱敏规则配置
+
+### 3) 日志检索与 Trace 追踪
+
+- 原始日志查询：支持按日志源、时间范围、级别、关键词、分页查询
+- 单条日志详情：支持按日志 ID 查看完整内容
+- Trace 查询：支持按 `traceId` 分页查询、全量查询、数量统计
+- ES 高级检索（`full` profile）：支持关键字/高亮/时间分桶
+- 前端体验：日志终端视图 + 详情面板 + Trace 时间线联动
+
+### 4) 聚合与上下文还原
+
+- 聚合组检索：支持分页、状态过滤、严重级别过滤
+- 聚合组上下文：可提取错误前后 N 条上下文日志用于定位问题
+- 未分析聚合组：可快速筛选待 AI 处理的异常组
+- 运维清理：支持过期聚合组清理
+
+### 5) AI 智能分析
+
+- 手动触发分析：可对指定聚合组立即执行根因分析
+- 分析结果查询：支持按聚合 ID 获取结果、按最近 N 条查看
+- 分析策略配置：支持上下文行数、自动分析级别、自动分析开关
+- LLM 配置管理：支持多配置维护、默认配置、活跃配置、API Key 验证
+
+### 6) 告警中心与通知闭环
+
+- 规则管理：创建/更新/删除/分页查询规则，支持启停切换
+- 规则类型：关键词、正则、级别、阈值、组合条件
+- 告警记录流转：待处理、确认、分配、升级、解决
+- 统计分析：告警总览、趋势统计、级别分布
+- 通知渠道：钉钉、飞书、企业微信、邮箱、WebHook
+- 渠道配置：支持批量保存和 UPSERT（存在即更新）
+
+### 7) 运维与可观测性
+
+- 一键部署与销毁：`up/down/uninstall`
+- 运行态观测：`status/logs`
+- 环境诊断：`doctor`（Docker/Compose/端口/磁盘/镜像仓库连通性）
+- 版本升级：`upgrade`（支持主版本保护与回滚）
+
+## 架构组件与部署档位
+
+### 组件
+
+- `frontend`：Web 控制台（默认映射 `3000`）
+- `backend`：API 服务（默认映射 `8080`）
+- `postgres`：业务数据存储
+- `redis`：缓存与状态
+- `rabbitmq`：异步消息
+- `elasticsearch`、`kibana`、`minio`：完整检索与对象存储能力（仅 `full`）
+
+### 三种 profile
+
+- `db`：`postgres + redis`（仅依赖层）
+- `minimal`：`frontend + backend + postgres + redis + rabbitmq`（核心可用）
+- `full`：`minimal + elasticsearch + kibana + minio`（完整能力）
+
+### 默认端口
+
+- `frontend=3000`
+- `backend=8080`
+- `postgres=5432`
+- `redis=6379`
+- `rabbitmq=5672`
+- `rabbitmq_management=15672`
+- `elasticsearch=9200`
+- `elasticsearch_transport=9300`
+- `kibana=5601`
+- `minio_api=9000`
+- `minio_console=9001`
 
 ## 快速开始
 
@@ -47,9 +108,7 @@ docker --version
 docker compose version
 ```
 
-### 1) 安装 CLI（方式一：命令行拉取，一键安装）
-
-这是推荐方式，适合绝大多数用户。
+### 1) 安装 CLI（方式一：脚本一键安装，推荐）
 
 #### macOS / Linux
 
@@ -69,18 +128,13 @@ irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/{{VERSION
 loganalysis version
 ```
 
-如果终端提示找不到命令，重开终端后再试。
+### 2) 安装 CLI（方式二：下载二进制后直接运行）
 
-### 2) 安装 CLI（方式二：从 Release 直接下载后运行）
+适合内网分发、临时机器、或不希望改 PATH 的场景。
 
-适合内网环境、手动分发、或不希望修改 PATH 的场景。
-
-1. 打开 Release 页面下载对应系统文件：
-   - `loganalysis-linux-amd64` / `loganalysis-linux-arm64`
-   - `loganalysis-darwin-amd64` / `loganalysis-darwin-arm64`
-   - `loganalysis-windows-amd64.exe` / `loganalysis-windows-arm64.exe`
-2. （可选）下载 `checksums.txt` 并校验
-3. 直接运行二进制
+1. 打开 Release 页面下载对应系统文件
+2. （可选）下载 `checksums.txt` 做校验
+3. 直接执行二进制
 
 示例（Windows PowerShell）：
 
@@ -100,7 +154,7 @@ chmod +x /tmp/loganalysis
 /tmp/loganalysis doctor
 ```
 
-### 3) 启动系统
+### 3) 首次启动（推荐顺序）
 
 ```bash
 loganalysis doctor
@@ -113,37 +167,285 @@ loganalysis status
 - 前端：<http://localhost:3000>
 - 后端：<http://localhost:8080>
 
-## 常用 CLI 命令
+## CLI 关键字详解（命令手册）
+
+> 查看总帮助：`loganalysis help`
+
+### 1) `up`
+
+用途：按 profile 渲染并启动 Docker Compose 栈。
+
+关键参数：
+
+- `--profile db|minimal|full`：部署档位（默认取 `config.default_profile`，初始为 `full`）
+- `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`，初始为 `latest`）
+- `--auto-port`：自动检测并避让端口冲突，且会把新端口写回配置文件
+
+示例：
 
 ```bash
+# 最小可用栈（推荐开发机）
+loganalysis up --profile minimal --version {{VERSION}}
+
+# 完整栈 + 自动避让端口
 loganalysis up --profile full --version {{VERSION}} --auto-port
+
+# 仅拉起数据库依赖
+loganalysis up --profile db --version {{VERSION}}
+```
+
+说明：
+
+- `--auto-port` 仅处理当前 profile 用到的端口（例如 `db` 只处理 `postgres/redis`）。
+- 启动成功后会更新 `~/.loganalysis/state.json` 记录当前 profile/version。
+
+### 2) `down`
+
+用途：停止当前栈并移除 orphan 容器。
+
+关键参数：
+
+- `--remove-volumes`：同时删除 compose 相关 volumes（数据会丢失）
+
+示例：
+
+```bash
+# 保留数据，停止服务
 loganalysis down
+
+# 连同 volumes 一起删除
 loganalysis down --remove-volumes
+```
+
+### 3) `status`
+
+用途：查看当前栈容器状态（等价于 compose `ps`）。
+
+示例：
+
+```bash
 loganalysis status
+```
+
+### 4) `logs`
+
+用途：查看容器日志，支持追踪输出。
+
+关键参数：
+
+- `[service]`：可选服务名，如 `frontend`、`backend`、`postgres`、`redis`、`rabbitmq`、`elasticsearch`、`kibana`、`minio`
+- `-f`：持续跟随日志
+- `--tail N`：显示最近 N 行（默认 `200`）
+
+示例：
+
+```bash
+# 查看 backend 最近 300 行日志
+loganalysis logs backend --tail 300
+
+# 持续跟踪 backend
 loganalysis logs backend -f
+
+# 查看所有服务的最近日志
+loganalysis logs --tail 100
+```
+
+### 5) `doctor`
+
+用途：环境预检，帮助定位“启动失败/连通性失败/端口冲突”问题。
+
+会检查：
+
+- `docker` 命令是否存在
+- `docker compose` 是否可用
+- Docker daemon 是否运行
+- `ghcr.io:443` 连通性
+- 配置端口是否被占用
+- Docker 磁盘统计是否可读取
+- 数据目录剩余磁盘空间（低于 5GB 会报 FAIL）
+
+示例：
+
+```bash
 loganalysis doctor
-loganalysis config list
-loganalysis config get release_repo
-loganalysis config set release_repo 3362345814/loganalysis-monorepo
+```
+
+### 6) `config`
+
+用途：管理 CLI 配置。
+
+子命令：
+
+- `loganalysis config list`：打印全部配置 JSON
+- `loganalysis config get <key>`：读取单项配置
+- `loganalysis config set <key> <value>`：更新配置
+- `loganalysis config path`：输出配置文件路径
+
+示例：
+
+```bash
+# 查看配置文件路径
+loganalysis config path
+
+# 查看当前默认 profile
+loganalysis config get default_profile
+
+# 修改默认 profile
+loganalysis config set default_profile minimal
+
+# 修改镜像仓库前缀
+loganalysis config set image_registry ghcr.io/3362345814
+
+# 修改前端端口
+loganalysis config set ports.frontend 13000
+```
+
+### 7) `upgrade`
+
+用途：升级运行栈（必要时回滚），并尝试自更新 CLI 二进制。
+
+关键参数：
+
+- `--to vX.Y.Z|latest`：目标版本（默认 `latest`）
+- `--allow-major`：允许跨主版本升级（例如 `v1.x -> v2.x`）
+
+示例：
+
+```bash
+# 升级到最新 release（自动解析）
+loganalysis upgrade --to latest
+
+# 升级到指定版本
 loganalysis upgrade --to {{VERSION}}
+
+# 允许主版本升级
+loganalysis upgrade --to v2.0.0 --allow-major
+```
+
+说明：
+
+- 默认会阻止主版本变更，避免误升级。
+- 升级失败会尝试回滚到旧版本。
+
+### 8) `uninstall`
+
+用途：卸载运行态文件，可选彻底清理数据。
+
+关键参数：
+
+- `--purge-data`：删除 `~/.loganalysis`（包括配置、状态和数据）
+
+示例：
+
+```bash
+# 只清理 runtime/state，保留配置和数据
 loganalysis uninstall
+
+# 彻底清理（不可恢复）
 loganalysis uninstall --purge-data
 ```
 
-## 关键配置说明
+### 9) `version`
 
-CLI 运行时文件目录：
+用途：输出 CLI 版本、commit、构建时间。
+
+示例：
+
+```bash
+loganalysis version
+```
+
+### 10) `help`
+
+用途：查看命令帮助。
+
+示例：
+
+```bash
+loganalysis help
+loganalysis --help
+loganalysis -h
+```
+
+## `config` 支持的全部 key
+
+### 基础项
+
+- `project_name`：compose project 名（容器名前缀）
+- `default_profile`：默认 profile（`db|minimal|full`）
+- `default_version`：默认镜像 tag
+- `image_registry`：镜像仓库前缀
+- `backend_image`：后端完整镜像名（设置后优先于 `image_registry`）
+- `frontend_image`：前端完整镜像名（设置后优先于 `image_registry`）
+- `release_repo`：升级与自更新使用的 GitHub 仓库（形如 `owner/repo`）
+- `data_dir`：运行数据目录
+
+### 端口项
+
+- `ports.frontend`
+- `ports.backend`
+- `ports.postgres`
+- `ports.redis`
+- `ports.rabbitmq`
+- `ports.rabbitmq_management`
+- `ports.elasticsearch`
+- `ports.elasticsearch_transport`
+- `ports.kibana`
+- `ports.minio_api`
+- `ports.minio_console`
+
+示例（批量调整常见端口）：
+
+```bash
+loganalysis config set ports.frontend 13000
+loganalysis config set ports.backend 18080
+loganalysis config set ports.postgres 15432
+loganalysis config set ports.redis 16379
+```
+
+## 常见运维操作示例
+
+### 场景 1：本机已有 3000/8080，被占用
+
+```bash
+loganalysis up --profile minimal --version {{VERSION}} --auto-port
+loganalysis status
+loganalysis config get ports.frontend
+loganalysis config get ports.backend
+```
+
+### 场景 2：只需数据库依赖，给本地开发使用
+
+```bash
+loganalysis up --profile db --version {{VERSION}}
+loganalysis logs postgres --tail 100
+```
+
+### 场景 3：排查后端启动失败
+
+```bash
+loganalysis doctor
+loganalysis logs backend --tail 300
+loganalysis logs backend -f
+```
+
+### 场景 4：升级并验证
+
+```bash
+loganalysis upgrade --to {{VERSION}}
+loganalysis status
+loganalysis version
+```
+
+## 运行时文件与目录
+
+CLI 默认使用 `~/.loganalysis`：
 
 - 配置：`~/.loganalysis/config.json`
 - 状态：`~/.loganalysis/state.json`
 - 运行时 Compose：`~/.loganalysis/runtime/compose.yaml`
-
-常用配置项：
-
-- `release_repo`：CLI 升级/自更新使用的 GitHub Release 仓库
-- `image_registry`：镜像仓库前缀（默认 `ghcr.io/3362345814`）
-- `backend_image` / `frontend_image`：可直接指定完整镜像名覆盖默认值
-- `ports.*`：各组件端口
+- 升级回滚备份：`~/.loganalysis/runtime/compose.backup.yaml`
+- 默认数据目录：`~/.loganalysis/data`
 
 ## 从源码运行（开发者）
 
@@ -171,7 +473,7 @@ npm install
 npm run dev
 ```
 
-## 常见问题（FAQ）
+## FAQ
 
 ### 1) `loganalysis` 命令找不到
 
@@ -181,10 +483,10 @@ npm run dev
 
 ### 2) `docker daemon is not ready`
 
-- 确认 Docker Desktop 已启动并处于 Running
-- 重新执行：`loganalysis doctor`
+- 确认 Docker Desktop 已启动并为 Running
+- 执行：`loganalysis doctor`
 
-### 3) 端口冲突（3000/8080 等已占用）
+### 3) 端口冲突（3000/8080 等）
 
 - 启动时加 `--auto-port` 自动避让
 - 或手工改端口：
@@ -196,11 +498,10 @@ loganalysis config set ports.backend 18080
 
 ### 4) GitHub/GHCR 网络波动导致下载失败
 
-- 重试安装命令（很多情况下可直接恢复）
-- 先执行 `loganalysis doctor` 看 `registry connectivity`
+- 先执行 `loganalysis doctor` 查看 `registry connectivity`
+- 重试安装/升级命令
 - 必要时切换网络或代理后重试
 
-### 5) Windows 下报 `Null 值表达式`、`irm 不是命令`
+### 5) Windows 下报 `irm 不是命令` 或 `网络错误`
 
-- `irm` 需要在 PowerShell 中执行，不是 `cmd`
-
+- `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
