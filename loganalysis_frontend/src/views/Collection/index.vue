@@ -734,8 +734,8 @@ const handleEdit = (row) => {
       parsedPaths = [...parsedPaths, ...patterns]
     }
   }
-  
-  form.value = { 
+
+  form.value = {
     ...row,
     paths: parsedPaths,
     desensitizationEnabled: row.desensitizationEnabled || false,
@@ -866,10 +866,76 @@ const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
 
+  // SSH 类型：点击确定时先执行连接和路径测试
+  if (form.value.sourceType === 'SSH') {
+    const paths = form.value.paths?.filter(p => p && p.trim()) || []
+    if (!form.value.host || !form.value.username || !form.value.password) {
+      ElMessage.warning('请填写完整的 SSH 连接信息')
+      return
+    }
+    if (paths.length === 0) {
+      ElMessage.warning('请填写日志路径')
+      return
+    }
+
+    // 1. 测试 SSH 连接
+    testingSsh.value = true
+    sshTestResult.value = null
+    let sshOk = false
+    try {
+      const res = await logSourceApi.testSshConnection({
+        host: form.value.host,
+        port: form.value.port || 22,
+        username: form.value.username,
+        password: form.value.password
+      })
+      sshOk = res.data.success
+      sshTestResult.value = sshOk
+      if (!sshOk) {
+        ElMessage.error('SSH 连接失败: ' + (res.data.message || '连接失败'))
+      }
+    } catch (error) {
+      sshTestResult.value = false
+      ElMessage.error('SSH 连接失败: ' + (error.message || '连接失败'))
+    } finally {
+      testingSsh.value = false
+    }
+    if (!sshOk) return
+
+    // 2. 测试路径是否存在
+    testingPath.value = true
+    pathTestResult.value = null
+    pathTestMessage.value = ''
+    let pathOk = false
+    try {
+      const res = await logSourceApi.testPathExists({
+        sourceType: 'SSH',
+        paths: paths,
+        host: form.value.host,
+        port: form.value.port || 22,
+        username: form.value.username,
+        password: form.value.password
+      })
+      pathOk = res.data.success
+      pathTestResult.value = pathOk
+      pathTestMessage.value = res.data.message || (pathOk ? '路径存在' : '路径不存在')
+      if (!pathOk) {
+        ElMessage.error('路径验证失败: ' + (res.data.message || '路径不存在'))
+      }
+    } catch (error) {
+      pathTestResult.value = false
+      pathTestMessage.value = error.message || '验证失败'
+      ElMessage.error('路径验证失败: ' + (error.message || '验证失败'))
+    } finally {
+      testingPath.value = false
+    }
+    if (!pathOk) return
+  }
+
   submitting.value = true
   try {
     const submitData = { ...form.value }
-    
+
     if (submitData.logFormat === 'NGINX') {
       if (submitData.paths && submitData.paths.length >= 2) {
         submitData.config = {

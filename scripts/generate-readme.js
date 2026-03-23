@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const versionJson = JSON.parse(fs.readFileSync('version.json', 'utf-8'));
+const versionJson = JSON.parse(fs.readFileSync('loganalysis_frontend/src/version.json', 'utf-8'));
 
 const template = fs.readFileSync('README.tpl.md', 'utf-8');
 

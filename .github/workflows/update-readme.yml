@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'version.json'
+      - 'loganalysis_frontend/src/version.json'
 
 permissions:
   contents: write

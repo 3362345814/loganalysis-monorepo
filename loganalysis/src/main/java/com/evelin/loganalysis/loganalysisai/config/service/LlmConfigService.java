@@ -182,6 +182,15 @@ public class LlmConfigService {
         dto.setEnabled(entity.getEnabled());
         dto.setIsDefault(entity.getIsDefault());
         dto.setRemark(entity.getRemark());
+
+        // 返回脱敏后的 API Key，前端可据此判断是否有保存的 Key
+        String rawApiKey = entity.getApiKey();
+        if (rawApiKey != null && !rawApiKey.isEmpty()) {
+            dto.setMaskedApiKey("******" + rawApiKey.substring(rawApiKey.length() - 4));
+        } else {
+            dto.setMaskedApiKey(null);
+        }
+
         return dto;
     }
     

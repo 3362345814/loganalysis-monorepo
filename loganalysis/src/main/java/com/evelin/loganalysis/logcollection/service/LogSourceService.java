@@ -427,6 +427,7 @@ public class LogSourceService {
         
         response.setHost(logSource.getHost());
         response.setPort(logSource.getPort());
+        response.setUsername(logSource.getUsername());
         response.setEncoding(logSource.getEncoding());
         response.setEnabled(logSource.getEnabled());
         response.setStatus(logSource.getStatus() != null ? logSource.getStatus().name() : null);
@@ -446,6 +447,10 @@ public class LogSourceService {
             Optional<Project> projectOpt = projectRepository.findById(logSource.getProjectId());
             projectOpt.ifPresent(project -> response.setProjectName(project.getName()));
         }
+
+        // 返回原始密码
+        response.setPassword(logSource.getPassword());
+
         return response;
     }
 }

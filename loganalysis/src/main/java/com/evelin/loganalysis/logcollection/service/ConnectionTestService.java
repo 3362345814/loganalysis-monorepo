@@ -3,6 +3,7 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.dto.ConnectionTestRequest;
 import com.evelin.loganalysis.logcollection.dto.ConnectionTestResponse;
 import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
@@ -11,7 +12,11 @@ import com.jcraft.jsch.SftpException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -169,13 +174,94 @@ public class ConnectionTestService {
             if (path == null || path.trim().isEmpty()) {
                 continue;
             }
+            String trimmedPath = path.trim();
+            boolean hasBackslash = trimmedPath.contains("\\");
+            String normalizedPath = trimmedPath.replace("\\", "/");
+
             try {
-                sftpChannel.stat(path.trim());
+                sftpChannel.stat(trimmedPath);
                 pathResults.put(path, true);
                 existingPaths.add(path);
             } catch (SftpException e) {
                 pathResults.put(path, false);
                 missingPaths.add(path);
+
+                // If backslash path failed, try forward-slash normalization
+                if (hasBackslash) {
+                    try {
+                        sftpChannel.stat(normalizedPath);
+                        pathResults.put(path, true);
+                        existingPaths.add(path);
+                        missingPaths.remove(path);
+                    } catch (SftpException e2) {
+                        // Normalized path also failed — Windows OpenSSH SFTP home dir restriction.
+                        // Try stripping the SFTP home directory prefix to get a relative path.
+                        try {
+                            String pwd = sftpChannel.pwd();
+                            String relativeToHome = normalizedPath;
+                            String pwdWithoutSlash = (pwd != null && pwd.startsWith("/")) ? pwd.substring(1) : pwd;
+                            if (pwdWithoutSlash != null && normalizedPath.toLowerCase().startsWith(pwdWithoutSlash.toLowerCase())) {
+                                relativeToHome = normalizedPath.substring(pwdWithoutSlash.length());
+                                if (relativeToHome.startsWith("/")) {
+                                    relativeToHome = relativeToHome.substring(1);
+                                }
+                            }
+                            if (relativeToHome.isEmpty()) {
+                                relativeToHome = ".";
+                            }
+                            sftpChannel.stat(relativeToHome);
+                            pathResults.put(path, true);
+                            existingPaths.add(path);
+                            missingPaths.remove(path);
+                        } catch (SftpException statRelEx) {
+                            // Windows OpenSSH may support /D/ style paths for non-home drives
+                            if (normalizedPath.length() >= 3 && normalizedPath.charAt(1) == ':') {
+                                String driveLetter = String.valueOf(normalizedPath.charAt(0));
+                                String pathAfterDrive = normalizedPath.substring(3);
+                                String[] sshDriveFormats = {
+                                    "/" + driveLetter + "/" + pathAfterDrive,
+                                    "/" + driveLetter.toLowerCase() + "/" + pathAfterDrive,
+                                    "/" + driveLetter.toUpperCase() + "/" + pathAfterDrive
+                                };
+                                for (String sshPath : sshDriveFormats) {
+                                    try {
+                                        sftpChannel.stat(sshPath);
+                                        pathResults.put(path, true);
+                                        existingPaths.add(path);
+                                        missingPaths.remove(path);
+                                        break;
+                                    } catch (SftpException ignored) { }
+                                }
+                            }
+                            // Cross-drive paths: SFTP cannot reach them, use SSH exec with Windows cmd
+                            if (missingPaths.contains(path)) {
+                                String windowsPath = normalizedPath.replace("/", "\\");
+                                String cmd = "cmd /c if exist \"" + windowsPath + "\" (echo EXISTS) else (echo MISSING)";
+                                try {
+                                    Channel execChannel = session.openChannel("exec");
+                                    ((ChannelExec) execChannel).setCommand(cmd);
+                                    execChannel.setInputStream(null);
+                                    InputStream in = execChannel.getInputStream();
+                                    execChannel.connect(10000);
+                                    BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+                                    StringBuilder output = new StringBuilder();
+                                    String line;
+                                    while ((line = reader.readLine()) != null) {
+                                        output.append(line);
+                                    }
+                                    execChannel.disconnect();
+                                    if ("EXISTS".equals(output.toString().trim())) {
+                                        pathResults.put(path, true);
+                                        existingPaths.add(path);
+                                        missingPaths.remove(path);
+                                    }
+                                } catch (Exception execEx) {
+                                    log.warn("SSH exec 验证路径失败: path={}, error={}", path, execEx.getMessage());
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

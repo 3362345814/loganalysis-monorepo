@@ -223,10 +223,12 @@ const handleAdd = () => {
 // 编辑
 const handleEdit = (row) => {
   isEdit.value = true
+  // 如果有保存的 API Key（masked 形式），回填到表单供用户参考
+  // 用户不改则保留原值，后端 apiKey 为空时不更新
   form.value = {
     id: row.id,
     name: row.name,
-    apiKey: '', // 不返回已保存的 API Key
+    apiKey: row.maskedApiKey || '',
     model: row.model,
     maxTokens: row.maxTokens,
     temperature: row.temperature,

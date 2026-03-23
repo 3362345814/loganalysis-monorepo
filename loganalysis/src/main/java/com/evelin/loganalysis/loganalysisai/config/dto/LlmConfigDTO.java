@@ -61,4 +61,10 @@ public class LlmConfigDTO {
      * 备注
      */
     private String remark;
+
+    /**
+     * API Key 脱敏显示（仅在查询时返回，前端用于判断是否有保存的 Key）
+     * 格式: "******" + 原始 Key 后4位
+     */
+    private String maskedApiKey;
 }

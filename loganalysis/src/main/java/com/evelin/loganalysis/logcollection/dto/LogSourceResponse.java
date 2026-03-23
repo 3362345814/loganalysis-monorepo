@@ -70,9 +70,19 @@ public class LogSourceResponse {
     private Integer port;
 
     /**
+     * 用户名
+     */
+    private String username;
+
+    /**
      * 编码
      */
     private String encoding;
+
+    /**
+     * SSH 密码（查询时直接返回原始值，前端不需要脱敏）
+     */
+    private String password;
 
     /**
      * 是否启用

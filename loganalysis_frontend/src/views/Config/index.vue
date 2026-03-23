@@ -570,7 +570,12 @@ const handleAddLlm = () => {
 
 const handleEditLlm = (row) => {
   isEditLlm.value = true
-  llmForm.value = { ...row }
+  // 如果有保存的 API Key（masked 形式），回填到表单供用户参考
+  // 用户不改则保留原值，后端 apiKey 为空时不更新
+  llmForm.value = {
+    ...row,
+    apiKey: row.maskedApiKey || ''
+  }
   llmDialogVisible.value = true
 }
 
