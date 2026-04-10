@@ -1094,19 +1094,22 @@ onUnmounted(() => {
 
 <style scoped>
 .logs-page {
-  padding: var(--space-lg);
+  padding: var(--space-24);
 }
 
 .filter-card {
-  margin-bottom: var(--space-md);
-  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  background: var(--color-white);
+  border: 1px solid var(--border-primary);
 }
 
 .terminal-card {
   margin-top: 0;
-  border-radius: var(--radius-lg);
-  background: #0d0d0d;
+  border-radius: var(--radius-comfortable);
+  background: var(--color-dark);
   overflow: hidden;
+  border: 1px solid rgba(38, 37, 30, 0.3);
 }
 
 .terminal-card :deep(.el-card__body) {
@@ -1117,45 +1120,34 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-sm) var(--space-md);
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
+  padding: var(--space-8) var(--space-24);
+  background: var(--color-dark);
+  border-bottom: 1px solid rgba(38, 37, 30, 0.5);
 }
 
 .terminal-title {
-  color: #00ff00;
-  font-family: 'Courier New', monospace;
+  color: var(--color-cream);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .log-count {
-  color: #888;
+  color: rgba(242, 241, 237, 0.5);
   font-size: 12px;
 }
 
 .terminal-content {
-  background: #0d0d0d;
-  color: #ccc;
-  font-family: 'Courier New', Consolas, monospace;
+  background: var(--color-dark);
+  color: rgba(242, 241, 237, 0.85);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
-  padding: var(--space-sm);
+  padding: var(--space-8) var(--space-24);
   min-height: 400px;
   max-height: 600px;
   overflow-y: auto;
-}
-
-.terminal-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.terminal-content::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
-
-.terminal-content::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 4px;
 }
 
 .log-line {
@@ -1167,99 +1159,96 @@ onUnmounted(() => {
 .log-file-tag {
   display: inline-block;
   padding: 1px 6px;
-  background: #409eff;
-  color: #fff;
-  border-radius: 3px;
+  background: rgba(201, 100, 66, 0.25);
+  color: #c96442;
+  border-radius: var(--radius-small);
   font-size: 11px;
   margin-right: 8px;
-  font-family: 'Courier New', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .log-time {
-  color: #888;
+  color: rgba(242, 241, 237, 0.45);
   margin-right: 8px;
 }
 
 .log-level {
   display: inline-block;
-  width: 50px;
+  width: 70px;
   text-align: center;
   margin-right: 8px;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .log-level.error {
-  color: #ff4d4f;
+  color: #b53333;
 }
 
 .log-level.warn {
-  color: #faad14;
+  color: #b87a2e;
 }
 
 .log-level.info {
-  color: #1890ff;
+  color: #9fbbe0;
 }
 
 .log-level.debug {
-  color: #52c41a;
+  color: #9fc9a2;
 }
 
 .log-level.trace {
-  color: #722ed1;
+  color: #c0a8dd;
 }
 
 .log-message {
-  color: #e6e6e6;
+  color: rgba(242, 241, 237, 0.85);
 }
 
 :deep(.highlight-keyword) {
-  background: #f8e71c;
-  color: #000;
+  background: rgba(201, 100, 66, 0.35);
+  color: var(--color-cream);
   padding: 0 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-small);
 }
 
 .log-highlight {
-  background: rgba(64, 158, 255, 0.3) !important;
-  border-left: 3px solid #409eff;
+  background: rgba(201, 100, 66, 0.15) !important;
+  border-left: 3px solid #c96442;
   animation: highlight-pulse 2s ease-out;
 }
 
 @keyframes highlight-pulse {
   0% {
-    background: rgba(64, 158, 255, 0.6);
+    background: rgba(201, 100, 66, 0.3);
   }
   100% {
-    background: rgba(64, 158, 255, 0.3);
+    background: rgba(201, 100, 66, 0.15);
   }
 }
 
 .terminal-empty {
   text-align: center;
-  color: #666;
+  color: rgba(242, 241, 237, 0.4);
   padding: 40px;
 }
 
-/* 日志内容区域和解析面板布局 */
 .logs-content {
   display: grid;
   grid-template-columns: 1fr 0px;
   gap: 0;
   align-items: start;
-  transition: grid-template-columns var(--transition-normal);
+  transition: grid-template-columns var(--duration-normal);
 }
 
 .logs-content:not(.panel-hidden) {
   grid-template-columns: 1fr 400px;
-  gap: var(--space-md);
+  gap: var(--space-24);
 }
 
-/* 面板隐藏时日志终端占满宽度 */
 .logs-content.panel-hidden .terminal-card {
   margin-right: 0;
 }
 
-/* 解析信息面板显示时，日志终端右侧有间距 */
 .logs-content:not(.panel-hidden) .terminal-card {
   margin-right: 0;
 }
@@ -1280,17 +1269,16 @@ onUnmounted(() => {
 .parsed-info-sidebar {
   margin-top: 0;
   width: 100%;
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--panel-border);
-  box-shadow: var(--panel-shadow);
+  background: var(--color-white);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   max-height: 600px;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--transition-normal), transform var(--transition-normal);
+  transition: opacity var(--duration-normal), transform var(--duration-normal);
   transform: translateX(20px);
 }
 
@@ -1304,10 +1292,10 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--surface-muted);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-24);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--surface-300);
+  border-radius: var(--radius-comfortable) var(--radius-comfortable) 0 0;
 }
 
 .parsed-info-title {
@@ -1317,9 +1305,9 @@ onUnmounted(() => {
 }
 
 .parsed-info-summary {
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--bg-elevated);
+  padding: var(--space-8) var(--space-24);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--surface-100);
 }
 
 .parsed-info-count {
@@ -1334,20 +1322,20 @@ onUnmounted(() => {
 }
 
 .parsed-info-content :deep(.el-table) {
-  --el-table-header-bg-color: var(--surface-muted);
-  --el-table-border-color: var(--panel-border);
-  --el-table-row-hover-bg-color: var(--primary-light);
+  --el-table-header-bg-color: var(--surface-300);
+  --el-table-border-color: var(--border-primary);
+  --el-table-row-hover-bg-color: rgba(38, 37, 30, 0.04);
   font-size: 13px;
 }
 
 .parsed-info-content :deep(.el-table th) {
-  background: var(--surface-muted) !important;
+  background: var(--surface-300) !important;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .parsed-info-content :deep(.el-table td) {
-  padding: 8px 12px;
+  padding: var(--space-8) var(--space-16);
 }
 
 .parsed-info-panel {
@@ -1365,7 +1353,7 @@ onUnmounted(() => {
 }
 
 .pagination-wrapper {
-  margin-top: var(--space-lg);
+  margin-top: var(--space-24);
   display: flex;
   justify-content: flex-end;
 }
@@ -1373,42 +1361,42 @@ onUnmounted(() => {
 .log-content {
   white-space: pre-wrap;
   word-wrap: break-word;
-  background: var(--surface-muted);
-  padding: var(--space-sm);
-  border-radius: var(--radius-sm);
+  background: var(--surface-300);
+  padding: var(--space-8);
+  border-radius: var(--radius-standard);
   max-height: 300px;
   overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
 }
 
 .log-content.error {
-  background: var(--danger-light);
-  border: 1px solid rgba(228, 91, 91, 0.3);
-  color: var(--danger);
+  background: rgba(181, 51, 51, 0.1);
+  border: 1px solid rgba(181, 51, 51, 0.2);
+  color: #b53333;
 }
 
 .parsed-info-footer {
-  padding: var(--space-md);
-  border-top: 1px solid var(--panel-border);
+  padding: var(--space-24);
+  border-top: 1px solid var(--border-primary);
   text-align: center;
-  background: var(--surface-muted);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--surface-300);
+  border-radius: 0 0 var(--radius-comfortable) var(--radius-comfortable);
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-8);
 }
 
 .parsed-info-footer .el-button {
   flex: 1;
 }
 
-/* 日志行选中状态 */
 .log-line.log-selected {
-  background: rgba(64, 158, 255, 0.2);
-  border-left: 3px solid #409eff;
+  background: rgba(201, 100, 66, 0.12);
+  border-left: 3px solid #c96442;
 }
 
-/* 日志行 hover */
 .log-line:hover {
-  background: #1a1a1a;
+  background: rgba(38, 37, 30, 0.3);
   cursor: pointer;
 }
 </style>

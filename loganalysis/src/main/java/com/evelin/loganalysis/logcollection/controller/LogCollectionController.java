@@ -2,20 +2,15 @@ package com.evelin.loganalysis.logcollection.controller;
 
 import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.collector.LogCollector;
-import com.evelin.loganalysis.logcollection.dto.ConnectionTestRequest;
-import com.evelin.loganalysis.logcollection.dto.ConnectionTestResponse;
-import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
-import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
-import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
-import com.evelin.loganalysis.logcollection.dto.RawLogEventResponse;
+import com.evelin.loganalysis.logcollection.dto.*;
+import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
+import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.service.ConnectionTestService;
 import com.evelin.loganalysis.logcollection.service.LogSourceService;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
-import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
-import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcommon.model.PageResult;
 import com.evelin.loganalysis.logcommon.model.Result;
 import jakarta.validation.Valid;
@@ -24,6 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -526,7 +525,7 @@ public class LogCollectionController {
     /**
      * 测试 SSH 连接
      *
-     * @param config SSH 连接配置
+     * @param request SSH 连接配置
      * @return 测试结果
      */
     @PostMapping("/sources/test-ssh")
@@ -555,9 +554,9 @@ public class LogCollectionController {
             @RequestParam("path") String path,
             @RequestParam("content") String content) {
         try {
-            java.nio.file.Path filePath = java.nio.file.Paths.get(path);
-            java.nio.file.Files.createDirectories(filePath.getParent());
-            java.nio.file.Files.writeString(filePath, content + System.lineSeparator(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            Path filePath = Paths.get(path);
+            Files.createDirectories(filePath.getParent());
+            Files.writeString(filePath, content + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             
             Map<String, Object> result = new HashMap<>();
             result.put("path", path);

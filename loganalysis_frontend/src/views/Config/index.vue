@@ -636,7 +636,7 @@ onMounted(() => {
 
 <style scoped>
 .system-config-container {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .config-tabs {
@@ -673,27 +673,31 @@ onMounted(() => {
 }
 
 .config-tip {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-16);
 }
 
 .config-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .param-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 
 .tab-content-card {
   animation-fill-mode: forwards;
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .tab-fade-enter-active,
 .tab-fade-leave-active {
-  transition: opacity var(--transition-normal), transform var(--transition-normal);
+  transition: opacity var(--duration-normal) ease,
+              transform var(--duration-normal) ease;
 }
 
 .tab-fade-enter-from {

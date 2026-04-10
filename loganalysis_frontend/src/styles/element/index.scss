@@ -1,0 +1,525 @@
+@use "element-plus/theme-chalk/src/common/var.scss" as * with (
+  $colors: (
+    'primary': (
+      'base': #c96442,
+    ),
+    'success': (
+      'base': #1f8a65,
+    ),
+    'warning': (
+      'base': #b87a2e,
+    ),
+    'danger': (
+      'base': #b53333,
+    ),
+    'error': (
+      'base': #b53333,
+    ),
+    'info': (
+      'base': #5e5d59,
+    ),
+    'white': #ffffff,
+    'black': #000000,
+  )
+);
+
+@use "element-plus/theme-chalk/src/mixins/config.scss" as *;
+
+:root {
+  /* ========== Color System (From DESIGN.md - Warm Claude Palette) ========== */
+
+  /* Primary Colors */
+  --color-dark: #141413;
+  --color-cream: #f5f4ed;
+  --color-light: #e8e6dc;
+  --color-white: #ffffff;
+
+  /* Accent Colors */
+  --color-accent: #c96442;
+  --color-gold: #b87a2e;
+
+  /* Semantic Colors */
+  --color-error: #b53333;
+  --color-success: #1f8a65;
+
+  /* Timeline / Feature Colors */
+  --color-thinking: #dfa88f;
+  --color-grep: #9fc9a2;
+  --color-read: #9fbbe0;
+  --color-edit: #c0a8dd;
+
+  /* Surface Scale */
+  --surface-100: #f7f7f4;
+  --surface-200: #f2f1ed;
+  --surface-300: #ebeae5;
+  --surface-400: #e6e5e0;
+  --surface-500: #e1e0db;
+
+  /* Border Colors */
+  --border-primary: rgba(38, 37, 30, 0.1);
+  --border-medium: rgba(38, 37, 30, 0.2);
+  --border-strong: rgba(38, 37, 30, 0.55);
+  --border-solid: #141413;
+  --border-light: #f2f1ed;
+
+  /* Text Colors */
+  --text-primary: #141413;
+  --text-secondary: rgba(38, 37, 30, 0.55);
+  --text-tertiary: rgba(38, 37, 30, 0.35);
+  --text-disabled: rgba(38, 37, 30, 0.3);
+
+  /* Shadows - Ring-based from DESIGN.md */
+  --shadow-card: rgba(0, 0, 0, 0.05) 0px 4px 24px;
+  --shadow-ambient: rgba(0, 0, 0, 0.02) 0px 0px 16px, rgba(0, 0, 0, 0.008) 0px 0px 8px;
+  --shadow-focus: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+  --shadow-ring: 0px 0px 0px 1px;
+
+  /* ========== Element Plus 组件变量覆盖 ========== */
+
+  /* Border */
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 9999px;
+  --el-border-radius-circle: 50%;
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-light);
+  --el-border-color-extra-light: var(--surface-200);
+  --el-border-color-dark: var(--border-medium);
+  --el-border-color-darker: var(--border-strong);
+
+  /* Font */
+  --el-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica Neue, Helvetica, Arial, sans-serif;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-large: 16px;
+  --el-font-weight-primary: 400;
+  --el-font-weight-secondary: 500;
+
+  /* Text */
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-primary);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-text-color-disabled: var(--text-disabled);
+
+  /* Fill */
+  --el-fill-color: var(--surface-400);
+  --el-fill-color-light: var(--surface-300);
+  --el-fill-color-lighter: var(--surface-200);
+  --el-fill-color-extra-light: var(--surface-100);
+  --el-fill-color-dark: var(--surface-500);
+  --el-fill-color-darker: var(--color-light);
+  --el-fill-color-blank: var(--color-white);
+
+  /* Background */
+  --el-bg-color: var(--surface-200);
+  --el-bg-color-page: var(--color-cream);
+  --el-bg-color-overlay: var(--color-white);
+
+  /* Box Shadow */
+  --el-box-shadow: var(--shadow-card);
+  --el-box-shadow-light: var(--shadow-ambient);
+  --el-box-shadow-lighter: var(--shadow-ambient);
+  --el-box-shadow-dark: rgba(0, 0, 0, 0.15) 0px 12px 24px 0px, rgba(0, 0, 0, 0.12) 0px 6px 12px 0px;
+  --el-box-shadow-focus: var(--shadow-focus);
+
+  /* ========== Button 组件 ========== */
+  --el-button-font-size: 14px;
+  --el-button-border-radius: 8px;
+  --el-button-padding-horizontal: 14px;
+  --el-button-padding-vertical: 10px;
+  --el-button-hover-link-font-color: var(--text-primary);
+  --el-button-hover-bg-color: var(--surface-400);
+  --el-button-hover-border-color: var(--border-medium);
+  --el-button-active-bg-color: var(--surface-500);
+  --el-button-active-border-color: var(--border-strong);
+
+  /* Primary Button - Warm Surface */
+  --el-button-primary-bg-color: var(--surface-300);
+  --el-button-primary-border-color: var(--border-primary);
+  --el-button-primary-text-color: var(--text-primary);
+  --el-button-primary-hover-bg-color: var(--surface-400);
+  --el-button-primary-hover-border-color: var(--border-medium);
+  --el-button-primary-hover-text-color: var(--text-primary);
+  --el-button-primary-active-bg-color: var(--surface-500);
+  --el-button-primary-active-border-color: var(--border-strong);
+  --el-button-primary-disabled-bg-color: var(--surface-200);
+  --el-button-primary-disabled-border-color: var(--border-primary);
+  --el-button-primary-disabled-text-color: var(--text-disabled);
+
+  /* Default Button */
+  --el-button-default-bg-color: var(--surface-300);
+  --el-button-default-border-color: var(--border-primary);
+  --el-button-default-text-color: var(--text-primary);
+  --el-button-default-hover-bg-color: var(--surface-400);
+  --el-button-default-hover-border-color: var(--border-medium);
+  --el-button-default-hover-text-color: var(--color-error);
+  --el-button-default-active-bg-color: var(--surface-500);
+  --el-button-default-active-border-color: var(--border-strong);
+
+  /* Success Button */
+  --el-button-success-bg-color: rgba(31, 138, 101, 0.12);
+  --el-button-success-border-color: rgba(31, 138, 101, 0.3);
+  --el-button-success-text-color: var(--color-success);
+  --el-button-success-hover-bg-color: rgba(31, 138, 101, 0.2);
+  --el-button-success-hover-border-color: rgba(31, 138, 101, 0.4);
+  --el-button-success-hover-text-color: var(--color-success);
+  --el-button-success-active-bg-color: rgba(31, 138, 101, 0.25);
+  --el-button-success-active-border-color: var(--color-success);
+
+  /* Warning Button */
+  --el-button-warning-bg-color: rgba(184, 122, 46, 0.12);
+  --el-button-warning-border-color: rgba(184, 122, 46, 0.3);
+  --el-button-warning-text-color: var(--color-gold);
+  --el-button-warning-hover-bg-color: rgba(184, 122, 46, 0.2);
+  --el-button-warning-hover-border-color: rgba(184, 122, 46, 0.4);
+  --el-button-warning-hover-text-color: var(--color-gold);
+  --el-button-warning-active-bg-color: rgba(184, 122, 46, 0.25);
+  --el-button-warning-active-border-color: var(--color-gold);
+
+  /* Danger Button */
+  --el-button-danger-bg-color: rgba(207, 45, 86, 0.12);
+  --el-button-danger-border-color: rgba(207, 45, 86, 0.3);
+  --el-button-danger-text-color: var(--color-error);
+  --el-button-danger-hover-bg-color: rgba(207, 45, 86, 0.2);
+  --el-button-danger-hover-border-color: rgba(207, 45, 86, 0.4);
+  --el-button-danger-hover-text-color: var(--color-error);
+  --el-button-danger-active-bg-color: rgba(207, 45, 86, 0.25);
+  --el-button-danger-active-border-color: var(--color-error);
+
+  /* Info Button */
+  --el-button-info-bg-color: var(--surface-300);
+  --el-button-info-border-color: var(--border-primary);
+  --el-button-info-text-color: var(--text-secondary);
+  --el-button-info-hover-bg-color: var(--surface-400);
+  --el-button-info-hover-border-color: var(--border-medium);
+  --el-button-info-hover-text-color: var(--text-primary);
+  --el-button-info-active-bg-color: var(--surface-500);
+  --el-button-info-active-border-color: var(--border-strong);
+
+  /* ========== Tag 组件 ========== */
+  --el-tag-font-size: 12px;
+  --el-tag-border-radius: 9999px;
+  --el-tag-padding: 0 10px;
+  --el-tag-height: 26px;
+  --el-tag-icon-size: 12px;
+
+  /* Tag Primary */
+  --el-tag-primary-bg-color: rgba(201, 100, 66, 0.12);
+  --el-tag-primary-border-color: rgba(201, 100, 66, 0.3);
+  --el-tag-primary-text-color: #c96442;
+  --el-tag-primary-hover-bg-color: rgba(201, 100, 66, 0.2);
+  --el-tag-primary-hover-border-color: rgba(201, 100, 66, 0.4);
+  --el-tag-primary-hover-text-color: #c96442;
+
+  /* Tag Success */
+  --el-tag-success-bg-color: rgba(31, 138, 101, 0.12);
+  --el-tag-success-border-color: rgba(31, 138, 101, 0.3);
+  --el-tag-success-text-color: var(--color-success);
+  --el-tag-success-hover-bg-color: rgba(31, 138, 101, 0.2);
+  --el-tag-success-hover-border-color: rgba(31, 138, 101, 0.4);
+  --el-tag-success-hover-text-color: var(--color-success);
+
+  /* Tag Warning */
+  --el-tag-warning-bg-color: rgba(184, 122, 46, 0.12);
+  --el-tag-warning-border-color: rgba(184, 122, 46, 0.3);
+  --el-tag-warning-text-color: var(--color-gold);
+  --el-tag-warning-hover-bg-color: rgba(184, 122, 46, 0.2);
+  --el-tag-warning-hover-border-color: rgba(184, 122, 46, 0.4);
+  --el-tag-warning-hover-text-color: var(--color-gold);
+
+  /* Tag Danger */
+  --el-tag-danger-bg-color: rgba(207, 45, 86, 0.12);
+  --el-tag-danger-border-color: rgba(207, 45, 86, 0.3);
+  --el-tag-danger-text-color: var(--color-error);
+  --el-tag-danger-hover-bg-color: rgba(207, 45, 86, 0.2);
+  --el-tag-danger-hover-border-color: rgba(207, 45, 86, 0.4);
+  --el-tag-danger-hover-text-color: var(--color-error);
+
+  /* Tag Info */
+  --el-tag-info-bg-color: var(--surface-300);
+  --el-tag-info-border-color: var(--border-primary);
+  --el-tag-info-text-color: var(--text-secondary);
+  --el-tag-info-hover-bg-color: var(--surface-400);
+  --el-tag-info-hover-border-color: var(--border-medium);
+  --el-tag-info-hover-text-color: var(--text-primary);
+
+  /* ========== Card 组件 ========== */
+  --el-card-border-radius: 8px;
+  --el-card-border-color: var(--border-primary);
+  --el-card-padding: 20px;
+  --el-card-bg-color: var(--color-white);
+
+  /* ========== Table 组件 ========== */
+  --el-table-border-color: var(--border-primary);
+  --el-table-border: 1px solid var(--border-primary);
+  --el-table-header-bg-color: var(--surface-300);
+  --el-table-header-text-color: var(--text-secondary);
+  --el-table-header-border-color: var(--border-primary);
+  --el-table-row-hover-bg-color: rgba(38, 37, 30, 0.04);
+  --el-table-current-row-bg-color: rgba(200, 85, 32, 0.08);
+  --el-table-fixed-box-shadow: var(--shadow-card);
+  --el-table-text-color: var(--text-primary);
+  --el-table-footer-bg-color: var(--surface-200);
+  --el-table-footer-text-color: var(--text-secondary);
+  --el-table-cell-padding: 12px 16px;
+
+  /* ========== Input 组件 ========== */
+  --el-input-bg-color: var(--color-white);
+  --el-input-border-color: var(--border-primary);
+  --el-input-hover-border-color: var(--border-medium);
+  --el-input-focus-border-color: var(--color-accent);
+  --el-input-text-color: var(--text-primary);
+  --el-input-placeholder-color: var(--text-tertiary);
+  --el-input-height: 36px;
+  --el-input-font-size: 14px;
+  --el-input-border-radius: 8px;
+  --el-input-inner-padding-horizontal: 12px;
+  --el-input-inner-padding-vertical: 10px;
+
+  /* ========== Select 组件 ========== */
+  --el-select-border-color: var(--border-primary);
+  --el-select-hover-border-color: var(--border-medium);
+  --el-select-focus-border-color: var(--color-accent);
+  --el-select-input-focus-border-color: var(--color-accent);
+  --el-select-bg-color: var(--color-white);
+  --el-select-option-bg-color: var(--color-white);
+  --el-select-option-hover-bg-color: var(--surface-200);
+  --el-select-option-selected-bg-color: rgba(200, 85, 32, 0.08);
+  --el-select-dropdown-bg-color: var(--color-white);
+  --el-select-dropdown-border-color: var(--border-primary);
+  --el-select-disabled-border-color: var(--border-primary);
+  --el-select-disabled-bg-color: var(--surface-200);
+  --el-select-input-border-radius: 8px;
+
+  /* ========== Dialog 组件 ========== */
+  --el-dialog-border-radius: 10px;
+  --el-dialog-bg-color: var(--color-white);
+  --el-dialog-title-font-size: 18px;
+  --el-dialog-box-shadow: var(--shadow-card);
+  --el-dialog-header-border-color: var(--border-primary);
+  --el-dialog-body-padding: 24px;
+  --el-dialog-header-padding: 16px;
+
+  /* ========== Message 组件 ========== */
+  --el-message-bg-color: var(--color-white);
+  --el-message-border-color: var(--border-primary);
+  --el-message-border-radius: 8px;
+  --el-message-text-color: var(--text-primary);
+  --el-message-padding: 12px 16px;
+
+  /* ========== Notification 组件 ========== */
+  --el-notification-border-radius: 8px;
+  --el-notification-bg-color: var(--color-white);
+  --el-notification-border-color: var(--border-primary);
+  --el-notification-title-color: var(--text-primary);
+  --el-notification-content-color: var(--text-secondary);
+  --el-notification-padding: 16px 20px;
+
+  /* ========== Popover 组件 ========== */
+  --el-popover-border-color: var(--border-primary);
+  --el-popover-bg-color: var(--color-white);
+  --el-popover-border-radius: 8px;
+  --el-popover-padding: 12px 16px;
+
+  /* ========== Tooltip 组件 ========== */
+  --el-tooltip-border-color: var(--border-primary);
+  --el-tooltip-bg-color: #4d4c48;
+  --el-tooltip-border-radius: 6px;
+  --el-tooltip-padding: 8px 12px;
+
+  /* ========== Dropdown 组件 ========== */
+  --el-dropdown-menu-box-shadow: var(--shadow-card);
+  --el-dropdown-menu-border-radius: 8px;
+  --el-dropdown-menu-bg-color: var(--color-white);
+  --el-dropdown-menu-item-hover-bg-color: var(--surface-200);
+  --el-dropdown-menu-item-text-color: var(--text-primary);
+  --el-dropdown-menu-item-hover-text-color: var(--color-accent);
+
+  /* ========== Tabs 组件 ========== */
+  --el-tabs-border-color: var(--border-primary);
+  --el-tabs-header-height: 44px;
+  --el-tabs-item-text-color: var(--text-secondary);
+  --el-tabs-item-hover-text-color: var(--text-primary);
+  --el-tabs-item-active-text-color: var(--color-accent);
+  --el-tabs-ink-bar-color: var(--color-accent);
+  --el-tabs-nav-wrap-bg-color: transparent;
+
+  /* ========== Menu 组件 ========== */
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: var(--text-secondary);
+  --el-menu-hover-bg-color: rgba(38, 37, 30, 0.06);
+  --el-menu-active-color: var(--color-accent);
+  --el-menu-hover-color: var(--text-primary);
+  --el-menu-item-height: 48px;
+  --el-menu-border-color: transparent;
+
+  /* ========== Pagination 组件 ========== */
+  --el-pagination-bg-color: transparent;
+  --el-pagination-text-color: var(--text-secondary);
+  --el-pagination-button-bg-color: var(--surface-300);
+  --el-pagination-button-color: var(--text-primary);
+  --el-pagination-hover-color: var(--color-accent);
+  --el-pagination-button-width: 32px;
+  --el-pagination-button-height: 32px;
+  --el-pagination-border-radius: 8px;
+
+  /* ========== Form 组件 ========== */
+  --el-form-label-font-size: 14px;
+  --el-form-item-text-color: var(--text-secondary);
+  --el-form-item-margin-bottom: 20px;
+  --el-form-label-height: 32px;
+
+  /* ========== Switch 组件 ========== */
+  --el-switch-on-color: var(--color-success);
+  --el-switch-off-color: var(--surface-400);
+  --el-switch-border-color: var(--border-primary);
+  --el-switch-border-radius: 9999px;
+  --el-switch-height: 24px;
+  --el-switch-button-size: 18px;
+
+  /* ========== Checkbox 组件 ========== */
+  --el-checkbox-bg-color: var(--color-white);
+  --el-checkbox-border-color: var(--border-medium);
+  --el-checkbox-checked-bg-color: var(--color-accent);
+  --el-checkbox-checked-border-color: var(--color-accent);
+  --el-checkbox-text-color: var(--text-primary);
+  --el-checkbox-border-radius: 4px;
+  --el-checkbox-height: 18px;
+  --el-checkbox-label-height: 32px;
+
+  /* ========== Radio 组件 ========== */
+  --el-radio-bg-color: var(--color-white);
+  --el-radio-border-color: var(--border-medium);
+  --el-radio-checked-bg-color: var(--color-accent);
+  --el-radio-checked-border-color: var(--color-accent);
+  --el-radio-text-color: var(--text-primary);
+  --el-radio-height: 18px;
+  --el-radio-label-height: 32px;
+
+  /* ========== Slider 组件 ========== */
+  --el-slider-main-bg-color: var(--color-accent);
+  --el-slider-runway-bg-color: var(--surface-400);
+  --el-slider-stop-bg-color: var(--border-medium);
+  --el-slider-height: 6px;
+  --el-slider-button-size: 16px;
+
+  /* ========== Progress 组件 ========== */
+  --el-progress-text-color: var(--text-primary);
+  --el-progress-border-radius: 9999px;
+  --el-progress-height: 8px;
+
+  /* ========== Badge 组件 ========== */
+  --el-badge-bg-color: var(--color-error);
+  --el-badge-border-radius: 9999px;
+  --el-badge-height: 18px;
+  --el-badge-font-size: 12px;
+  --el-badge-padding: 0 6px;
+
+  /* ========== Avatar 组件 ========== */
+  --el-avatar-bg-color: var(--surface-300);
+  --el-avatar-text-color: var(--text-primary);
+  --el-avatar-border-radius: 8px;
+
+  /* ========== Empty 组件 ========== */
+  --el-empty-fill-color-1: var(--surface-300);
+  --el-empty-fill-color-2: var(--surface-200);
+  --el-empty-fill-color-3: var(--surface-100);
+  --el-empty-description-margin-top: 12px;
+  --el-empty-description-color: var(--text-secondary);
+
+  /* ========== Loading 组件 ========== */
+  --el-loading-spinner-size: 36px;
+  --el-loading-color: var(--color-accent);
+
+  /* ========== Steps 组件 ========== */
+  --el-step-border-color: var(--border-primary);
+  --el-step-text-color: var(--text-secondary);
+  --el-step-title-font-size: 14px;
+  --el-step-icon-size: 24px;
+  --el-step-line-height: 20px;
+
+  /* ========== Timeline 组件 ========== */
+  --el-timeline-node-size: 12px;
+  --el-timeline-node-color: var(--border-medium);
+
+  /* ========== Calendar 组件 ========== */
+  --el-calendar-border: 1px solid var(--border-primary);
+  --el-calendar-header-border: 1px solid var(--border-primary);
+  --el-calendar-cell-width: 80px;
+
+  /* ========== Descriptions 组件 ========== */
+  --el-descriptions-table-border: 1px solid var(--border-primary);
+  --el-descriptions-item-bordered-label-bg: var(--surface-200);
+  --el-descriptions-item-cell-padding: 12px 16px;
+
+  /* ========== Image 组件 ========== */
+  --el-image-placeholder-color: var(--text-tertiary);
+  --el-image-border-radius: 8px;
+
+  /* ========== Backtop 组件 ========== */
+  --el-backtop-bg-color: var(--surface-300);
+  --el-backtop-hover-bg-color: var(--surface-400);
+  --el-backtop-border-radius: 8px;
+
+  /* ========== Scrollbar 组件 ========== */
+  --el-scrollbar-bar-width: 8px;
+  --el-scrollbar-bar-height: 8px;
+  --el-scrollbar-thumb-color: rgba(38, 37, 30, 0.2);
+  --el-scrollbar-thumb-hover-color: rgba(38, 37, 30, 0.35);
+  --el-scrollbar-thumb-radius: 9999px;
+
+  /* ========== Alert 组件 ========== */
+  --el-alert-padding: 12px 16px;
+  --el-alert-border-radius: 8px;
+  --el-alert-icon-size: 16px;
+  --el-alert-title-font-size: 14px;
+  --el-alert-description-font-size: 13px;
+
+  /* Alert Success */
+  --el-alert-success-bg-color: rgba(31, 138, 101, 0.12);
+  --el-alert-success-border-color: rgba(31, 138, 101, 0.25);
+  --el-alert-success-title-color: #1a6b4a;
+  --el-alert-success-icon-color: var(--color-success);
+
+  /* Alert Warning */
+  --el-alert-warning-bg-color: rgba(184, 122, 46, 0.15);
+  --el-alert-warning-border-color: rgba(184, 122, 46, 0.3);
+  --el-alert-warning-title-color: #7a5518;
+  --el-alert-warning-icon-color: var(--color-gold);
+
+  /* Alert Danger */
+  --el-alert-danger-bg-color: rgba(207, 45, 86, 0.12);
+  --el-alert-danger-border-color: rgba(207, 45, 86, 0.25);
+  --el-alert-danger-title-color: #a02040;
+  --el-alert-danger-icon-color: var(--color-error);
+
+  /* Alert Info */
+  --el-alert-info-bg-color: var(--surface-300);
+  --el-alert-info-border-color: var(--border-primary);
+  --el-alert-info-title-color: var(--text-primary);
+  --el-alert-info-icon-color: var(--text-secondary);
+
+  /* ========== Link 组件 ========== */
+  --el-link-font-size: 14px;
+  --el-link-default-text-color: var(--color-accent);
+  --el-link-default-hover-text-color: var(--color-error);
+  --el-link-success-text-color: var(--color-success);
+  --el-link-success-hover-text-color: var(--color-error);
+  --el-link-warning-text-color: var(--color-gold);
+  --el-link-warning-hover-text-color: var(--color-error);
+  --el-link-danger-text-color: var(--color-error);
+  --el-link-danger-hover-text-color: var(--color-error);
+
+  /* ========== Divider 组件 ========== */
+  --el-divider-border-color: var(--border-primary);
+  --el-divider-text-color: var(--text-tertiary);
+
+  /* ========== Spinner 组件 ========== */
+  --el-spinner-color: var(--color-accent);
+
+  /* ========== Skeleton 组件 ========== */
+  --el-skeleton-color: var(--surface-300);
+  --el-skeleton-to-color: var(--surface-200);
+}

@@ -1,7 +1,9 @@
 package com.evelin.loganalysis.logprocessing.service;
 
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
-import com.evelin.loganalysis.logprocessing.dto.*;
+import com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService;
+import com.evelin.loganalysis.logprocessing.dto.ParsedLogEvent;
+import com.evelin.loganalysis.logprocessing.dto.ProcessingResult;
 import com.evelin.loganalysis.logprocessing.pipeline.LogProcessingPipeline;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +23,7 @@ import java.util.concurrent.CompletableFuture;
 public class LogProcessingService {
 
     private final LogProcessingPipeline pipeline;
-    private final com.evelin.loganalysis.logprocessing.desensitization.DesensitizationService desensitizationService;
+    private final DesensitizationService desensitizationService;
 
     /**
      * 处理单条原始日志

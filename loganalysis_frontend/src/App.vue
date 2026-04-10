@@ -153,18 +153,18 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 .app-aside {
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
-  background: linear-gradient(180deg, #17263f 0%, #101a2f 100%);
-  box-shadow: inset -1px 0 rgba(255, 255, 255, 0.05);
+  padding: var(--space-16) var(--space-12);
+  background: var(--color-cream);
+  border-right: 1px solid var(--border-primary);
   transition: width 0.28s ease, padding 0.28s ease;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 8px;
+  gap: var(--space-10);
+  margin-bottom: var(--space-14);
+  padding: var(--space-8);
 }
 
 .logo-mark {
@@ -173,28 +173,29 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
-  color: #e8f1ff;
-  background: linear-gradient(140deg, rgba(47, 128, 255, 0.8), rgba(28, 96, 208, 0.8));
+  border-radius: var(--radius-comfortable);
+  color: var(--color-white);
+  background: var(--color-accent);
 }
 
 .logo-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  color: rgba(236, 243, 255, 0.92);
+  color: var(--text-primary);
 }
 
 .logo-text strong {
   font-size: 16px;
   line-height: 1.1;
   letter-spacing: 0.02em;
+  font-weight: 600;
 }
 
 .logo-text span {
   margin-top: 3px;
   font-size: 12px;
-  color: rgba(196, 212, 235, 0.78);
+  color: var(--text-secondary);
 }
 
 .nav-menu {
@@ -204,23 +205,24 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 }
 
 .nav-menu :deep(.el-menu-item) {
-  margin: 6px 0;
+  margin: var(--space-6) 0;
   height: 46px;
-  border-radius: var(--radius-md);
-  color: rgba(212, 222, 238, 0.8);
-  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  border-radius: var(--radius-comfortable);
+  color: var(--text-secondary);
+  transition: background-color var(--duration-fast) ease,
+              color var(--duration-fast) ease,
+              transform var(--duration-fast) ease;
 }
 
 .nav-menu :deep(.el-menu-item:hover) {
-  color: #f2f7ff;
-  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--color-accent);
+  background-color: rgba(38, 37, 30, 0.04);
   transform: translateX(2px);
 }
 
 .nav-menu :deep(.el-menu-item.is-active) {
-  color: #f5f8ff;
-  background: linear-gradient(120deg, rgba(47, 128, 255, 0.34), rgba(47, 128, 255, 0.16));
-  box-shadow: 0 4px 12px rgba(47, 128, 255, 0.25);
+  color: #c96442;
+  background-color: rgba(201, 100, 66, 0.08);
 }
 
 .nav-menu :deep(.el-menu-item .el-icon) {
@@ -230,16 +232,16 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 .aside-footer {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 10px 6px;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-10) var(--space-6);
   font-size: 11px;
   line-height: 1.4;
-  color: rgba(176, 193, 219, 0.8);
+  color: var(--text-tertiary);
 }
 
 .aside-version {
   font-size: 12px;
-  color: rgba(214, 226, 245, 0.95);
+  color: var(--text-secondary);
 }
 
 .workspace {
@@ -251,17 +253,16 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   align-items: center;
   justify-content: space-between;
   height: 64px;
-  padding: 0 24px;
-  border-bottom: 1px solid rgba(33, 72, 132, 0.13);
-  background: rgba(248, 251, 255, 0.86);
-  backdrop-filter: blur(10px);
+  padding: 0 var(--space-24);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--color-cream);
 }
 
 .header-left,
 .header-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-14);
   min-width: 0;
 }
 
@@ -269,46 +270,50 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   display: inline-flex;
   align-items: center;
   height: 28px;
-  padding: 0 12px;
-  border-radius: var(--radius-full);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-pill);
   font-size: 12px;
-  color: #1c5ec0;
-  background: rgba(47, 128, 255, 0.13);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  font-weight: 500;
+  color: #c96442;
+  background: rgba(201, 100, 66, 0.1);
+  transition: transform var(--duration-fast) ease,
+              box-shadow var(--duration-fast) ease;
 }
 
 .route-pill:hover {
   transform: scale(1.02);
-  box-shadow: 0 2px 8px rgba(47, 128, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(201, 100, 66, 0.15);
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border-radius: 999px;
+  gap: var(--space-7);
+  padding: 5px var(--space-10);
+  border-radius: var(--radius-pill);
   font-size: 12px;
-  color: #23553f;
-  background: rgba(45, 178, 113, 0.12);
+  font-weight: 500;
+  color: var(--color-success);
+  background: rgba(31, 138, 101, 0.1);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #2db271;
-  box-shadow: 0 0 0 6px rgba(45, 178, 113, 0.15);
+  background: var(--color-success);
+  box-shadow: 0 0 0 6px rgba(31, 138, 101, 0.12);
 }
 
 .app-main {
   min-width: 0;
-  padding: 20px 24px 24px;
+  padding: var(--space-24) var(--space-24) var(--space-24);
 }
 
 .route-fade-enter-active,
 .route-fade-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity var(--duration-slow) ease,
+              transform var(--duration-slow) ease;
 }
 
 .route-fade-enter-from,
@@ -320,7 +325,7 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 @media (max-width: 900px) {
   .app-header {
     height: 60px;
-    padding: 0 14px;
+    padding: 0 var(--space-14);
   }
 
   .status-pill {
@@ -328,11 +333,11 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   }
 
   .header-left {
-    gap: 8px;
+    gap: var(--space-8);
   }
 
   .app-main {
-    padding: var(--space-md);
+    padding: var(--space-24) var(--space-14) var(--space-32);
   }
 
   .logo-text {

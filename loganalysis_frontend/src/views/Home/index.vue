@@ -102,7 +102,7 @@ const metricCards = computed(() => [
     value: stats.sources,
     description: '当前已接入的数据源总数',
     icon: Collection,
-    color: '#2f80ff'
+    color: 'var(--color-accent)'
   },
   {
     key: 'logs',
@@ -110,7 +110,7 @@ const metricCards = computed(() => [
     value: stats.logs,
     description: '已入库日志条目（累计）',
     icon: Document,
-    color: '#2db271'
+    color: 'var(--color-success)'
   },
   {
     key: 'collecting',
@@ -118,7 +118,7 @@ const metricCards = computed(() => [
     value: stats.collecting,
     description: '正在实时采集的源数量',
     icon: Loading,
-    color: '#f2994a'
+    color: 'var(--color-gold)'
   },
   {
     key: 'alerts',
@@ -126,7 +126,7 @@ const metricCards = computed(() => [
     value: stats.alerts,
     description: '当前筛选范围的告警总数',
     icon: Bell,
-    color: '#e45b5b'
+    color: 'var(--color-error)'
   }
 ])
 
@@ -141,26 +141,35 @@ const quickActions = Object.freeze([
 .home-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-24);
 }
 
 .metrics-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--space-16);
 }
 
 .metric-item {
   position: relative;
   overflow: hidden;
-  padding: 16px 18px;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-xl);
-  background: var(--panel-bg);
-  box-shadow: var(--panel-shadow);
+  padding: var(--space-24);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-featured);
+  background: var(--color-white);
   opacity: 0;
   transform: translateY(12px);
-  animation: fadeInUp var(--duration-slow) var(--ease-smooth) forwards;
+  animation: fadeInUp var(--duration-slow) var(--ease-out) forwards;
+  cursor: default;
+  transition: box-shadow var(--duration-normal) ease,
+              border-color var(--duration-normal) ease,
+              transform var(--duration-fast) ease;
+}
+
+.metric-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+  border-color: var(--border-medium);
 }
 
 .metric-item::before {
@@ -169,101 +178,109 @@ const quickActions = Object.freeze([
   inset: 0 auto auto 0;
   width: 100%;
   height: 3px;
-  background: linear-gradient(90deg, var(--metric-accent), transparent);
+  background: var(--metric-accent);
 }
 
 .metric-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-12);
 }
 
 .metric-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: #ffffff;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-comfortable);
+  color: var(--color-white);
   background: var(--metric-accent);
 }
 
 .metric-label {
   font-size: 14px;
-  color: #5d6d89;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
 .metric-value {
-  margin-top: 12px;
-  font-size: 30px;
+  margin-top: var(--space-16);
+  font-size: 32px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.01em;
-  color: #1b2d4c;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-sub {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #74849f;
+  margin: var(--space-8) 0 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
 }
 
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-16);
 }
 
 .action-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid rgba(44, 87, 152, 0.16);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.72);
-  color: #30558c;
-  font-size: 13px;
+  min-height: 48px;
+  padding: 0 var(--space-24);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  background: var(--color-white);
+  color: var(--text-primary);
+  font-size: 14px;
   font-weight: 500;
-  transition: transform var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+  transition: transform var(--duration-fast) ease,
+              border-color var(--duration-fast) ease,
+              background-color var(--duration-fast) ease,
+              box-shadow var(--duration-normal) ease;
 }
 
 .action-link:hover {
-  border-color: rgba(47, 128, 255, 0.45);
-  background: rgba(235, 244, 255, 0.86);
+  border-color: var(--color-accent);
+  background: rgba(201, 100, 66, 0.04);
   transform: translateY(-2px);
-  box-shadow: var(--panel-shadow-hover);
+  box-shadow: var(--shadow-card);
+  color: var(--color-accent);
 }
 
 .overview-panel {
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-xl);
-  padding: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.92));
-  box-shadow: var(--panel-shadow);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-featured);
+  padding: var(--space-24);
+  background: var(--color-white);
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: var(--space-16);
+  margin-bottom: var(--space-24);
 }
 
 .panel-headline h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #1b2d4c;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
 }
 
 .panel-headline p {
-  margin: 6px 0 0;
+  margin: var(--space-6) 0 0;
   font-size: 13px;
-  color: #6a7993;
+  color: var(--text-secondary);
 }
 
 .panel-controls {
@@ -277,46 +294,49 @@ const quickActions = Object.freeze([
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-24);
 }
 
 .chart-panel {
-  padding: 14px;
-  border: 1px solid rgba(35, 75, 136, 0.12);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.86);
-  transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
+  padding: var(--space-16);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  background: var(--surface-100);
+  transition: transform var(--duration-normal) ease,
+              box-shadow var(--duration-normal) ease,
+              border-color var(--duration-normal) ease;
 }
 
 .chart-panel:hover {
   transform: translateY(-3px);
-  box-shadow: var(--panel-shadow-hover);
-  border-color: rgba(47, 128, 255, 0.25);
+  box-shadow: var(--shadow-card);
+  border-color: var(--border-medium);
 }
 
 .chart-panel-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .chart-panel-top h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1f304d;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
 }
 
 .level-hint {
   font-size: 12px;
-  color: #6e7e98;
+  color: var(--text-tertiary);
 }
 
 .chart-container {
   width: 100%;
   height: 300px;
-  margin-top: 12px;
+  margin-top: var(--space-16);
 }
 
 @keyframes fadeInUp {
@@ -336,7 +356,7 @@ const quickActions = Object.freeze([
   }
 }
 
-@media (max-width: var(--breakpoint-lg)) {
+@media (max-width: var(--breakpoint-tablet)) {
   .panel-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -351,22 +371,22 @@ const quickActions = Object.freeze([
   }
 }
 
-@media (max-width: var(--breakpoint-sm)) {
+@media (max-width: var(--breakpoint-mobile)) {
   .metrics-strip,
   .quick-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .metric-value {
-    font-size: 26px;
+    font-size: 28px;
   }
 
   .overview-panel {
-    padding: var(--space-md);
+    padding: var(--space-24);
   }
 
   .chart-panel {
-    padding: var(--space-sm);
+    padding: var(--space-16);
   }
 
   .chart-panel-top {

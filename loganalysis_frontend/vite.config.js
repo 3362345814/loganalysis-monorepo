@@ -9,6 +9,13 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: `@use "@/styles/element/index.scss" as *;`
+      }
+    }
+  },
   server: {
     port: 3000,
     proxy: {

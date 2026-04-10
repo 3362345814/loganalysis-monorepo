@@ -98,9 +98,9 @@
           <!-- 聚合组列表 -->
           <el-table :data="aggGroups" v-loading="aggLoading" stripe>
             <el-table-column prop="groupId" label="聚合组ID" width="180" />
-            <el-table-column prop="representativeLog" label="代表性日志" min-width="250" show-overflow-tooltip />
+            <el-table-column prop="representativeLog" label="代表性日志" min-width="180" show-overflow-tooltip />
             <el-table-column prop="eventCount" label="事件数" width="100" />
-            <el-table-column prop="severity" label="严重程度" width="100">
+            <el-table-column prop="severity" label="严重程度" width="120">
               <template #default="{ row }">
                 <el-tag :type="getSeverityType(row.severity)">{{ row.severity }}</el-tag>
               </template>
@@ -639,11 +639,14 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
 
 <style scoped>
 .processing-page {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .tool-card {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .card-header {
@@ -654,10 +657,10 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
 
 .log-content {
   margin: 0;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  font-family: 'Courier New', monospace;
+  padding: var(--space-16);
+  background-color: var(--surface-300);
+  border-radius: var(--radius-standard);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -666,49 +669,49 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
 }
 
 .parsed-info-content {
-  padding: 16px;
+  padding: var(--space-24);
 }
 
 .parsed-info-summary {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #ebeef5;
+  margin-bottom: var(--space-24);
+  padding-bottom: var(--space-16);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .parsed-info-count {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .field-key {
   font-weight: 500;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .field-value {
-  color: #303133;
+  color: var(--text-primary);
   word-break: break-all;
 }
 
 .parsed-info-footer {
-  padding: 16px;
-  border-top: 1px solid #ebeef5;
+  padding: var(--space-24);
+  border-top: 1px solid var(--border-primary);
   display: flex;
-  gap: 12px;
+  gap: var(--space-16);
 }
 
 .ai-analysis-loading {
-  margin-top: 16px;
-  padding: 20px;
+  margin-top: var(--space-24);
+  padding: var(--space-24);
   text-align: center;
-  color: #409eff;
+  color: #c96442;
 }
 
 .ai-analysis-error {
-  margin-top: 16px;
+  margin-top: var(--space-24);
 }
 
 .ai-analysis-result {
-  margin-top: 16px;
+  margin-top: var(--space-24);
 }
 </style>

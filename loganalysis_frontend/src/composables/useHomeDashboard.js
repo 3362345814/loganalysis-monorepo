@@ -3,11 +3,11 @@ import { logSourceApi, projectApi, rawLogApi } from '@/api'
 import { alertStatisticsApi } from '@/api/alertApi'
 
 const levelColorMap = Object.freeze({
-  CRITICAL: '#e45b5b',
-  HIGH: '#ff7d4c',
-  MEDIUM: '#f3b343',
-  LOW: '#2db271',
-  INFO: '#7a879d'
+  CRITICAL: '#b53333',
+  HIGH: '#c96442',
+  MEDIUM: '#b87a2e',
+  LOW: '#1f8a65',
+  INFO: '#9fbbe0'
 })
 
 const levelLabelMap = Object.freeze({
@@ -21,12 +21,12 @@ const levelLabelMap = Object.freeze({
 const createAreaGradient = () => {
   const graphic = globalThis.echarts?.graphic
   if (!graphic?.LinearGradient) {
-    return 'rgba(47, 128, 255, 0.16)'
+    return 'rgba(201, 100, 66, 0.16)'
   }
 
   return new graphic.LinearGradient(0, 0, 0, 1, [
-    { offset: 0, color: 'rgba(47, 128, 255, 0.32)' },
-    { offset: 1, color: 'rgba(47, 128, 255, 0.04)' }
+    { offset: 0, color: 'rgba(201, 100, 66, 0.32)' },
+    { offset: 1, color: 'rgba(201, 100, 66, 0.04)' }
   ])
 }
 
@@ -83,8 +83,8 @@ export const useHomeDashboard = () => {
         areaStyle: {
           color: createAreaGradient()
         },
-        lineStyle: { color: '#2f80ff', width: 2.5 },
-        itemStyle: { color: '#2f80ff' },
+        lineStyle: { color: '#c96442', width: 2.5 },
+        itemStyle: { color: '#c96442' },
         data: trendData.value.map(({ count }) => count)
       }
     ]

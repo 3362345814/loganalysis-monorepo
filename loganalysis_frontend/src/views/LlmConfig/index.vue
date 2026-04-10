@@ -310,41 +310,48 @@ onMounted(() => {
 
 <style scoped>
 .llm-config-container {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
 }
 
 .page-header h2 {
   margin: 0 0 8px 0;
   font-size: 24px;
-  color: #303133;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .subtitle {
   margin: 0;
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .toolbar-card {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .table-card {
   min-height: 400px;
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .config-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .param-text {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
 }
 </style>

@@ -39,7 +39,7 @@
             <el-tag type="info">{{ row.projectName || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="sourceType" label="类型" width="100">
+        <el-table-column prop="sourceType" label="类型" width="140">
           <template #default="{ row }">
             <el-tag>{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
           </template>
@@ -72,11 +72,6 @@
               {{ row.aggregationLevel }}及以上
             </el-tag>
             <el-tag v-else type="info">全部</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="lastCollectionTime" label="最后采集" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.lastCollectionTime) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
@@ -1015,39 +1010,45 @@ onMounted(() => {
 
 <style scoped>
 .collection-page {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .toolbar-card {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .project-info-card {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .project-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .project-info .el-icon {
   font-size: 20px;
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .project-name {
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .project-info-empty {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #909399;
+  gap: var(--space-10);
+  color: var(--text-secondary);
 }
 
 .project-info-empty .el-icon {
@@ -1062,33 +1063,33 @@ onMounted(() => {
 .project-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-10);
 }
 
 .project-item {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  padding: var(--space-16) var(--space-16);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
   cursor: pointer;
-  transition: all 0.2s;
-  gap: 12px;
+  transition: all var(--duration-fast) ease;
+  gap: var(--space-16);
 }
 
 .project-item:hover {
-  background-color: #f5f7fa;
-  border-color: #409eff;
+  background-color: rgba(38, 37, 30, 0.04);
+  border-color: #c96442;
 }
 
 .project-item.active {
-  background-color: #ecf5ff;
-  border-color: #409eff;
+  background-color: rgba(38, 37, 30, 0.04);
+  border-color: #c96442;
 }
 
 .project-item-icon {
   font-size: 24px;
-  color: #409eff;
+  color: #c96442;
 }
 
 .project-item-info {
@@ -1098,27 +1099,30 @@ onMounted(() => {
 .project-item-name {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .project-item-code {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-tertiary);
   margin-top: 2px;
 }
 
 .project-item-check {
-  color: #409eff;
+  color: var(--color-accent);
   font-size: 18px;
 }
 
 .table-card {
   min-height: 500px;
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
 }
 
 .action-buttons {
   display: flex;
-  gap: 5px;
+  gap: var(--space-4);
   flex-wrap: nowrap;
 }
 
@@ -1130,8 +1134,8 @@ onMounted(() => {
 .form-tip {
   display: block;
   font-size: 12px;
-  color: #909399;
-  margin-top: 5px;
+  color: var(--text-tertiary);
+  margin-top: var(--space-4);
 }
 
 .custom-rules {
@@ -1139,14 +1143,14 @@ onMounted(() => {
 }
 
 .rule-examples {
-  margin-top: 10px;
+  margin-top: var(--space-10);
 }
 
 .rule-examples code {
-  background-color: #f5f7fa;
+  background-color: var(--surface-300);
   padding: 2px 6px;
-  border-radius: 3px;
-  color: #409eff;
+  border-radius: var(--radius-small);
+  color: #c96442;
 }
 
 .pattern-help {
@@ -1154,41 +1158,41 @@ onMounted(() => {
 }
 
 .pattern-list {
-  margin: 8px 0 0 0;
+  margin: var(--space-8) 0 0 0;
   padding-left: 20px;
 }
 
 .pattern-list li {
-  margin: 4px 0;
+  margin: var(--space-4) 0;
   line-height: 1.6;
 }
 
 .pattern-buttons {
-  margin-top: 10px;
+  margin-top: var(--space-10);
   display: flex;
-  gap: 10px;
+  gap: var(--space-8);
 }
 
 .pattern-list code {
-  background-color: #f5f7fa;
+  background-color: var(--surface-300);
   padding: 2px 6px;
-  border-radius: 3px;
-  color: #409eff;
+  border-radius: var(--radius-small);
+  color: var(--color-accent);
   font-size: 12px;
 }
 
 .test-result {
   display: inline-block;
-  margin-left: 10px;
+  margin-left: var(--space-10);
   font-size: 12px;
   font-weight: 500;
 }
 
 .test-result.success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .test-result.error {
-  color: #f56c6c;
+  color: var(--color-error);
 }
 </style>

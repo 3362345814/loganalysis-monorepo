@@ -3,8 +3,9 @@ package com.evelin.loganalysis.logcollection.collector;
 import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.model.CollectionCheckpoint;
 import com.evelin.loganalysis.logcollection.model.CollectionState;
-import com.evelin.loganalysis.logcollection.service.CheckpointManager;
 import com.evelin.loganalysis.logcollection.model.LogSource;
+import com.evelin.loganalysis.logcollection.service.CheckpointManager;
+import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
@@ -64,7 +65,7 @@ public class LocalFileCollector extends AbstractLogCollector {
     public LocalFileCollector(LogSource logSource,
                               CheckpointManager checkpointManager,
                               CollectionConfig config,
-                              com.evelin.loganalysis.logcollection.service.RawLogEventService rawLogEventService,
+                              RawLogEventService rawLogEventService,
                               RabbitTemplate rabbitTemplate) {
         super(logSource, checkpointManager, config, rabbitTemplate);
     }

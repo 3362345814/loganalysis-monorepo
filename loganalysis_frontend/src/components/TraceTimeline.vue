@@ -234,41 +234,41 @@ export default {
 
 <style scoped>
 .trace-timeline-dialog :deep(.el-dialog__body) {
-  padding: 0 20px 20px 20px;
+  padding: 0 var(--space-24) var(--space-24) var(--space-24);
 }
 
 .trace-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #eee;
-  margin-bottom: 16px;
+  padding: var(--space-16) 0;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: var(--space-16);
 }
 
 .trace-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .trace-label {
   font-weight: 600;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .trace-value {
-  font-family: 'Courier New', monospace;
-  color: #409eff;
-  background: #ecf5ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #c96442;
+  background: rgba(201, 100, 66, 0.1);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-small);
   font-size: 13px;
 }
 
 .trace-stats {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .timeline-container {
@@ -277,11 +277,11 @@ export default {
 }
 
 .timeline-empty {
-  padding: 40px 0;
+  padding: var(--space-48) 0;
 }
 
 .timeline {
-  padding: 8px 0;
+  padding: var(--space-8) 0;
 }
 
 .timeline-item {
@@ -301,64 +301,64 @@ export default {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #409eff;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 2px #409eff;
+  background: var(--color-read);
+  border: 2px solid var(--color-white);
+  box-shadow: 0 0 0 2px var(--color-read);
   z-index: 1;
   flex-shrink: 0;
 }
 
 .marker-dot.error {
-  background: #f56c6c;
-  box-shadow: 0 0 0 2px #f56c6c;
+  background: #b53333;
+  box-shadow: 0 0 0 2px #b53333;
 }
 
 .marker-dot.warn {
-  background: #e6a23c;
-  box-shadow: 0 0 0 2px #e6a23c;
+  background: #b87a2e;
+  box-shadow: 0 0 0 2px #b87a2e;
 }
 
 .marker-dot.debug {
-  background: #67c23a;
-  box-shadow: 0 0 0 2px #67c23a;
+  background: #1f8a65;
+  box-shadow: 0 0 0 2px #1f8a65;
 }
 
 .marker-dot.trace {
-  background: #909399;
-  box-shadow: 0 0 0 2px #909399;
+  background: var(--text-tertiary);
+  box-shadow: 0 0 0 2px var(--text-tertiary);
 }
 
 .marker-line {
   flex: 1;
   width: 2px;
-  background: #e4e7ed;
-  margin-top: 4px;
+  background: var(--border-primary);
+  margin-top: var(--space-4);
   min-height: 20px;
 }
 
 .timeline-content {
   flex: 1;
-  padding: 0 0 16px 12px;
+  padding: 0 0 var(--space-24) var(--space-16);
   cursor: pointer;
-  margin-left: 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  margin-left: var(--space-8);
+  border-radius: var(--radius-comfortable);
+  transition: background-color var(--duration-fast) ease;
 }
 
 .timeline-content:hover {
-  background: #f5f7fa;
+  background: rgba(38, 37, 30, 0.04);
 }
 
 .timeline-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: var(--space-16);
+  margin-bottom: var(--space-4);
 }
 
 .timeline-time {
-  font-family: 'Courier New', monospace;
-  color: #909399;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
@@ -366,43 +366,43 @@ export default {
   font-weight: 600;
   font-size: 12px;
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-small);
 }
 
 .timeline-level.info {
-  color: #409eff;
-  background: #ecf5ff;
+  color: var(--color-read);
+  background: rgba(159, 187, 224, 0.15);
 }
 
 .timeline-level.error {
-  color: #f56c6c;
-  background: #fef0f0;
+  color: #b53333;
+  background: rgba(181, 51, 51, 0.1);
 }
 
 .timeline-level.warn {
-  color: #e6a23c;
-  background: #fdf6ec;
+  color: #b87a2e;
+  background: rgba(184, 122, 46, 0.1);
 }
 
 .timeline-level.debug {
-  color: #67c23a;
-  background: #f0f9eb;
+  color: #1f8a65;
+  background: rgba(31, 138, 101, 0.1);
 }
 
 .timeline-level.trace {
-  color: #909399;
-  background: #f4f4f5;
+  color: var(--text-tertiary);
+  background: var(--surface-300);
 }
 
 .timeline-source {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-tertiary);
 }
 
 .expand-icon {
   margin-left: auto;
-  color: #c0c4cc;
-  transition: transform 0.3s;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-normal) ease;
 }
 
 .expand-icon.is-expanded {
@@ -411,35 +411,36 @@ export default {
 
 .timeline-message {
   font-size: 13px;
-  color: #303133;
+  color: var(--text-primary);
   line-height: 1.5;
   word-break: break-all;
 }
 
 .timeline-details {
-  margin-top: 12px;
-  padding: 12px;
-  background: #fafafa;
-  border-radius: 4px;
-  border: 1px solid #ebeef5;
+  margin-top: var(--space-16);
+  padding: var(--space-16);
+  background: var(--surface-100);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
 }
 
 .detail-content {
   white-space: pre-wrap;
   word-wrap: break-word;
-  background: #fff;
-  padding: 8px;
-  border-radius: 4px;
+  background: var(--color-white);
+  padding: var(--space-8);
+  border-radius: var(--radius-small);
   font-size: 12px;
   line-height: 1.4;
   max-height: 200px;
   overflow-y: auto;
-  margin: 4px 0;
+  margin: var(--space-4) 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .detail-content.error {
-  background: #fff5f5;
-  color: #f56c6c;
+  background: rgba(181, 51, 51, 0.1);
+  color: #b53333;
 }
 
 .detail-content.error.stack {
@@ -448,41 +449,40 @@ export default {
 }
 
 .detail-content.raw {
-  background: #f5f7fa;
-  color: #606266;
-  font-family: 'Courier New', monospace;
+  background: var(--surface-300);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
 .raw-content-section {
-  margin-top: 12px;
+  margin-top: var(--space-16);
 }
 
 .section-header {
   font-size: 12px;
   font-weight: 600;
-  color: #606266;
-  margin-bottom: 8px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-8);
 }
 
 .parsed-fields-section {
-  margin-top: 12px;
+  margin-top: var(--space-16);
 }
 
 .parsed-fields-section .section-header {
   font-size: 12px;
   font-weight: 600;
-  color: #606266;
-  margin-bottom: 8px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-8);
 }
 
 .field-key {
-  color: #606266;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
 .field-value {
-  color: #303133;
+  color: var(--text-primary);
   word-break: break-all;
 }
 </style>
