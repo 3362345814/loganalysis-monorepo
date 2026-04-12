@@ -42,7 +42,7 @@
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="ruleType" label="规则类型" width="120">
           <template #default="{ row }">
-            <el-tag size="small">{{ getRuleTypeText(row.ruleType) }}</el-tag>
+            <el-tag type="info" size="small">{{ getRuleTypeText(row.ruleType) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="conditionExpression" label="触发条件" min-width="200" show-overflow-tooltip />
@@ -58,6 +58,7 @@
             <el-tag
               v-for="channel in row.notificationChannels"
               :key="channel"
+              type="info"
               size="small"
               class="channel-tag"
             >

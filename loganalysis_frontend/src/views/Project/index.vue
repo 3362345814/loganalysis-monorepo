@@ -8,7 +8,7 @@
           <el-button :icon="Refresh" @click="loadProjects">刷新</el-button>
         </el-col>
         <el-col :span="6" class="toolbar-right">
-          <el-tag type="success">项目数: {{ projects.length }}</el-tag>
+          <el-tag type="info">项目数: {{ projects.length }}</el-tag>
         </el-col>
       </el-row>
     </el-card>
@@ -23,7 +23,7 @@
         <el-table-column prop="email" label="邮箱" width="180" show-overflow-tooltip />
         <el-table-column prop="enabled" label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'danger'">
+            <el-tag :type="row.enabled ? 'success' : 'info'">
               {{ row.enabled ? '启用' : '禁用' }}
             </el-tag>
           </template>

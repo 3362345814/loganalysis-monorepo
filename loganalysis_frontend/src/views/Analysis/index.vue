@@ -312,7 +312,7 @@ const getSeverityType = (severity) => {
   const typeMap = {
     'HIGH': 'danger',
     'MEDIUM': 'warning',
-    'LOW': 'success'
+    'LOW': 'info'
   }
   return typeMap[severity] || 'info'
 }

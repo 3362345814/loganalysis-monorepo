@@ -6,7 +6,7 @@
         :key="item.key"
         class="metric-item"
         :class="`stagger-${index + 1}`"
-        :style="{ '--metric-accent': item.color }"
+        :style="{ '--metric-accent': item.color, '--metric-accent-soft': item.softColor }"
       >
         <div class="metric-top">
           <span class="metric-icon">
@@ -102,7 +102,8 @@ const metricCards = computed(() => [
     value: stats.sources,
     description: '当前已接入的数据源总数',
     icon: Collection,
-    color: 'var(--color-accent)'
+    color: 'var(--color-accent)',
+    softColor: 'rgba(201, 100, 66, 0.12)'
   },
   {
     key: 'logs',
@@ -110,7 +111,8 @@ const metricCards = computed(() => [
     value: stats.logs,
     description: '已入库日志条目（累计）',
     icon: Document,
-    color: 'var(--color-success)'
+    color: 'var(--color-success)',
+    softColor: 'rgba(31, 138, 101, 0.12)'
   },
   {
     key: 'collecting',
@@ -118,7 +120,8 @@ const metricCards = computed(() => [
     value: stats.collecting,
     description: '正在实时采集的源数量',
     icon: Loading,
-    color: 'var(--color-gold)'
+    color: 'var(--color-gold)',
+    softColor: 'rgba(184, 122, 46, 0.12)'
   },
   {
     key: 'alerts',
@@ -126,7 +129,8 @@ const metricCards = computed(() => [
     value: stats.alerts,
     description: '当前筛选范围的告警总数',
     icon: Bell,
-    color: 'var(--color-error)'
+    color: 'var(--color-error)',
+    softColor: 'rgba(181, 51, 51, 0.12)'
   }
 ])
 
@@ -182,11 +186,12 @@ const quickActions = Object.freeze([
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-comfortable);
-  color: var(--color-white);
-  background: var(--metric-accent);
+  color: var(--metric-accent);
+  background: var(--metric-accent-soft);
+  font-size: 26px;
 }
 
 .metric-label {

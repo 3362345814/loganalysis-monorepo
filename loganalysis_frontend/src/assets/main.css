@@ -721,6 +721,7 @@ a {
 .el-tag {
   border-radius: var(--radius-pill) !important;
   font-weight: 500;
+  letter-spacing: 0.12px;
   border: 1px solid;
 }
 

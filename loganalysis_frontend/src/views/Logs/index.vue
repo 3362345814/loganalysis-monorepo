@@ -1052,7 +1052,7 @@ const getLogLevelType = (level) => {
     case 'WARN':
       return 'warning'
     case 'INFO':
-      return 'success'
+      return 'info'
     case 'DEBUG':
       return 'info'
     case 'TRACE':

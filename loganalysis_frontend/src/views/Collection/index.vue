@@ -9,7 +9,7 @@
           <el-button :icon="Refresh" @click="loadSources">刷新</el-button>
         </el-col>
         <el-col :span="6" class="toolbar-right">
-          <el-tag type="success">采集源: {{ sources.length }}</el-tag>
+          <el-tag type="info">采集源: {{ sources.length }}</el-tag>
         </el-col>
       </el-row>
     </el-card>
@@ -41,7 +41,7 @@
         </el-table-column>
         <el-table-column prop="sourceType" label="类型" width="140">
           <template #default="{ row }">
-            <el-tag>{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
+            <el-tag type="info">{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="路径" min-width="180" show-overflow-tooltip>
@@ -116,7 +116,7 @@
           <el-input v-model="form.name" placeholder="请输入采集源名称" />
         </el-form-item>
         <el-form-item label="所属项目" prop="projectId">
-          <el-tag type="success">{{ currentProject?.name || '未选择' }}</el-tag>
+          <el-tag type="info">{{ currentProject?.name || '未选择' }}</el-tag>
           <span class="form-tip" style="margin-left: 10px">采集源将绑定到此项目</span>
         </el-form-item>
         <el-form-item label="类型" prop="sourceType">
@@ -141,9 +141,9 @@
           <el-form-item label="主机地址" prop="host">
             <el-input v-model="form.host" placeholder="SSH服务器地址，如 192.168.1.100" />
           </el-form-item>
-          <el-form-item label="端口" prop="port">
-            <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="SSH端口，默认22" />
-          </el-form-item>
+        <el-form-item label="端口" prop="port">
+            <el-input-number v-model="form.port" :min="1" :max="65535" :controls="false" placeholder="SSH端口，默认22" />
+        </el-form-item>
           <el-form-item label="用户名" prop="username">
             <el-input v-model="form.username" placeholder="SSH用户名" />
           </el-form-item>

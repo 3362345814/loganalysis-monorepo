@@ -24,7 +24,7 @@
           <el-table :data="channelList" v-loading="loadingChannels" style="width: 100%; margin-top: 20px;">
             <el-table-column prop="channel" label="渠道" width="120">
               <template #default="{ row }">
-                <el-tag>{{ getChannelText(row.channel) }}</el-tag>
+                <span class="channel-name">{{ getChannelText(row.channel) }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="enabled" label="启用状态" width="120">
@@ -38,7 +38,6 @@
                   <el-input
                     v-model="row.configParams.webhookUrl"
                     placeholder="请输入钉钉 webhook 地址"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -47,7 +46,6 @@
                   <el-input
                     v-model="row.configParams.secret"
                     placeholder="请输入加签密钥(可选)"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -57,12 +55,10 @@
                     <el-input
                       v-model="row.configParams.recipients"
                       placeholder="接收人，多个用逗号分隔(可选)"
-                      size="small"
                     >
                       <template #prepend>接收人</template>
                     </el-input>
                     <el-button
-                      size="small"
                       type="primary"
                       :disabled="!row.enabled || !row.configParams.webhookUrl"
                       :loading="testingDingtalk === row.channel"
@@ -77,13 +73,11 @@
                     <el-input
                       v-model="row.configParams.webhookUrl"
                       placeholder="请输入企业微信 webhook 地址"
-                      size="small"
                       :disabled="!row.enabled"
                     >
                       <template #prepend>Webhook URL</template>
                     </el-input>
                     <el-button
-                      size="small"
                       type="primary"
                       :disabled="!row.enabled || !row.configParams.webhookUrl"
                       :loading="testingWechatWork === row.channel"
@@ -97,7 +91,6 @@
                   <el-input
                     v-model="row.configParams.smtpHost"
                     placeholder="SMTP 服务器地址"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -106,14 +99,12 @@
                   <el-input
                     v-model="row.configParams.smtpPort"
                     placeholder="端口"
-                    size="small"
                     :disabled="!row.enabled"
                     style="width: 120px; margin-right: 8px;"
                   />
                   <el-input
                     v-model="row.configParams.username"
                     placeholder="用户名"
-                    size="small"
                     :disabled="!row.enabled"
                     style="width: 150px; margin-right: 8px;"
                   />
@@ -122,14 +113,12 @@
                     placeholder="密码"
                     type="password"
                     show-password
-                    size="small"
                     :disabled="!row.enabled"
                     style="width: 150px;"
                   />
                   <el-input
                     v-model="row.configParams.from"
                     placeholder="发件人邮箱"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-top: 8px; margin-bottom: 8px;"
                   >
@@ -138,7 +127,6 @@
                   <el-input
                     v-model="row.configParams.recipients"
                     placeholder="收件人邮箱，多个用逗号分隔"
-                    size="small"
                     :disabled="!row.enabled"
                   >
                     <template #prepend>收件人</template>
@@ -148,7 +136,6 @@
                   <el-input
                     v-model="row.configParams.webhookUrl"
                     placeholder="请输入 Webhook 地址"
-                    size="small"
                     :disabled="!row.enabled"
                   >
                     <template #prepend>Webhook URL</template>
@@ -158,7 +145,6 @@
                   <el-input
                     v-model="row.configParams.webhookUrl"
                     placeholder="请输入飞书 webhook 地址"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -167,7 +153,6 @@
                   <el-input
                     v-model="row.configParams.secret"
                     placeholder="请输入飞书机器人加签密钥(可选)"
-                    size="small"
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -177,12 +162,10 @@
                     <el-input
                       v-model="row.configParams.recipients"
                       placeholder="接收人，多个用逗号分隔(可选)"
-                      size="small"
                     >
                       <template #prepend>接收人</template>
                     </el-input>
                     <el-button
-                      size="small"
                       type="primary"
                       :disabled="!row.enabled || !row.configParams.webhookUrl"
                       :loading="testingFeishu === row.channel"
@@ -199,7 +182,6 @@
                 <el-input
                   v-model="row.description"
                   placeholder="请输入描述"
-                  size="small"
                   :disabled="!row.enabled"
                 />
               </template>
@@ -219,7 +201,7 @@
 
           <el-form :model="analysisConfigForm" label-width="120px" style="max-width: 500px;">
             <el-form-item label="上下文行数">
-              <el-input-number v-model="analysisConfigForm.contextSize" :min="10" :max="30" />
+              <el-input-number v-model="analysisConfigForm.contextSize" :min="10" :max="30" :controls="false" />
               <span class="context-range-tip">行 (10-30)</span>
             </el-form-item>
             <el-form-item label="自动分析级别">
@@ -724,6 +706,11 @@ onMounted(() => {
   gap: var(--space-8);
 }
 
+.channel-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .param-text {
   font-size: 12px;
   color: var(--text-tertiary);
@@ -738,6 +725,22 @@ onMounted(() => {
 
 .llm-table {
   margin-top: var(--space-10);
+}
+
+.system-config-container :deep(.el-input-group__prepend) {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-primary) !important;
+  border-right: none !important;
+  border-radius: 12px 0 0 12px !important;
+  background: var(--surface-200) !important;
+  color: var(--text-secondary) !important;
+  padding: 0 var(--space-12);
+}
+
+.system-config-container :deep(.el-input-group--prepend .el-input__wrapper) {
+  border-left: none !important;
+  border-radius: 0 12px 12px 0 !important;
 }
 
 .tab-fade-enter-active,

@@ -1,9 +1,9 @@
 {
-  "version": "v0.2.4",
+  "version": "v0.2.5",
   "releaseDate": "2026-04-12",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041201",
+    "buildNumber": "2026041202",
     "environment": "production"
   }
 }

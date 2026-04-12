@@ -145,6 +145,8 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 }
 
 .app-aside {
+  --aside-icon-box-size: 36px;
+  --aside-menu-inline-pad: 18px;
   display: flex;
   flex-direction: column;
   padding: var(--space-16) var(--space-12);
@@ -158,18 +160,27 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   align-items: center;
   gap: var(--space-10);
   margin-bottom: var(--space-14);
-  padding: var(--space-8);
+  min-height: 46px;
+  padding: var(--space-8) 0;
 }
 
 .logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--aside-icon-box-size);
+  height: var(--aside-icon-box-size);
   border-radius: var(--radius-comfortable);
   color: var(--color-white);
   background: var(--color-accent);
+}
+
+.app-aside:not(.is-compact) .logo {
+  padding-left: var(--aside-menu-inline-pad);
+}
+
+.app-aside.is-compact .logo {
+  justify-content: center;
 }
 
 .logo-text {
@@ -198,6 +209,11 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   background: transparent;
 }
 
+.app-aside.is-compact .nav-menu {
+  --el-menu-base-level-padding: 20px;
+  --el-menu-icon-width: 24px;
+}
+
 .nav-menu :deep(.el-menu-item) {
   margin: var(--space-6) 0;
   height: 46px;
@@ -206,6 +222,11 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   transition: background-color var(--duration-fast) ease,
               color var(--duration-fast) ease,
               transform var(--duration-fast) ease;
+}
+
+.app-aside:not(.is-compact) .nav-menu :deep(.el-menu-item) {
+  padding-left: var(--aside-menu-inline-pad) !important;
+  padding-right: var(--space-12) !important;
 }
 
 .nav-menu :deep(.el-menu-item:hover) {
@@ -220,7 +241,34 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 }
 
 .nav-menu :deep(.el-menu-item .el-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--aside-icon-box-size);
+  height: var(--aside-icon-box-size);
   font-size: 17px;
+}
+
+.app-aside.is-compact :deep(.nav-menu.el-menu--collapse) {
+  width: 100% !important;
+}
+
+.app-aside.is-compact :deep(.nav-menu.el-menu--collapse > .el-menu-item) {
+  justify-content: center;
+}
+
+.app-aside.is-compact :deep(.nav-menu.el-menu--collapse > .el-menu-item .el-menu-tooltip__trigger) {
+  justify-content: center !important;
+}
+
+.app-aside.is-compact :deep(.nav-menu.el-menu--collapse > .el-menu-item .el-icon) {
+  width: var(--el-menu-icon-width) !important;
+  height: var(--el-menu-icon-width) !important;
+  margin: 0 !important;
+}
+
+.app-aside.is-compact .nav-menu :deep(.el-menu-item:hover) {
+  transform: none;
 }
 
 .aside-footer {
