@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - 'loganalysis_frontend/src/version.json'
 
 permissions:
   contents: write
@@ -11,8 +15,39 @@ permissions:
   id-token: write
 
 jobs:
+  resolve-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG=$(jq -r '.version // empty' loganalysis_frontend/src/version.json)
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::无法解析版本号，请检查 loganalysis_frontend/src/version.json 的 version 字段。"
+            exit 1
+          fi
+
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $TAG"
+
   build-images:
     runs-on: ubuntu-latest
+    needs: resolve-release
     strategy:
       fail-fast: false
       matrix:
@@ -55,11 +90,12 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ steps.vars.outputs.image }}:${{ github.ref_name }}
+            ${{ steps.vars.outputs.image }}:${{ needs.resolve-release.outputs.release_tag }}
             ${{ steps.vars.outputs.image }}:latest
 
   build-cli:
     runs-on: ubuntu-latest
+    needs: resolve-release
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +142,7 @@ jobs:
         run: |
           mkdir -p dist
           go build -buildvcs=false -trimpath \
-            -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -ldflags "-s -w -X main.version=${{ needs.resolve-release.outputs.release_tag }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o "dist/loganalysis-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
             ./cmd/loganalysis
 
@@ -119,11 +155,14 @@ jobs:
   publish-release:
     runs-on: ubuntu-latest
     needs:
+      - resolve-release
       - build-images
       - build-cli
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
@@ -183,6 +222,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.resolve-release.outputs.release_tag }}
+          name: ${{ needs.resolve-release.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           body: ${{ steps.release_notes.outputs.body }}
           files: |
             dist/loganalysis-*
