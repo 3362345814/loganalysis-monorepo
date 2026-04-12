@@ -147,9 +147,43 @@ jobs:
             --output-certificate checksums.txt.pem \
             checksums.txt
 
+      - name: Generate release notes from version.json
+        id: release_notes
+        shell: bash
+        run: |
+          VERSION_FILE="loganalysis_frontend/src/version.json"
+
+          mapfile -t updates < <(jq -r '
+            .updateInfo as $u
+            | if $u == null then empty
+              elif ($u | type) == "array" then $u[]
+              else ($u | tostring | split("\n")[])
+              end
+            | gsub("^\\s+|\\s+$"; "")
+            | select(length > 0)
+          ' "$VERSION_FILE")
+
+          if [ ${#updates[@]} -eq 0 ]; then
+            notes="1. 无更新说明"
+          else
+            notes=""
+            for i in "${!updates[@]}"; do
+              idx=$((i + 1))
+              notes+="${idx}. ${updates[$i]}"$'\n'
+            done
+            notes="${notes%$'\n'}"
+          fi
+
+          {
+            echo "body<<EOF"
+            echo "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body: ${{ steps.release_notes.outputs.body }}
           files: |
             dist/loganalysis-*
             dist/checksums.txt
