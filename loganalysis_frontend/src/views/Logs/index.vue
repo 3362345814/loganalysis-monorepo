@@ -1127,7 +1127,7 @@ onUnmounted(() => {
 
 .terminal-title {
   color: var(--color-cream);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -1141,7 +1141,7 @@ onUnmounted(() => {
 .terminal-content {
   background: var(--color-dark);
   color: rgba(242, 241, 237, 0.85);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-terminal-mono);
   font-size: 13px;
   line-height: 1.6;
   padding: var(--space-8) var(--space-24);
@@ -1164,7 +1164,7 @@ onUnmounted(() => {
   border-radius: var(--radius-small);
   font-size: 11px;
   margin-right: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-terminal-mono);
 }
 
 .log-time {
@@ -1299,7 +1299,7 @@ onUnmounted(() => {
 }
 
 .parsed-info-title {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 14px;
   color: var(--text-primary);
 }
@@ -1330,7 +1330,7 @@ onUnmounted(() => {
 
 .parsed-info-content :deep(.el-table th) {
   background: var(--surface-300) !important;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
@@ -1366,7 +1366,7 @@ onUnmounted(() => {
   border-radius: var(--radius-standard);
   max-height: 300px;
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
   font-size: 12px;
 }
 

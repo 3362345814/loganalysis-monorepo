@@ -9,7 +9,7 @@
       </template>
 
       <!-- 统计卡片 -->
-      <el-row :gutter="20" style="margin-bottom: 20px">
+      <el-row :gutter="20" class="summary-row">
         <el-col :span="6">
           <el-statistic title="总聚合组" :value="aggSummary.total || 0" />
         </el-col>
@@ -37,7 +37,7 @@
       </el-row>
 
       <!-- 严重程度统计 -->
-      <el-row :gutter="20" style="margin-bottom: 20px">
+      <el-row :gutter="20" class="severity-row">
         <el-col :span="6">
           <el-statistic title="严重" :value="aggSummary.severityCounts?.CRITICAL || 0">
             <template #suffix>
@@ -69,7 +69,7 @@
       </el-row>
 
           <!-- 筛选 -->
-          <el-form inline style="margin-bottom: 10px">
+          <el-form inline class="agg-filter-form">
             <el-form-item label="项目">
               <el-select v-model="aggQuery.projectId" placeholder="全部" clearable style="width: 150px" @change="handleProjectChange">
                 <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
@@ -96,7 +96,7 @@
           </el-form>
 
           <!-- 聚合组列表 -->
-          <el-table :data="aggGroups" v-loading="aggLoading" stripe>
+          <el-table :data="aggGroups" v-loading="aggLoading">
             <el-table-column prop="groupId" label="聚合组ID" width="180" />
             <el-table-column prop="representativeLog" label="代表性日志" min-width="180" show-overflow-tooltip />
             <el-table-column prop="eventCount" label="事件数" width="100" />
@@ -144,7 +144,7 @@
             :total="aggTotal"
             :page-sizes="[10, 20, 50, 100]"
             layout="total, sizes, prev, pager, next, jumper"
-            style="margin-top: 20px; justify-content: flex-end"
+            class="agg-pagination"
             @size-change="loadAggregationGroups"
             @current-change="loadAggregationGroups"
           />
@@ -177,11 +177,11 @@
 
       <!-- 组内日志列表 -->
       <el-divider content-position="left">
-        <span style="font-weight: bold;">组内日志列表</span>
-        <el-tag type="info" size="small" style="margin-left: 8px;">共 {{ groupLogsTotal }} 条</el-tag>
+        <span class="group-logs-title">组内日志列表</span>
+        <el-tag type="info" size="small" class="group-logs-count">共 {{ groupLogsTotal }} 条</el-tag>
       </el-divider>
       
-      <el-table :data="groupLogs" v-loading="logsLoading" stripe max-height="400" size="small">
+      <el-table :data="groupLogs" v-loading="logsLoading" max-height="400" size="small">
         <el-table-column prop="logTime" label="日志时间" width="160">
           <template #default="{ row }">
             {{ formatTime(row.logTime) || formatTime(row.originalLogTime) }}
@@ -211,7 +211,7 @@
         :total="groupLogsTotal"
         :page-sizes="[10, 20, 50]"
         layout="total, sizes, prev, pager, next"
-        style="margin-top: 15px; justify-content: flex-end"
+        class="logs-pagination"
         @size-change="loadGroupLogs"
         @current-change="loadGroupLogs"
       />
@@ -235,7 +235,7 @@
         <div class="parsed-info-summary">
           <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
         </div>
-        <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
+        <el-table :data="parsedInfoTableData" size="small" max-height="400">
           <el-table-column prop="key" label="字段名" width="120">
             <template #default="{ row }">
               <span class="field-key">{{ formatFieldKey(row.key) }}</span>
@@ -649,6 +649,33 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
   background: var(--color-white);
 }
 
+.summary-row,
+.severity-row {
+  margin-bottom: var(--space-24);
+}
+
+.agg-filter-form {
+  margin-bottom: var(--space-10);
+}
+
+.agg-pagination {
+  margin-top: var(--space-24);
+  justify-content: flex-end;
+}
+
+.group-logs-title {
+  font-weight: 500;
+}
+
+.group-logs-count {
+  margin-left: var(--space-8);
+}
+
+.logs-pagination {
+  margin-top: var(--space-16);
+  justify-content: flex-end;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -660,7 +687,7 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
   padding: var(--space-16);
   background-color: var(--surface-300);
   border-radius: var(--radius-standard);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
@@ -704,7 +731,7 @@ const loadAggregationByGroupId = async (groupId, onSuccess) => {
   margin-top: var(--space-24);
   padding: var(--space-24);
   text-align: center;
-  color: #c96442;
+  color: var(--color-accent);
 }
 
 .ai-analysis-error {

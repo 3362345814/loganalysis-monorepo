@@ -8,7 +8,7 @@
           <el-button v-if="currentProject" type="success" :icon="Plus" @click="handleCreateSource">新建采集源</el-button>
           <el-button :icon="Refresh" @click="loadSources">刷新</el-button>
         </el-col>
-        <el-col :span="6" style="text-align: right">
+        <el-col :span="6" class="toolbar-right">
           <el-tag type="success">采集源: {{ sources.length }}</el-tag>
         </el-col>
       </el-row>
@@ -26,13 +26,13 @@
       <div class="project-info-empty">
         <el-icon><WarningFilled /></el-icon>
         <span>请先选择一个项目，或创建新项目</span>
-        <el-button type="primary" size="small" style="margin-left: 15px" @click="showProjectSelector">选择项目</el-button>
+        <el-button type="primary" size="small" class="project-select-btn" @click="showProjectSelector">选择项目</el-button>
       </div>
     </el-card>
 
     <!-- 日志源列表 -->
     <el-card class="table-card">
-      <el-table :data="sources" v-loading="loading" stripe>
+      <el-table :data="sources" v-loading="loading">
         <el-table-column prop="name" label="名称" min-width="120" />
         <el-table-column prop="projectName" label="所属项目" width="120">
           <template #default="{ row }">
@@ -1079,17 +1079,17 @@ onMounted(() => {
 
 .project-item:hover {
   background-color: rgba(38, 37, 30, 0.04);
-  border-color: #c96442;
+  border-color: var(--color-accent);
 }
 
 .project-item.active {
   background-color: rgba(38, 37, 30, 0.04);
-  border-color: #c96442;
+  border-color: var(--color-accent);
 }
 
 .project-item-icon {
   font-size: 24px;
-  color: #c96442;
+  color: var(--color-accent);
 }
 
 .project-item-info {
@@ -1118,6 +1118,14 @@ onMounted(() => {
   border-radius: var(--radius-comfortable);
   border: 1px solid var(--border-primary);
   background: var(--color-white);
+}
+
+.toolbar-right {
+  text-align: right;
+}
+
+.project-select-btn {
+  margin-left: 15px;
 }
 
 .action-buttons {
@@ -1150,7 +1158,7 @@ onMounted(() => {
   background-color: var(--surface-300);
   padding: 2px 6px;
   border-radius: var(--radius-small);
-  color: #c96442;
+  color: var(--color-accent);
 }
 
 .pattern-help {

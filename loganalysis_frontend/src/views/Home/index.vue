@@ -172,15 +172,6 @@ const quickActions = Object.freeze([
   border-color: var(--border-medium);
 }
 
-.metric-item::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 3px;
-  background: var(--metric-accent);
-}
-
 .metric-top {
   display: flex;
   align-items: center;
@@ -272,7 +263,7 @@ const quickActions = Object.freeze([
 .panel-headline h2 {
   margin: 0;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-primary);
   letter-spacing: 0.01em;
 }
@@ -323,7 +314,7 @@ const quickActions = Object.freeze([
 .chart-panel-top h3 {
   margin: 0;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   letter-spacing: 0.01em;
 }

@@ -258,7 +258,7 @@ export default {
 }
 
 .trace-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
   color: #c96442;
   background: rgba(201, 100, 66, 0.1);
   padding: 2px 8px;
@@ -357,7 +357,7 @@ export default {
 }
 
 .timeline-time {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
   color: var(--text-tertiary);
   font-size: 13px;
 }
@@ -435,7 +435,7 @@ export default {
   max-height: 200px;
   overflow-y: auto;
   margin: var(--space-4) 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
 }
 
 .detail-content.error {
@@ -460,7 +460,7 @@ export default {
 
 .section-header {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: var(--space-8);
 }
@@ -471,7 +471,7 @@ export default {
 
 .parsed-fields-section .section-header {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-secondary);
   margin-bottom: var(--space-8);
 }

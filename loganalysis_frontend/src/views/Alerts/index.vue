@@ -113,7 +113,7 @@
         </div>
       </template>
 
-      <el-table :data="alertList" v-loading="loading" stripe style="width: 100%">
+      <el-table :data="alertList" v-loading="loading" style="width: 100%">
         <el-table-column prop="alertId" label="告警编号" width="180" />
         <el-table-column prop="projectName" label="项目" width="150">
           <template #default="{ row }">
@@ -161,7 +161,7 @@
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="handleSizeChange"
         @current-change="handlePageChange"
-        style="margin-top: 20px; justify-content: flex-end"
+        class="list-pagination"
       />
     </el-card>
 
@@ -196,7 +196,7 @@
         <el-descriptions-item label="解决备注" :span="2">{{ currentAlert.resolutionNote || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
-        <div style="display: flex; justify-content: space-between; width: 100%;">
+        <div class="detail-footer">
           <div>
             <el-button
               v-if="currentAlert?.aggregationId"
@@ -259,7 +259,7 @@
         <div class="parsed-info-summary">
           <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
         </div>
-        <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
+        <el-table :data="parsedInfoTableData" size="small" max-height="400">
           <el-table-column prop="key" label="字段名" width="120">
             <template #default="{ row }">
               <span class="field-key">{{ formatFieldKey(row.key) }}</span>
@@ -764,6 +764,17 @@ onMounted(() => {
   align-items: center;
 }
 
+.list-pagination {
+  margin-top: var(--space-24);
+  justify-content: flex-end;
+}
+
+.detail-footer {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
 .content-box {
   max-height: 100px;
   overflow: auto;
@@ -773,7 +784,7 @@ onMounted(() => {
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-family-mono);
 }
 
 .parsed-info-content {

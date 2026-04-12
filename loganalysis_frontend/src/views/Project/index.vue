@@ -7,7 +7,7 @@
           <el-button type="primary" :icon="Plus" @click="handleCreate">新建项目</el-button>
           <el-button :icon="Refresh" @click="loadProjects">刷新</el-button>
         </el-col>
-        <el-col :span="6" style="text-align: right">
+        <el-col :span="6" class="toolbar-right">
           <el-tag type="success">项目数: {{ projects.length }}</el-tag>
         </el-col>
       </el-row>
@@ -15,7 +15,7 @@
 
     <!-- 项目列表 -->
     <el-card class="table-card">
-      <el-table :data="projects" v-loading="loading" stripe>
+      <el-table :data="projects" v-loading="loading">
         <el-table-column prop="name" label="项目名称" min-width="150" />
         <el-table-column prop="code" label="项目代码" width="120" />
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
@@ -154,11 +154,15 @@ const handleDelete = (row) => {
 
 <style scoped>
 .project-page {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .toolbar-card,
 .table-card {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-24);
+}
+
+.toolbar-right {
+  text-align: right;
 }
 </style>

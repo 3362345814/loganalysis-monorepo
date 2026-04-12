@@ -3,6 +3,8 @@ package com.evelin.loganalysis.loganalysisai.config.service;
 import com.evelin.loganalysis.loganalysisai.config.dto.LlmConfigDTO;
 import com.evelin.loganalysis.loganalysisai.config.entity.LlmConfigEntity;
 import com.evelin.loganalysis.loganalysisai.config.repository.LlmConfigRepository;
+import com.evelin.loganalysis.loganalysisai.llm.config.DynamicLlmConfig;
+import com.evelin.loganalysis.loganalysisai.llm.provider.OpenAiProvider;
 import com.evelin.loganalysis.logcommon.utils.IdGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class LlmConfigService {
     
     private final LlmConfigRepository llmConfigRepository;
+    private final OpenAiProvider openAiProvider;
     
     /**
      * 获取所有配置
@@ -113,7 +116,7 @@ public class LlmConfigService {
         
         // 更新字段
         existing.setName(dto.getName());
-        if (dto.getApiKey() != null && !dto.getApiKey().isEmpty()) {
+        if (dto.getApiKey() != null && !dto.getApiKey().isEmpty() && !isMaskedApiKey(dto.getApiKey())) {
             existing.setApiKey(dto.getApiKey());
         }
         existing.setModel(dto.getModel());
@@ -147,13 +150,12 @@ public class LlmConfigService {
         LlmConfigEntity config = llmConfigRepository.findById(id)
                 .orElse(null);
         
-        if (config == null || config.getApiKey() == null) {
+        if (config == null) {
             return false;
         }
-        
-        // 这里可以调用 LLM 提供商验证 API Key
-        // 暂时返回 true
-        return true;
+
+        DynamicLlmConfig dynamicConfig = toDynamicConfig(config);
+        return openAiProvider.validateApiKey(dynamicConfig);
     }
     
     /**
@@ -210,5 +212,21 @@ public class LlmConfigService {
         entity.setIsDefault(dto.getIsDefault());
         entity.setRemark(dto.getRemark());
         return entity;
+    }
+
+    private DynamicLlmConfig toDynamicConfig(LlmConfigEntity entity) {
+        DynamicLlmConfig config = new DynamicLlmConfig();
+        config.setConfigId(entity.getId());
+        config.setApiKey(entity.getApiKey());
+        config.setModel(entity.getModel());
+        config.setMaxTokens(entity.getMaxTokens() != null ? entity.getMaxTokens() : 2000);
+        config.setTemperature(entity.getTemperature() != null ? entity.getTemperature() : 0.3);
+        config.setTimeout(entity.getTimeout() != null ? entity.getTimeout() : 30);
+        config.setEndpoint(entity.getEndpoint());
+        return config;
+    }
+
+    private boolean isMaskedApiKey(String apiKey) {
+        return apiKey != null && apiKey.startsWith("******");
     }
 }

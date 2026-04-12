@@ -70,11 +70,11 @@
             刷新
           </el-button>
         </el-col>
-        <el-col :span="16" style="text-align: right;">
+        <el-col :span="16" class="toolbar-actions">
           <el-input
             v-model="searchKeyword"
             placeholder="搜索分析结果..."
-            style="width: 300px;"
+            class="search-input"
             clearable
             @change="handleSearch"
           >
@@ -88,7 +88,7 @@
 
     <!-- 分析结果列表 -->
     <el-card class="table-card">
-      <el-table :data="paginatedList" v-loading="loading" stripe>
+      <el-table :data="paginatedList" v-loading="loading">
         <el-table-column prop="aggregationId" label="聚合组ID" width="180">
           <template #default="{ row }">
             <el-button type="primary" link @click="jumpToAggregation(row)">
@@ -116,7 +116,7 @@
               :percentage="Math.round((row.confidence || 0) * 100)" 
               :color="getConfidenceColor(row.confidence)"
               :stroke-width="10"
-              style="width: 80px;"
+              class="confidence-progress"
             />
           </template>
         </el-table-column>
@@ -330,10 +330,10 @@ const getStatusType = (status) => {
 
 // 获取置信度颜色
 const getConfidenceColor = (confidence) => {
-  if (!confidence) return '#909399'
-  if (confidence >= 0.9) return '#67c23a'
-  if (confidence >= 0.7) return '#e6a23c'
-  return '#f56c6c'
+  if (!confidence) return 'var(--text-tertiary)'
+  if (confidence >= 0.9) return 'var(--color-success)'
+  if (confidence >= 0.7) return 'var(--color-gold)'
+  return 'var(--color-error)'
 }
 
 // 格式化时间
@@ -497,6 +497,18 @@ onMounted(() => {
   background: var(--color-white);
 }
 
+.toolbar-actions {
+  text-align: right;
+}
+
+.search-input {
+  width: 300px;
+}
+
+.confidence-progress {
+  width: 80px;
+}
+
 .table-card {
   min-height: 500px;
   border-radius: var(--radius-comfortable);
@@ -536,7 +548,7 @@ onMounted(() => {
 }
 
 .root-cause {
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-primary);
   font-size: 15px;
 }

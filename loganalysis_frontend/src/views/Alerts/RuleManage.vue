@@ -17,7 +17,12 @@
         <div class="card-header">
           <span>告警规则管理</span>
           <div class="header-actions">
-            <el-alert v-if="enabledChannels.length === 0" type="warning" :closable="false" style="margin-right: 12px; padding: 4px 12px;">
+            <el-alert
+              v-if="enabledChannels.length === 0"
+              type="warning"
+              :closable="false"
+              class="channel-warning-alert"
+            >
               请先在"系统配置"中配置通知渠道
             </el-alert>
             <el-button type="primary" @click="handleCreate" :disabled="enabledChannels.length === 0">
@@ -27,7 +32,7 @@
         </div>
       </template>
 
-      <el-table :data="ruleList" v-loading="loading" stripe style="width: 100%">
+      <el-table :data="ruleList" v-loading="loading">
         <el-table-column prop="name" label="规则名称" min-width="150" />
         <el-table-column prop="projectId" label="项目" width="150">
           <template #default="{ row }">
@@ -50,7 +55,12 @@
         </el-table-column>
         <el-table-column prop="notificationChannels" label="通知渠道" width="150">
           <template #default="{ row }">
-            <el-tag v-for="channel in row.notificationChannels" :key="channel" size="small" style="margin-right: 4px">
+            <el-tag
+              v-for="channel in row.notificationChannels"
+              :key="channel"
+              size="small"
+              class="channel-tag"
+            >
               {{ getChannelText(channel) }}
             </el-tag>
           </template>
@@ -81,7 +91,7 @@
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="handleSizeChange"
         @current-change="handlePageChange"
-        style="margin-top: 20px; justify-content: flex-end"
+        class="list-pagination"
       />
     </el-card>
 
@@ -453,11 +463,11 @@ onMounted(() => {
 
 <style scoped>
 .rule-manage-container {
-  padding: 20px;
+  padding: var(--space-24);
 }
 
 .table-card :deep(.el-card__header) {
-  padding: 14px 20px;
+  padding: var(--space-16) var(--space-24);
 }
 
 .card-header {
@@ -472,14 +482,28 @@ onMounted(() => {
   align-items: center;
 }
 
+.channel-warning-alert {
+  margin-right: var(--space-12);
+  padding: var(--space-4) var(--space-12);
+}
+
+.channel-tag {
+  margin-right: var(--space-4);
+}
+
+.list-pagination {
+  margin-top: var(--space-24);
+  justify-content: flex-end;
+}
+
 .form-tip {
   font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
+  color: var(--text-tertiary);
+  margin-top: var(--space-4);
 }
 
 .form-unit {
-  margin-left: 8px;
-  color: #606266;
+  margin-left: var(--space-8);
+  color: var(--text-secondary);
 }
 </style>

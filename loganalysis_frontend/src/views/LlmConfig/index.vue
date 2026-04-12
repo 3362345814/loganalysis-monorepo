@@ -19,7 +19,7 @@
             刷新
           </el-button>
         </el-col>
-        <el-col :span="12" style="text-align: right;">
+        <el-col :span="12" class="toolbar-right">
           <el-tag type="info">当前活跃配置: {{ activeConfigName }}</el-tag>
         </el-col>
       </el-row>
@@ -27,7 +27,7 @@
 
     <!-- 配置列表 -->
     <el-card class="table-card">
-      <el-table :data="configList" v-loading="loading" stripe>
+      <el-table :data="configList" v-loading="loading">
         <el-table-column prop="name" label="配置名称" width="150">
           <template #default="{ row }">
             <div class="config-name">
@@ -108,10 +108,6 @@
           </el-col>
         </el-row>
         
-        <el-form-item label="API 端点">
-          <el-input v-model="form.endpoint" placeholder="留空使用默认端点" />
-        </el-form-item>
-        
         <el-form-item label="超时时间(秒)">
           <el-input-number v-model="form.timeout" :min="10" :max="120" :step="5" />
         </el-form-item>
@@ -131,6 +127,16 @@
       
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button
+          v-if="isEdit"
+          type="success"
+          plain
+          @click="handleTestConnection"
+          :loading="testLoading"
+          :disabled="submitLoading"
+        >
+          保存并测试
+        </el-button>
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
           {{ isEdit ? '更新' : '创建' }}
         </el-button>
@@ -148,6 +154,7 @@ import { llmConfigApi } from '@/api'
 // 状态
 const loading = ref(false)
 const submitLoading = ref(false)
+const testLoading = ref(false)
 const configList = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -275,6 +282,33 @@ const handleDelete = async (row) => {
   }
 }
 
+// 测试连接（仅支持已保存配置）
+const handleTestConnection = async () => {
+  if (!isEdit.value || !form.value.id) {
+    ElMessage.warning('请先保存配置后再测试连接')
+    return
+  }
+
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  testLoading.value = true
+  try {
+    await llmConfigApi.update(form.value.id, form.value)
+    const res = await llmConfigApi.validate(form.value.id)
+    if (res.data === true) {
+      ElMessage.success('连接测试成功')
+    } else {
+      ElMessage.error('连接测试失败，请检查 API Key、模型和端点配置')
+    }
+  } catch (error) {
+    console.error('测试连接失败:', error)
+    ElMessage.error('测试连接失败: ' + (error.message || '未知错误'))
+  } finally {
+    testLoading.value = false
+  }
+}
+
 // 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
@@ -320,7 +354,7 @@ onMounted(() => {
 .page-header h2 {
   margin: 0 0 8px 0;
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
@@ -335,6 +369,10 @@ onMounted(() => {
   border-radius: var(--radius-comfortable);
   border: 1px solid var(--border-primary);
   background: var(--color-white);
+}
+
+.toolbar-right {
+  text-align: right;
 }
 
 .table-card {

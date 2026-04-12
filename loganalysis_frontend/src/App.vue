@@ -36,12 +36,6 @@
           </el-breadcrumb>
         </div>
 
-        <div class="header-right">
-          <span class="status-pill">
-            <i class="status-dot" />
-            系统运行正常
-          </span>
-        </div>
       </el-header>
 
       <el-main class="app-main">
@@ -189,7 +183,7 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   font-size: 16px;
   line-height: 1.1;
   letter-spacing: 0.02em;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .logo-text span {
@@ -258,8 +252,7 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   background: var(--color-cream);
 }
 
-.header-left,
-.header-right {
+.header-left {
   display: flex;
   align-items: center;
   gap: var(--space-14);
@@ -282,27 +275,7 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
 
 .route-pill:hover {
   transform: scale(1.02);
-  box-shadow: 0 2px 8px rgba(201, 100, 66, 0.15);
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-7);
-  padding: 5px var(--space-10);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-success);
-  background: rgba(31, 138, 101, 0.1);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 0 6px rgba(31, 138, 101, 0.12);
+  box-shadow: 0 0 0 1px rgba(201, 100, 66, 0.28);
 }
 
 .app-main {
@@ -326,10 +299,6 @@ const currentTitle = computed(() => route.meta?.title ?? '首页')
   .app-header {
     height: 60px;
     padding: 0 var(--space-14);
-  }
-
-  .status-pill {
-    display: none;
   }
 
   .header-left {

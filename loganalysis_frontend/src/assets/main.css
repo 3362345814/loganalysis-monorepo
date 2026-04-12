@@ -1,5 +1,78 @@
+@font-face {
+  font-family: 'DreamHanSans';
+  src: local('Dream Han Sans SC W6'), local('梦源黑体 SC W6'),
+       url('./fonts/DreamHanSans-W6.ttc');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DreamHanSans';
+  src: local('Dream Han Sans SC W7'), local('梦源黑体 SC W7'),
+       url('./fonts/DreamHanSans-W7.ttc');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DreamHanSans';
+  src: local('Dream Han Sans SC W7'), local('梦源黑体 SC W7'),
+       url('./fonts/DreamHanSans-W7.ttc');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DreamHanSerif';
+  src: local('Dream Han Serif SC W6'), local('梦源宋体 SC W6'),
+       url('./fonts/DreamHanSerif-W6.ttc');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DreamHanSerif';
+  src: local('Dream Han Serif SC W7'), local('梦源宋体 SC W7'),
+       url('./fonts/DreamHanSerif-W7.ttc');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DreamHanSerif';
+  src: local('Dream Han Serif SC W7'), local('梦源宋体 SC W7'),
+       url('./fonts/DreamHanSerif-W7.ttc');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrainsMono';
+  src: local('JetBrains Mono'),
+       url('./fonts/JetBrainsMono-wght.ttf') format('truetype-variations');
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
+
+  /* ========== Typography System (From DESIGN.md serif/sans split) ========== */
+  --font-family-sans: 'DreamHanSans', 'Dream Han Sans SC', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  --font-family-serif: 'DreamHanSerif', 'Dream Han Serif SC', 'Songti SC',
+    'STSong', 'Noto Serif CJK SC', Georgia, serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-family-terminal-mono: 'JetBrainsMono', 'JetBrains Mono', ui-monospace,
+    SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-family-number: var(--font-family-serif);
 
   /* ========== Color System (From DESIGN.md - Warm Claude Palette) ========== */
 
@@ -11,7 +84,10 @@
 
   /* Accent Colors */
   --color-accent: #c96442;
+  --color-coral: #d97757;
   --color-gold: #b87a2e;
+  --color-focus-blue: #3898ec;
+  --color-ivory: #faf9f5;
 
   /* Semantic Colors */
   --color-error: #b53333;
@@ -106,7 +182,7 @@
   --el-border-color-extra-light: var(--surface-200);
   --el-border-color-dark: var(--border-medium);
   --el-border-color-darker: var(--border-strong);
-  --el-border-color-focus: var(--color-accent);
+  --el-border-color-focus: var(--color-focus-blue);
 
   /* Fill */
   --el-fill-color: var(--surface-400);
@@ -143,14 +219,14 @@
   --el-button-active-border-color: var(--border-strong);
 
   /* Button Primary - Cursor 风格 */
-  --el-button-primary-bg-color: var(--surface-300);
-  --el-button-primary-border-color: var(--border-primary);
-  --el-button-primary-text-color: var(--color-dark);
-  --el-button-primary-hover-bg-color: var(--surface-400);
-  --el-button-primary-hover-border-color: var(--border-medium);
-  --el-button-primary-hover-text-color: var(--color-error);
-  --el-button-primary-active-bg-color: var(--surface-500);
-  --el-button-primary-active-border-color: var(--border-strong);
+  --el-button-primary-bg-color: var(--color-accent);
+  --el-button-primary-border-color: var(--color-accent);
+  --el-button-primary-text-color: var(--color-ivory);
+  --el-button-primary-hover-bg-color: var(--color-coral);
+  --el-button-primary-hover-border-color: var(--color-coral);
+  --el-button-primary-hover-text-color: var(--color-ivory);
+  --el-button-primary-active-bg-color: #b85a3a;
+  --el-button-primary-active-border-color: #b85a3a;
   --el-button-primary-disabled-bg-color: var(--surface-200);
   --el-button-primary-disabled-border-color: var(--border-primary);
   --el-button-primary-disabled-text-color: var(--text-disabled);
@@ -265,18 +341,18 @@
   --el-input-bg-color: var(--color-white);
   --el-input-border-color: var(--border-primary);
   --el-input-hover-border-color: var(--border-medium);
-  --el-input-focus-border-color: var(--color-accent);
+  --el-input-focus-border-color: var(--color-focus-blue);
   --el-input-text-color: var(--text-primary);
   --el-input-placeholder-color: var(--text-tertiary);
   --el-input-height: 34px;
   --el-input-font-size: 14px;
-  --el-input-border-radius: 8px;
+  --el-input-border-radius: 12px;
 
   /* Select */
   --el-select-border-color: var(--border-primary);
   --el-select-hover-border-color: var(--border-medium);
-  --el-select-focus-border-color: var(--color-accent);
-  --el-select-input-focus-border-color: var(--color-accent);
+  --el-select-focus-border-color: var(--color-focus-blue);
+  --el-select-input-focus-border-color: var(--color-focus-blue);
   --el-select-bg-color: var(--color-white);
   --el-select-option-bg-color: var(--color-white);
   --el-select-option-hover-bg-color: var(--surface-200);
@@ -467,8 +543,59 @@ body {
 body {
   margin: 0;
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica Neue, Helvetica, Arial, sans-serif;
+  font-family: var(--font-family-sans);
+  font-weight: 400;
+  line-height: 1.6;
   background: var(--color-cream);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.page-header h2,
+.panel-header h2,
+.card-header > span:first-child,
+.card-header > div:first-child,
+.card-header > div:first-child > span:first-child,
+.parsed-info-title,
+.section-header,
+.project-name,
+.project-item-name,
+.config-name,
+.logo-text strong {
+  font-family: var(--font-family-serif);
+  font-weight: 500;
+}
+
+.metric-value,
+.stat-value,
+.el-statistic__content .el-statistic__content-value {
+  font-family: var(--font-family-number);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-label,
+.stat-label,
+.el-statistic__title {
+  font-family: var(--font-family-sans);
+  font-weight: 500;
+}
+
+.el-dialog__title,
+.el-divider__text {
+  font-family: var(--font-family-serif);
+  font-weight: 500;
+}
+
+input,
+button,
+select,
+textarea {
+  font-family: inherit;
 }
 
 #app {
@@ -514,17 +641,28 @@ a {
   background-color: var(--surface-500);
 }
 
-/* Button Primary - Warm Surface */
+/* Button Primary - Terracotta Brand */
 .el-button--primary:not(.is-text):not(.is-link) {
-  background-color: var(--surface-300) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+  color: var(--color-ivory) !important;
 }
 
 .el-button--primary:not(.is-text):not(.is-link):hover {
-  background-color: var(--surface-400) !important;
-  border-color: var(--border-medium) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--color-coral) !important;
+  border-color: var(--color-coral) !important;
+  color: var(--color-ivory) !important;
+}
+
+.el-button--primary:not(.is-text):not(.is-link):active {
+  background-color: #b85a3a !important;
+  border-color: #b85a3a !important;
+  color: var(--color-ivory) !important;
+}
+
+.el-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 152, 236, 0.25) !important;
 }
 
 /* Button Success */
@@ -633,7 +771,8 @@ a {
 
 .el-table th.el-table__cell {
   background: var(--surface-300) !important;
-  font-weight: 600;
+  font-family: var(--font-family-sans);
+  font-weight: 500;
   color: var(--text-secondary) !important;
   border-color: var(--border-primary) !important;
 }
@@ -648,7 +787,7 @@ a {
 
 /* Input 组件 */
 .el-input__wrapper {
-  border-radius: var(--radius-comfortable) !important;
+  border-radius: 12px !important;
   box-shadow: none !important;
   border: 1px solid var(--border-primary) !important;
   background: var(--color-white) !important;
@@ -661,13 +800,13 @@ a {
 
 .el-input__wrapper.is-focus,
 .el-input__wrapper:focus-within {
-  border-color: var(--color-accent) !important;
-  box-shadow: 0 0 0 2px rgba(200, 85, 32, 0.1) !important;
+  border-color: var(--color-focus-blue) !important;
+  box-shadow: 0 0 0 2px rgba(56, 152, 236, 0.2) !important;
 }
 
 /* Select 组件 */
 .el-select__wrapper {
-  border-radius: var(--radius-comfortable) !important;
+  border-radius: 12px !important;
   box-shadow: none !important;
   border: 1px solid var(--border-primary) !important;
   background: var(--color-white) !important;
@@ -679,8 +818,8 @@ a {
 
 .el-select__wrapper.is-focus,
 .el-select__wrapper.is-focused {
-  border-color: var(--color-accent) !important;
-  box-shadow: 0 0 0 2px rgba(200, 85, 32, 0.1) !important;
+  border-color: var(--color-focus-blue) !important;
+  box-shadow: 0 0 0 2px rgba(56, 152, 236, 0.2) !important;
 }
 
 .el-select-dropdown__item.is-selected {
@@ -696,6 +835,7 @@ a {
 .el-form-item__label {
   color: var(--text-secondary) !important;
   font-weight: 500;
+  letter-spacing: 0.12px;
 }
 
 /* Dialog 组件 */

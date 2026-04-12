@@ -51,10 +51,14 @@ public class OpenAiProvider implements LlmProvider {
     
     @Override
     public LlmResponse chat(LlmRequest request) {
-        long startTime = System.currentTimeMillis();
-        
         DynamicLlmConfig dynamicConfig = dynamicConfigService.getActiveConfig();
-        
+        return chat(request, dynamicConfig);
+    }
+
+    private LlmResponse chat(LlmRequest request, DynamicLlmConfig dynamicConfig) {
+        long startTime = System.currentTimeMillis();
+        LlmRequest safeRequest = request != null ? request : new LlmRequest();
+
         if (dynamicConfig == null || !dynamicConfig.isValid()) {
             LlmResponse error = new LlmResponse();
             error.setStatus("error");
@@ -63,9 +67,9 @@ public class OpenAiProvider implements LlmProvider {
         }
         
         String apiKey = dynamicConfig.getApiKey();
-        String model = request.getModel() != null ? request.getModel() : dynamicConfig.getModel();
-        double temperature = request.getTemperature() > 0 ? request.getTemperature() : dynamicConfig.getTemperature();
-        int maxTokens = request.getMaxTokens() > 0 ? request.getMaxTokens() : dynamicConfig.getMaxTokens();
+        String model = safeRequest.getModel() != null ? safeRequest.getModel() : dynamicConfig.getModel();
+        double temperature = safeRequest.getTemperature() > 0 ? safeRequest.getTemperature() : dynamicConfig.getTemperature();
+        int maxTokens = safeRequest.getMaxTokens() > 0 ? safeRequest.getMaxTokens() : dynamicConfig.getMaxTokens();
         int timeout = dynamicConfig.getTimeout();
         String endpoint = dynamicConfig.getEndpoint();
         
@@ -82,22 +86,22 @@ public class OpenAiProvider implements LlmProvider {
             List<Map<String, String>> messages = new ArrayList<>();
             
             // 添加系统提示
-            if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-                messages.add(Map.of("role", "system", "content", request.getSystemPrompt()));
+            if (safeRequest.getSystemPrompt() != null && !safeRequest.getSystemPrompt().isEmpty()) {
+                messages.add(Map.of("role", "system", "content", safeRequest.getSystemPrompt()));
             } else {
                 messages.add(Map.of("role", "system", "content", getDefaultSystemPrompt()));
             }
             
             // 添加历史消息
-            if (request.getMessages() != null && !request.getMessages().isEmpty()) {
-                for (LlmRequest.ChatMessage msg : request.getMessages()) {
+            if (safeRequest.getMessages() != null && !safeRequest.getMessages().isEmpty()) {
+                for (LlmRequest.ChatMessage msg : safeRequest.getMessages()) {
                     messages.add(Map.of("role", msg.getRole(), "content", msg.getContent()));
                 }
             }
             
             // 添加当前提示
-            if (request.getPrompt() != null && !request.getPrompt().isEmpty()) {
-                messages.add(Map.of("role", "user", "content", request.getPrompt()));
+            if (safeRequest.getPrompt() != null && !safeRequest.getPrompt().isEmpty()) {
+                messages.add(Map.of("role", "user", "content", safeRequest.getPrompt()));
             }
             
             requestBody.put("messages", messages);
@@ -156,6 +160,9 @@ public class OpenAiProvider implements LlmProvider {
             return OPENAI_CHAT_COMPLETION_API;
         }
         String lower = baseUrl.toLowerCase();
+        if (lower.endsWith("/v1") || lower.contains("/compatible-mode/v1")) {
+            return "/chat/completions";
+        }
         // Ark(豆包) baseUrl 通常包含 /api/v3
         if (lower.contains("volces.com") && lower.contains("/api/v3")) {
             return ARK_CHAT_COMPLETION_API;
@@ -169,7 +176,14 @@ public class OpenAiProvider implements LlmProvider {
     private String getBaseUrl(String provider, String customEndpoint) {
         // 如果有自定义端点，优先使用
         if (customEndpoint != null && !customEndpoint.isEmpty()) {
-            return customEndpoint;
+            String normalized = customEndpoint.trim();
+            if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+                normalized = "https://" + normalized;
+            }
+            if (normalized.endsWith("/")) {
+                normalized = normalized.substring(0, normalized.length() - 1);
+            }
+            return normalized;
         }
         
         // 根据提供商返回默认端点
@@ -200,25 +214,22 @@ public class OpenAiProvider implements LlmProvider {
     
     @Override
     public boolean validateApiKey() {
-        DynamicLlmConfig dynamicConfig = dynamicConfigService.getActiveConfig();
-        
+        return validateApiKey(dynamicConfigService.getActiveConfig());
+    }
+
+    public boolean validateApiKey(DynamicLlmConfig dynamicConfig) {
         if (dynamicConfig == null || !dynamicConfig.isValid()) {
             return false;
         }
-        
-        String apiKey = dynamicConfig.getApiKey();
-        
-        if (apiKey == null || apiKey.isEmpty()) {
-            return false;
-        }
-        
+
         try {
             LlmRequest request = new LlmRequest();
-            request.setModel("gpt-3.5-turbo");
+            request.setModel(dynamicConfig.getModel());
             request.setPrompt("Hello");
-            request.setMaxTokens(5);
-            
-            LlmResponse response = chat(request);
+            request.setTemperature(0);
+            request.setMaxTokens(1);
+
+            LlmResponse response = chat(request, dynamicConfig);
             return response.isSuccess();
         } catch (Exception e) {
             log.warn("API 密钥验证失败: {}", e.getMessage());

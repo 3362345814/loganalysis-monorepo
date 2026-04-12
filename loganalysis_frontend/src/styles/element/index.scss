@@ -36,7 +36,10 @@
 
   /* Accent Colors */
   --color-accent: #c96442;
+  --color-coral: #d97757;
   --color-gold: #b87a2e;
+  --color-focus-blue: #3898ec;
+  --color-ivory: #faf9f5;
 
   /* Semantic Colors */
   --color-error: #b53333;
@@ -89,11 +92,12 @@
   --el-border-color-darker: var(--border-strong);
 
   /* Font */
-  --el-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica Neue, Helvetica, Arial, sans-serif;
+  --el-font-family: 'DreamHanSans', 'Dream Han Sans SC', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
   --el-font-size-base: 14px;
   --el-font-size-small: 13px;
   --el-font-size-large: 16px;
-  --el-font-weight-primary: 400;
+  --el-font-weight-primary: 500;
   --el-font-weight-secondary: 500;
 
   /* Text */
@@ -136,14 +140,14 @@
   --el-button-active-border-color: var(--border-strong);
 
   /* Primary Button - Warm Surface */
-  --el-button-primary-bg-color: var(--surface-300);
-  --el-button-primary-border-color: var(--border-primary);
-  --el-button-primary-text-color: var(--text-primary);
-  --el-button-primary-hover-bg-color: var(--surface-400);
-  --el-button-primary-hover-border-color: var(--border-medium);
-  --el-button-primary-hover-text-color: var(--text-primary);
-  --el-button-primary-active-bg-color: var(--surface-500);
-  --el-button-primary-active-border-color: var(--border-strong);
+  --el-button-primary-bg-color: var(--color-accent);
+  --el-button-primary-border-color: var(--color-accent);
+  --el-button-primary-text-color: var(--color-ivory);
+  --el-button-primary-hover-bg-color: var(--color-coral);
+  --el-button-primary-hover-border-color: var(--color-coral);
+  --el-button-primary-hover-text-color: var(--color-ivory);
+  --el-button-primary-active-bg-color: #b85a3a;
+  --el-button-primary-active-border-color: #b85a3a;
   --el-button-primary-disabled-bg-color: var(--surface-200);
   --el-button-primary-disabled-border-color: var(--border-primary);
   --el-button-primary-disabled-text-color: var(--text-disabled);
@@ -269,20 +273,20 @@
   --el-input-bg-color: var(--color-white);
   --el-input-border-color: var(--border-primary);
   --el-input-hover-border-color: var(--border-medium);
-  --el-input-focus-border-color: var(--color-accent);
+  --el-input-focus-border-color: var(--color-focus-blue);
   --el-input-text-color: var(--text-primary);
   --el-input-placeholder-color: var(--text-tertiary);
   --el-input-height: 36px;
   --el-input-font-size: 14px;
-  --el-input-border-radius: 8px;
+  --el-input-border-radius: 12px;
   --el-input-inner-padding-horizontal: 12px;
   --el-input-inner-padding-vertical: 10px;
 
   /* ========== Select 组件 ========== */
   --el-select-border-color: var(--border-primary);
   --el-select-hover-border-color: var(--border-medium);
-  --el-select-focus-border-color: var(--color-accent);
-  --el-select-input-focus-border-color: var(--color-accent);
+  --el-select-focus-border-color: var(--color-focus-blue);
+  --el-select-input-focus-border-color: var(--color-focus-blue);
   --el-select-bg-color: var(--color-white);
   --el-select-option-bg-color: var(--color-white);
   --el-select-option-hover-bg-color: var(--surface-200);
@@ -291,7 +295,7 @@
   --el-select-dropdown-border-color: var(--border-primary);
   --el-select-disabled-border-color: var(--border-primary);
   --el-select-disabled-bg-color: var(--surface-200);
-  --el-select-input-border-radius: 8px;
+  --el-select-input-border-radius: 12px;
 
   /* ========== Dialog 组件 ========== */
   --el-dialog-border-radius: 10px;

@@ -220,7 +220,7 @@
           <el-form :model="analysisConfigForm" label-width="120px" style="max-width: 500px;">
             <el-form-item label="上下文行数">
               <el-input-number v-model="analysisConfigForm.contextSize" :min="10" :max="30" />
-              <span style="margin-left: 10px; color: #909399">行 (10-30)</span>
+              <span class="context-range-tip">行 (10-30)</span>
             </el-form-item>
             <el-form-item label="自动分析级别">
               <el-select v-model="analysisConfigForm.autoAnalysisSeverity" style="width: 100%">
@@ -255,7 +255,7 @@
             </div>
           </template>
 
-          <el-table :data="llmConfigList" v-loading="loadingLlm" stripe style="margin-top: 10px;">
+          <el-table :data="llmConfigList" v-loading="loadingLlm" class="llm-table">
             <el-table-column prop="name" label="配置名称" width="150">
               <template #default="{ row }">
                 <div class="config-name">
@@ -341,6 +341,16 @@
       </el-form>
       <template #footer>
         <el-button @click="llmDialogVisible = false">取消</el-button>
+        <el-button
+          v-if="isEditLlm"
+          type="success"
+          plain
+          @click="handleTestLlmConnection"
+          :loading="testingLlmConnection"
+          :disabled="submittingLlm"
+        >
+          保存并测试
+        </el-button>
         <el-button type="primary" @click="handleSubmitLlm" :loading="submittingLlm">
           {{ isEditLlm ? '更新' : '创建' }}
         </el-button>
@@ -375,6 +385,7 @@ const analysisConfigForm = ref({
 
 const loadingLlm = ref(false)
 const submittingLlm = ref(false)
+const testingLlmConnection = ref(false)
 const llmConfigList = ref([])
 const llmDialogVisible = ref(false)
 const isEditLlm = ref(false)
@@ -602,6 +613,32 @@ const handleSubmitLlm = async () => {
   }
 }
 
+const handleTestLlmConnection = async () => {
+  if (!isEditLlm.value || !llmForm.value.id) {
+    ElMessage.warning('请先保存配置后再测试连接')
+    return
+  }
+
+  const valid = await llmFormRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  testingLlmConnection.value = true
+  try {
+    await llmConfigApi.update(llmForm.value.id, llmForm.value)
+    const res = await llmConfigApi.validate(llmForm.value.id)
+    if (res.data === true) {
+      ElMessage.success('连接测试成功')
+    } else {
+      ElMessage.error('连接测试失败，请检查 API Key、模型和端点配置')
+    }
+  } catch (error) {
+    console.error('LLM 连接测试失败:', error)
+    ElMessage.error('测试连接失败: ' + (error.message || '未知错误'))
+  } finally {
+    testingLlmConnection.value = false
+  }
+}
+
 const handleSetDefaultLlm = async (row) => {
   try {
     await llmConfigApi.update(row.id, { ...row, isDefault: true })
@@ -676,6 +713,11 @@ onMounted(() => {
   margin-bottom: var(--space-16);
 }
 
+.context-range-tip {
+  margin-left: var(--space-10);
+  color: var(--text-tertiary);
+}
+
 .config-name {
   display: flex;
   align-items: center;
@@ -692,6 +734,10 @@ onMounted(() => {
   border-radius: var(--radius-comfortable);
   border: 1px solid var(--border-primary);
   background: var(--color-white);
+}
+
+.llm-table {
+  margin-top: var(--space-10);
 }
 
 .tab-fade-enter-active,
