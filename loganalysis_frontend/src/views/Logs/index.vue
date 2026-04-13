@@ -870,13 +870,29 @@ const getFileName = (filePath) => {
   return filePath.split('/').pop() || filePath.split('\\').pop() || filePath
 }
 
-// 高亮关键字文本
+const escapeHtml = (value) => {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// 高亮关键字文本（先转义日志内容，避免 v-html 执行用户输入）
 const highlightText = (text, keyword) => {
-  if (!text || !keyword) return text
-  // 转义特殊正则字符
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escaped})`, 'gi')
-  return text.replace(regex, '<mark class="highlight-keyword">$1</mark>')
+  if (text === null || text === undefined) return ''
+
+  const safeText = escapeHtml(text)
+  const keywordText = keyword === null || keyword === undefined ? '' : String(keyword)
+
+  if (!keywordText) return safeText
+
+  // 在转义后的文本中匹配关键词，保留高亮标签但不执行原始 HTML/JS
+  const safeKeyword = escapeHtml(keywordText)
+  const escapedKeywordPattern = safeKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedKeywordPattern})`, 'gi')
+  return safeText.replace(regex, '<mark class="highlight-keyword">$1</mark>')
 }
 
 const formatLogTimeDisplay = (log) => {

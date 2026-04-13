@@ -442,6 +442,29 @@ CLI 默认使用 `~/.loganalysis`：
 
 ## 从源码运行（开发者）
 
+### 开发环境要求（本地与 CI 对齐）
+
+- JDK：`21.x`（必须，CI 使用 `actions/setup-java@v4` + `java-version: 21`）
+- Maven：`3.9+`
+- Node.js：`20+`（前端）
+- Go：`1.22+`（CLI）
+
+建议先检查：
+
+```bash
+java -version
+mvn -version
+node -v
+go version
+```
+
+若本机装有多个 JDK，先切到 Java 21 再执行 Maven（macOS 示例）：
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+java -version
+```
+
 ### CLI
 
 ```bash
@@ -455,6 +478,19 @@ go build ./cmd/loganalysis
 
 ```bash
 cd loganalysis
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)  # macOS 可选
+mvn -v
+mvn test
+mvn spring-boot:run
+```
+
+30 分钟快速跑通（新同学推荐）：
+
+```bash
+cd loganalysis
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)  # macOS 可选
+mvn -v
+mvn test
 mvn spring-boot:run
 ```
 
@@ -498,3 +534,15 @@ loganalysis config set ports.backend 18080
 ### 5) Windows 下报 `irm 不是命令` 或 `网络错误`
 
 - `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
+
+### 6) `mvn test` 失败并提示 Java 版本不匹配
+
+- 本项目已固定 JDK 版本为 `21`，若使用 `17/24` 等版本会被 Maven Enforcer 拦截
+- 先执行 `java -version` 和 `mvn -v`，确认当前 Maven 使用的 Java Home
+- 切换到 Java 21 后重试（macOS）：
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+mvn -v
+mvn test
+```

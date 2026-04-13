@@ -3,12 +3,14 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
+import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.repository.CheckpointRepository;
 import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
 import com.evelin.loganalysis.logcollection.repository.RawLogEventRepository;
 import com.evelin.loganalysis.logcollection.util.LogPathSerializer;
 import com.evelin.loganalysis.logcollection.validation.LogPathValidator;
+import com.evelin.loganalysis.logprocessing.service.AggregationGroupService;
 import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
 import com.evelin.loganalysis.logcollection.enums.LogFormat;
 import com.evelin.loganalysis.logcollection.enums.LogSourceType;
@@ -45,6 +47,8 @@ public class LogSourceService {
     private final LogPathValidator logPathValidator;
     private final CheckpointRepository checkpointRepository;
     private final RawLogEventRepository rawLogEventRepository;
+    private final AggregationGroupService aggregationGroupService;
+    private final CollectorFactory collectorFactory;
 
     /**
      * 创建日志源
@@ -303,6 +307,9 @@ public class LogSourceService {
         LogSource logSource = logSourceRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.DATA_NOT_FOUND, "日志源不存在: " + id));
 
+        // 若采集器仍在运行，先移除并停止，防止删除后继续写入数据
+        collectorFactory.remove(logSource);
+
         // 统计关联数据数量
         long logCount = rawLogEventRepository.countBySourceId(id);
         
@@ -314,11 +321,14 @@ public class LogSourceService {
         
         // 删除关联的检查点
         checkpointRepository.deleteBySourceId(id);
+
+        // 级联删除关联聚合组，避免出现“组存在但组内日志为空”
+        int deletedGroups = aggregationGroupService.deleteBySourceId(id.toString());
         
         // 删除日志源
         logSourceRepository.delete(logSource);
         
-        log.info("删除日志源成功: {}, 关联日志: {} 条", id, logCount);
+        log.info("删除日志源成功: {}, 关联日志: {} 条, 关联聚合组: {} 个", id, logCount, deletedGroups);
     }
 
     /**

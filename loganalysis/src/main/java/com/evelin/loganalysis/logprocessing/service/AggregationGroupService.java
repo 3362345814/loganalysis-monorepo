@@ -3,6 +3,7 @@ package com.evelin.loganalysis.logprocessing.service;
 import com.evelin.loganalysis.logprocessing.dto.AggregationResult;
 import com.evelin.loganalysis.logprocessing.entity.AggregationGroupEntity;
 import com.evelin.loganalysis.logprocessing.repository.AggregationGroupRepository;
+import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -11,9 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +32,7 @@ import java.util.stream.Collectors;
 public class AggregationGroupService {
 
     private final AggregationGroupRepository aggregationGroupRepository;
+    private final LogSourceRepository logSourceRepository;
 
     /**
      * 创建或更新聚合组
@@ -182,6 +188,63 @@ public class AggregationGroupService {
     @Transactional
     public void delete(String id) {
         aggregationGroupRepository.deleteById(id);
+    }
+
+    /**
+     * 删除指定日志源关联的所有聚合组
+     */
+    @Transactional
+    public int deleteBySourceId(String sourceId) {
+        int deleted = aggregationGroupRepository.deleteBySourceId(sourceId);
+        if (deleted > 0) {
+            log.info("删除日志源 {} 关联聚合组: {} 个", sourceId, deleted);
+        }
+        return deleted;
+    }
+
+    /**
+     * 清理 sourceId 对应日志源已不存在的孤儿聚合组
+     */
+    @Transactional
+    public int cleanupOrphanGroups() {
+        List<String> sourceIds = aggregationGroupRepository.findDistinctSourceIds();
+        if (sourceIds.isEmpty()) {
+            return 0;
+        }
+
+        Set<String> existingSourceIds = new HashSet<>();
+        List<String> orphanSourceIds = new ArrayList<>();
+
+        for (String sourceId : sourceIds) {
+            if (sourceId == null || sourceId.isBlank()) {
+                continue;
+            }
+
+            if (existingSourceIds.contains(sourceId)) {
+                continue;
+            }
+
+            boolean exists;
+            try {
+                exists = logSourceRepository.existsById(UUID.fromString(sourceId));
+            } catch (IllegalArgumentException ex) {
+                exists = false;
+            }
+
+            if (exists) {
+                existingSourceIds.add(sourceId);
+            } else {
+                orphanSourceIds.add(sourceId);
+            }
+        }
+
+        if (orphanSourceIds.isEmpty()) {
+            return 0;
+        }
+
+        int deleted = aggregationGroupRepository.deleteBySourceIdIn(orphanSourceIds);
+        log.warn("清理孤儿聚合组完成: 删除 {} 个，涉及已失联日志源 {}", deleted, orphanSourceIds);
+        return deleted;
     }
 
     /**

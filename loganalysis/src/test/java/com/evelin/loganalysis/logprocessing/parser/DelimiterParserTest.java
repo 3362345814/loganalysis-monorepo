@@ -38,6 +38,7 @@ public class DelimiterParserTest {
         boolean foundLevel = false;
         boolean foundLogger = false;
         boolean foundMsg = false;
+        boolean foundNewLine = false;
 
         for (Token token : tokens) {
             if (token instanceof DateToken) {
@@ -59,7 +60,10 @@ public class DelimiterParserTest {
                 assertEquals(" - ", token.getEndDelimiter());
             } else if (token instanceof MessageToken) {
                 foundMsg = true;
-                // MessageToken 后面是换行符
+                // MessageToken 不再绑定换行分隔符，换行由 NewLineToken 独立处理
+                assertNull(token.getEndDelimiter());
+            } else if (token instanceof NewLineToken) {
+                foundNewLine = true;
                 assertEquals("\n", token.getEndDelimiter());
             }
         }
@@ -69,6 +73,7 @@ public class DelimiterParserTest {
         assertTrue(foundLevel, "Should have LevelToken");
         assertTrue(foundLogger, "Should have LoggerToken");
         assertTrue(foundMsg, "Should have MessageToken");
+        assertTrue(foundNewLine, "Should have NewLineToken");
     }
 
     @Test
@@ -160,7 +165,8 @@ public class DelimiterParserTest {
         assertTrue(ctx.skipLiteral("["));
         assertEquals(1, ctx.getCursor());
         assertEquals("thread", ctx.readUntil("]"));
-        assertTrue(ctx.skipLiteral("] "));
+        // readUntil 会吞掉 delimiter，本例中 "]" 已在 readUntil 内部消费
+        assertTrue(ctx.skipLiteral(" "));
         assertEquals("INFO", ctx.readRemaining());
     }
 }

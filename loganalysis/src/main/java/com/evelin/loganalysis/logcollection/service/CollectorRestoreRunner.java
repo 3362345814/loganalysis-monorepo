@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.collector.LogCollector;
 import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
 import com.evelin.loganalysis.logcollection.model.LogSource;
+import com.evelin.loganalysis.logprocessing.service.AggregationGroupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -25,10 +26,15 @@ public class CollectorRestoreRunner implements ApplicationRunner {
 
     private final LogSourceService logSourceService;
     private final CollectorFactory collectorFactory;
+    private final AggregationGroupService aggregationGroupService;
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
         log.info("Starting collector restore process...");
+
+        // 启动时先清理日志源已不存在的孤儿聚合组
+        int orphanDeleted = aggregationGroupService.cleanupOrphanGroups();
+        log.info("Startup orphan aggregation-group cleanup completed: deleted={}", orphanDeleted);
 
         // 查询所有状态为 RUNNING 的日志源
         List<LogSource> runningSources = logSourceService.findEntitiesByStatus(CollectionStatus.RUNNING);

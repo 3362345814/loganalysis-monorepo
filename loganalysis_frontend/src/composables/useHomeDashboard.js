@@ -48,6 +48,12 @@ export const useHomeDashboard = () => {
   const levelData = shallowRef([])
 
   const getProjectParams = () => (selectedProjectId.value ? { projectId: selectedProjectId.value } : {})
+  const collectingStatuses = Object.freeze(new Set(['RUNNING', 'COLLECTING']))
+
+  const isCollectingSource = (source) => {
+    const normalizedStatus = String(source?.status ?? '').trim().toUpperCase()
+    return source?.running === true || collectingStatuses.has(normalizedStatus)
+  }
 
   const trendOption = computed(() => ({
     tooltip: {
@@ -149,7 +155,7 @@ export const useHomeDashboard = () => {
       const sourceList = sourcesRes.data ?? []
 
       stats.sources = sourceList.length
-      stats.collecting = sourceList.filter(({ status }) => status === 'COLLECTING').length
+      stats.collecting = sourceList.filter(isCollectingSource).length
       stats.logs = logsRes.data?.total ?? 0
       stats.alerts = alertRes.data?.totalAlerts ?? 0
     } catch (error) {

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -68,6 +69,26 @@ public interface AggregationGroupRepository extends JpaRepository<AggregationGro
     @Modifying
     @Query("UPDATE AggregationGroupEntity a SET a.status = 'EXPIRED' WHERE a.status = 'ACTIVE' AND a.lastEventTime < :cutoffTime")
     int expireOldGroups(LocalDateTime cutoffTime);
+
+    /**
+     * 删除指定日志源的聚合组
+     */
+    @Modifying
+    @Query("DELETE FROM AggregationGroupEntity a WHERE a.sourceId = :sourceId")
+    int deleteBySourceId(@Param("sourceId") String sourceId);
+
+    /**
+     * 批量删除指定日志源集合对应的聚合组
+     */
+    @Modifying
+    @Query("DELETE FROM AggregationGroupEntity a WHERE a.sourceId IN :sourceIds")
+    int deleteBySourceIdIn(@Param("sourceIds") List<String> sourceIds);
+
+    /**
+     * 查询聚合组中出现过的日志源ID（去重）
+     */
+    @Query("SELECT DISTINCT a.sourceId FROM AggregationGroupEntity a WHERE a.sourceId IS NOT NULL AND a.sourceId <> ''")
+    List<String> findDistinctSourceIds();
 
     /**
      * 统计总数
