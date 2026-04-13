@@ -1,0 +1,36 @@
+.tab-content-card {
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  background: var(--color-white);
+  animation-fill-mode: forwards;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.llm-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.active-config-tag {
+  margin-right: var(--space-10);
+}
+
+.llm-table {
+  margin-top: var(--space-10);
+}
+
+.config-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.param-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}

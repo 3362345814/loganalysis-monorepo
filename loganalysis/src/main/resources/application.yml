@@ -112,9 +112,9 @@ management:
   health:
     mail:
       enabled: false
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
 # Logging配置（全局）

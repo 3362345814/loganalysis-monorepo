@@ -1,0 +1,12 @@
+.project-page {
+  padding: var(--space-24);
+}
+
+.toolbar-card,
+.table-card {
+  margin-bottom: var(--space-24);
+}
+
+.toolbar-right {
+  text-align: right;
+}

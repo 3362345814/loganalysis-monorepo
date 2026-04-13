@@ -1,0 +1,49 @@
+.llm-config-container {
+  padding: var(--space-24);
+}
+
+.page-header {
+  margin-bottom: var(--space-24);
+}
+
+.page-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.toolbar-card {
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.toolbar-right {
+  text-align: right;
+}
+
+.table-card {
+  min-height: 400px;
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.config-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.param-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}

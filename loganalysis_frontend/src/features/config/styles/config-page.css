@@ -1,0 +1,40 @@
+.system-config-container {
+  padding: var(--space-24);
+}
+
+.config-tabs {
+  background: transparent;
+}
+
+.system-config-container .el-tabs__header,
+.system-config-container .el-tabs__nav-wrap,
+.system-config-container .el-tabs__nav-scroll,
+.system-config-container .el-tabs__content,
+.system-config-container .el-tab-pane {
+  background: transparent;
+}
+
+.system-config-container .el-tabs__header {
+  margin-bottom: 0;
+}
+
+.system-config-container .el-tabs__nav-scroll {
+  display: flex;
+  justify-content: center;
+}
+
+.system-config-container .el-input-group__prepend {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--border-primary) !important;
+  border-right: none !important;
+  border-radius: 12px 0 0 12px !important;
+  background: var(--surface-200) !important;
+  color: var(--text-secondary) !important;
+}
+
+.system-config-container .el-input-group--prepend .el-input__wrapper {
+  border-left: none !important;
+  border-radius: 0 12px 12px 0 !important;
+}

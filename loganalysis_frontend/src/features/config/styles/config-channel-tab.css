@@ -1,0 +1,62 @@
+.tab-content-card {
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  background: var(--color-white);
+  animation-fill-mode: forwards;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-tip {
+  margin-bottom: var(--space-16);
+}
+
+.channel-table {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.channel-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.field-spacing-8 {
+  margin-bottom: var(--space-8);
+}
+
+.inline-flex-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.smtp-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-8);
+}
+
+.smtp-port-input {
+  width: 120px;
+  margin-right: var(--space-8);
+}
+
+.smtp-username-input,
+.smtp-password-input {
+  width: 150px;
+  margin-right: var(--space-8);
+}
+
+.smtp-password-input {
+  margin-right: 0;
+}
+
+.email-from-input {
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-8);
+}

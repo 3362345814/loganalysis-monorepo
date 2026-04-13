@@ -1,0 +1,140 @@
+.alerts-container {
+  padding: var(--space-24);
+}
+
+.statistics-row {
+  margin-bottom: var(--space-24);
+}
+
+.stat-card {
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.stat-card :deep(.el-card__body) {
+  padding: var(--space-24);
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-24);
+}
+
+.stat-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-comfortable);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.stat-icon.total {
+  background: rgba(201, 100, 66, 0.12);
+  color: #c96442;
+}
+
+.stat-icon.pending {
+  background: rgba(184, 122, 46, 0.12);
+  color: #b87a2e;
+}
+
+.stat-icon.critical {
+  background: rgba(181, 51, 51, 0.12);
+  color: #b53333;
+}
+
+.stat-icon.today {
+  background: rgba(31, 138, 101, 0.12);
+  color: #1f8a65;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.filter-card {
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.filter-form {
+  margin-bottom: 0;
+}
+
+.table-card :deep(.el-card__header) {
+  padding: var(--space-16) var(--space-24);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.list-pagination {
+  margin-top: var(--space-24);
+  justify-content: flex-end;
+}
+
+.detail-footer {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.content-box {
+  max-height: 100px;
+  overflow: auto;
+  background: var(--surface-300);
+  padding: var(--space-8);
+  border-radius: var(--radius-standard);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-family-mono);
+}
+
+.parsed-info-content {
+  padding: var(--space-24);
+}
+
+.parsed-info-summary {
+  margin-bottom: var(--space-24);
+  padding-bottom: var(--space-16);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.parsed-info-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.field-key {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field-value {
+  color: var(--text-primary);
+  word-break: break-all;
+}

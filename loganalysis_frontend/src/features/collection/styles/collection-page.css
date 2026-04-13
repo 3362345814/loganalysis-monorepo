@@ -1,0 +1,155 @@
+.collection-page {
+  padding: var(--space-24);
+}
+
+.form-tip {
+  display: block;
+  margin-top: var(--space-4);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.form-tip-inline {
+  margin-left: var(--space-10);
+}
+
+.source-type-alert {
+  margin-top: var(--space-8);
+  padding: 8px 12px;
+}
+
+.pattern-warning-alert {
+  margin-top: var(--space-10);
+}
+
+.form-alert-spacing {
+  margin-bottom: var(--space-16);
+}
+
+.nginx-path-test-result {
+  margin-left: 100px;
+}
+
+.custom-rules {
+  width: 100%;
+}
+
+.custom-rules-table {
+  margin-top: var(--space-10);
+}
+
+.rule-examples {
+  margin-top: var(--space-10);
+}
+
+.rule-examples code {
+  padding: 2px 6px;
+  border-radius: var(--radius-small);
+  background-color: var(--surface-300);
+  color: var(--color-accent);
+}
+
+.pattern-help {
+  width: 100%;
+}
+
+.pattern-list {
+  margin: var(--space-8) 0 0;
+  padding-left: 20px;
+}
+
+.pattern-list li {
+  margin: var(--space-4) 0;
+  line-height: 1.6;
+}
+
+.pattern-list code {
+  padding: 2px 6px;
+  border-radius: var(--radius-small);
+  background-color: var(--surface-300);
+  color: var(--color-accent);
+  font-size: 12px;
+}
+
+.pattern-buttons {
+  display: flex;
+  gap: var(--space-8);
+  margin-top: var(--space-10);
+}
+
+.test-result {
+  display: inline-block;
+  margin-left: var(--space-10);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.test-result.success {
+  color: var(--color-success);
+}
+
+.test-result.error {
+  color: var(--color-error);
+}
+
+.aggregation-level-select {
+  width: 250px;
+}
+
+.project-select-wrapper {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.project-search-input {
+  margin-bottom: var(--space-16);
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-16);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  cursor: pointer;
+  transition: all var(--duration-fast) ease;
+}
+
+.project-item:hover,
+.project-item.active {
+  background-color: rgba(38, 37, 30, 0.04);
+  border-color: var(--color-accent);
+}
+
+.project-item-icon {
+  font-size: 24px;
+  color: var(--color-accent);
+}
+
+.project-item-info {
+  flex: 1;
+}
+
+.project-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.project-item-code {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.project-item-check {
+  font-size: 18px;
+  color: var(--color-accent);
+}

@@ -1,0 +1,17 @@
+.table-card {
+  min-height: 500px;
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.action-buttons {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: nowrap;
+}
+
+.action-buttons .el-button {
+  padding: 5px 8px;
+  font-size: 12px;
+}

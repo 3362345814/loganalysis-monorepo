@@ -184,10 +184,14 @@ public class LogCollectionController {
 
         // 2. 停止采集器
         LogCollector collector = collectorFactory.get(source);
-        if (collector != null) {
+        if (collector != null && collector.isRunning()) {
+            // 保持数据库状态为 RUNNING，避免与旧库约束冲突；
+            // 采集器内部会进入 STOPPING 并优雅排空队列，最后再落库 STOPPED。
             collector.stop();
             collectorFactory.remove(source);
             log.info("停止采集器: {} - {}", source.getName(), source.getPath());
+        } else if (collector != null) {
+            collectorFactory.remove(source);
         }
 
         // 3. 更新数据库状态
@@ -274,9 +278,11 @@ public class LogCollectionController {
      */
     @GetMapping("/collectors/status")
     public Result<List<Map<String, Object>>> getAllCollectorsStatus() {
-        List<LogSource> runningSources = logSourceService.findEntitiesByStatus(CollectionStatus.RUNNING);
+        List<LogSource> activeSources = new ArrayList<>();
+        activeSources.addAll(logSourceService.findEntitiesByStatus(CollectionStatus.RUNNING));
+        activeSources.addAll(logSourceService.findEntitiesByStatus(CollectionStatus.STOPPING));
 
-        List<Map<String, Object>> statusList = runningSources.stream()
+        List<Map<String, Object>> statusList = activeSources.stream()
                 .map(source -> {
                     LogCollector collector = collectorFactory.get(source);
                     Map<String, Object> status = new HashMap<>();

@@ -22,6 +22,11 @@ public enum CollectionStatus {
     PAUSED,
 
     /**
+     * 停止中（排空队列）
+     */
+    STOPPING,
+
+    /**
      * 错误状态
      */
     ERROR,

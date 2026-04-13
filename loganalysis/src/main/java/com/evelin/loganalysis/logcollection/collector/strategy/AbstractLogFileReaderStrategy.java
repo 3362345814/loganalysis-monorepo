@@ -68,6 +68,7 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
     protected final BlockingQueue<RawLogEvent> logQueue;
     private static final int DEFAULT_BATCH_SIZE = 100;
     private static final long DEFAULT_FLUSH_INTERVAL_MS = 5000;
+    private static final long CONSUMER_DRAIN_TIMEOUT_SECONDS = 15;
 
     // ==================== 线程池 ====================
     protected ExecutorService readerExecutor;
@@ -297,20 +298,30 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
     }
 
     protected void shutdownExecutors() {
+        // 读取与检查点线程立即停止，避免继续读取新日志
         if (readerExecutor != null && !readerExecutor.isShutdown()) {
             readerExecutor.shutdownNow();
             awaitTermination(readerExecutor, "reader");
-        }
-        if (consumerExecutor != null && !consumerExecutor.isShutdown()) {
-            consumerExecutor.shutdownNow();
-            awaitTermination(consumerExecutor, "consumer");
         }
         if (checkpointScheduler != null && !checkpointScheduler.isShutdown()) {
             checkpointScheduler.shutdownNow();
             awaitTermination(checkpointScheduler, "checkpoint");
         }
-        if (logQueue != null) {
-            logQueue.clear();
+
+        // 消费线程优雅排空队列，减少停机丢日志
+        if (consumerExecutor != null && !consumerExecutor.isShutdown()) {
+            consumerExecutor.shutdown();
+            try {
+                if (!consumerExecutor.awaitTermination(CONSUMER_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    log.warn("consumer executor drain timeout, forcing shutdown: name={}, queueSize={}",
+                            getName(), logQueue.size());
+                    consumerExecutor.shutdownNow();
+                    awaitTermination(consumerExecutor, "consumer(force)");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                consumerExecutor.shutdownNow();
+            }
         }
     }
 
@@ -455,18 +466,22 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
      * 通常在文件读取结束或检查点保存时被调用。
      */
     protected void flushBuffer(String filePath) {
-        if (!running.get()) return;
+        if (!canFlushBufferedLogs()) return;
         if (!multiLineBuffer.isEmpty()) {
             flushMultiLineBuffer(filePath);
         }
     }
 
     private void flushMultiLineBuffer(String filePath) {
-        if (!running.get() || multiLineBuffer.isEmpty()) return;
+        if (!canFlushBufferedLogs() || multiLineBuffer.isEmpty()) return;
         String logContent = multiLineBuffer.toString();
         enqueueLogEvent(logContent, multiLineStartLineNumber, filePath, -1);
         multiLineBuffer.setLength(0);
         multiLineStartLineNumber = 0;
+    }
+
+    private boolean canFlushBufferedLogs() {
+        return running.get() || state == CollectionState.STOPPING;
     }
 
     private void enqueueLogEvent(String line, long lineNumber, String filePath, long offset) {

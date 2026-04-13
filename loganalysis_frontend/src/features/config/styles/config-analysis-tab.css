@@ -1,0 +1,25 @@
+.tab-content-card {
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-comfortable);
+  background: var(--color-white);
+  animation-fill-mode: forwards;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analysis-form {
+  max-width: 500px;
+}
+
+.context-range-tip {
+  margin-left: var(--space-10);
+  color: var(--text-tertiary);
+}
+
+.analysis-level-select {
+  width: 100%;
+}

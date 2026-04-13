@@ -1,0 +1,10 @@
+.toolbar-card {
+  margin-bottom: var(--space-24);
+  border-radius: var(--radius-comfortable);
+  border: 1px solid var(--border-primary);
+  background: var(--color-white);
+}
+
+.toolbar-right {
+  text-align: right;
+}
