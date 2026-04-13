@@ -8,16 +8,23 @@
         :class="`stagger-${index + 1}`"
         :style="{ '--metric-accent': item.color, '--metric-accent-soft': item.softColor }"
       >
-        <div class="metric-top">
-          <span class="metric-icon">
-            <el-icon>
-              <component :is="item.icon" />
-            </el-icon>
-          </span>
-          <span class="metric-label">{{ item.label }}</span>
+        <div class="metric-main" :class="{ 'has-trend': item.showTrend }">
+          <div class="metric-content">
+            <div class="metric-top">
+              <span class="metric-icon">
+                <el-icon>
+                  <component :is="item.icon" />
+                </el-icon>
+              </span>
+              <span class="metric-label">{{ item.label }}</span>
+            </div>
+            <div class="metric-value">{{ Number(item.value || 0).toLocaleString('zh-CN') }}</div>
+            <p class="metric-sub">{{ item.description }}</p>
+          </div>
+          <div v-if="item.showTrend" class="metric-trend" v-loading="logIngestionTrendLoading">
+            <v-chart :option="item.trendOption" autoresize />
+          </div>
         </div>
-        <div class="metric-value">{{ Number(item.value || 0).toLocaleString('zh-CN') }}</div>
-        <p class="metric-sub">{{ item.description }}</p>
       </article>
     </section>
 
@@ -31,11 +38,15 @@
     <section class="overview-panel">
       <header class="panel-header">
         <div class="panel-headline">
-          <h2>告警概览</h2>
-          <p>聚焦近期趋势与级别分布，支持按项目快速筛选。</p>
+          <h2>{{ isLogOverview ? '日志概览' : '告警概览' }}</h2>
+          <p>{{ isLogOverview ? '查看近24小时日志入库趋势与级别分布。' : '聚焦近期趋势与级别分布，支持按项目快速筛选。' }}</p>
         </div>
 
         <div class="panel-controls">
+          <el-radio-group v-model="overviewMode" size="small" @change="handleOverviewModeChange">
+            <el-radio-button label="alert">告警概览</el-radio-button>
+            <el-radio-button label="log">日志概览</el-radio-button>
+          </el-radio-group>
           <el-select
             v-model="selectedProjectId"
             placeholder="全部项目"
@@ -50,25 +61,47 @@
       <div class="panel-grid">
         <article class="chart-panel">
           <div class="chart-panel-top">
-            <h3>告警趋势</h3>
-            <el-radio-group v-model="trendDays" size="small" @change="loadTrendData">
+            <h3>{{ isLogOverview ? '日志入库趋势' : '告警趋势' }}</h3>
+            <el-radio-group v-if="!isLogOverview" v-model="trendDays" size="small" @change="loadTrendData">
               <el-radio-button label="7">近7天</el-radio-button>
               <el-radio-button label="14">近14天</el-radio-button>
               <el-radio-button label="30">近30天</el-radio-button>
             </el-radio-group>
+            <div v-else class="chart-top-controls">
+              <el-radio-group v-model="logTrendRange" size="small" @change="handleLogTrendRangeChange">
+                <el-radio-button label="12">12小时</el-radio-button>
+                <el-radio-button label="24">24小时</el-radio-button>
+              </el-radio-group>
+            </div>
           </div>
-          <div class="chart-container" v-loading="trendLoading">
-            <v-chart :option="trendOption" autoresize />
+          <p v-if="isLogOverview" class="chart-hint">{{ logOverviewTrendHint }}</p>
+          <div class="chart-container" v-loading="isLogOverview ? logOverviewTrendLoading : trendLoading">
+            <v-chart :option="isLogOverview ? logOverviewTrendOption : trendOption" autoresize />
           </div>
         </article>
 
         <article class="chart-panel">
           <div class="chart-panel-top">
-            <h3>告警级别分布</h3>
-            <span class="level-hint">{{ levelHint }}</span>
+            <h3>{{ isLogOverview ? '日志级别分布' : '告警级别分布' }}</h3>
+            <div v-if="isLogOverview" class="chart-top-controls">
+              <el-select
+                v-model="logLevelSourceId"
+                placeholder="全部日志源"
+                @change="handleLogLevelSourceChange"
+              >
+                <el-option
+                  v-for="source in logLevelSourceOptions"
+                  :key="source.id || 'all'"
+                  :label="source.name"
+                  :value="source.id"
+                />
+              </el-select>
+            </div>
+            <span v-else class="level-hint">{{ alertLevelHint }}</span>
           </div>
-          <div class="chart-container" v-loading="levelLoading">
-            <v-chart :option="levelOption" autoresize />
+          <p v-if="isLogOverview" class="chart-hint">{{ logOverviewLevelHint }}</p>
+          <div class="chart-container" v-loading="isLogOverview ? logOverviewLevelLoading : levelLoading">
+            <v-chart :option="isLogOverview ? logOverviewLevelOption : levelOption" autoresize />
           </div>
         </article>
       </div>
@@ -85,15 +118,32 @@ const {
   stats,
   selectedProjectId,
   projects,
+  overviewMode,
   trendDays,
   trendLoading,
   levelLoading,
   trendOption,
   levelOption,
-  levelHint,
+  logIngestionTrendLoading,
+  logIngestionTrendOption,
+  logTrendRange,
+  logOverviewTrendLoading,
+  logOverviewLevelLoading,
+  logOverviewTrendOption,
+  logOverviewLevelOption,
+  logLevelSourceId,
+  logLevelSourceOptions,
+  alertLevelHint,
+  logOverviewLevelHint,
+  logOverviewTrendHint,
   loadTrendData,
-  handleProjectChange
+  handleProjectChange,
+  handleOverviewModeChange,
+  handleLogTrendRangeChange,
+  handleLogLevelSourceChange
 } = useHomeDashboard()
+
+const isLogOverview = computed(() => overviewMode.value === 'log')
 
 const metricCards = computed(() => [
   {
@@ -109,10 +159,12 @@ const metricCards = computed(() => [
     key: 'logs',
     label: '日志总量',
     value: stats.logs,
-    description: '已入库日志条目（累计）',
+    description: '已入库日志条目',
     icon: Document,
     color: 'var(--color-success)',
-    softColor: 'rgba(31, 138, 101, 0.12)'
+    softColor: 'rgba(31, 138, 101, 0.12)',
+    showTrend: true,
+    trendOption: logIngestionTrendOption.value
   },
   {
     key: 'collecting',
