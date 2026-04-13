@@ -7,7 +7,7 @@
 - 前端控制台（Vue 3 + Element Plus）
 - 跨平台运维 CLI（Go，基于 Docker Compose 一键部署）
 
-当前文档对应版本：`v0.3.0`（发布于 `2026-04-13`）
+当前文档对应版本：`v0.3.1`（发布于 `2026-04-14`）
 
 ## 系统功能全景
 
@@ -113,13 +113,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.0/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.1/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.0/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.1/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -140,7 +140,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.0/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.1/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -148,7 +148,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.0/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.1/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -158,7 +158,7 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --profile minimal --version v0.3.0 --auto-port
+loganalysis up --profile minimal --version v0.3.1 --auto-port
 loganalysis status
 ```
 
@@ -190,7 +190,7 @@ loganalysis up
 loganalysis up --auto-port
 
 # 手动指定版本 + 自动避让端口
-loganalysis up -version v0.3.0 --auto-port
+loganalysis up -version v0.3.1 --auto-port
 ```
 
 ### 2) `down`
@@ -310,7 +310,7 @@ loganalysis config set ports.frontend 13000
 loganalysis upgrade --to latest
 
 # 升级到指定版本
-loganalysis upgrade --to v0.3.0
+loganalysis upgrade --to v0.3.1
 
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
@@ -401,7 +401,7 @@ loganalysis config set ports.redis 16379
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --profile minimal --version v0.3.0 --auto-port
+loganalysis up --profile minimal --version v0.3.1 --auto-port
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
@@ -410,7 +410,7 @@ loganalysis config get ports.backend
 ### 场景 2：只需数据库依赖，给本地开发使用
 
 ```bash
-loganalysis up --profile db --version v0.3.0
+loganalysis up --profile db --version v0.3.1
 loganalysis logs postgres --tail 100
 ```
 
@@ -425,7 +425,7 @@ loganalysis logs backend -f
 ### 场景 4：升级并验证
 
 ```bash
-loganalysis upgrade --to v0.3.0
+loganalysis upgrade --to v0.3.1
 loganalysis status
 loganalysis version
 ```
