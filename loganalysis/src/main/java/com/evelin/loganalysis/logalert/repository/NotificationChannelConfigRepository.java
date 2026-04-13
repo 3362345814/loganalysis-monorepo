@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 通知渠道配置Repository
@@ -14,7 +15,7 @@ import java.util.Optional;
  * @author Evelin
  */
 @Repository
-public interface NotificationChannelConfigRepository extends JpaRepository<NotificationChannelConfig, Long> {
+public interface NotificationChannelConfigRepository extends JpaRepository<NotificationChannelConfig, UUID> {
 
     /**
      * 根据渠道查询配置

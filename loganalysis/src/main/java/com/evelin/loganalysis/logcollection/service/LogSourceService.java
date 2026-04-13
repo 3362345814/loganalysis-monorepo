@@ -38,6 +38,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LogSourceService {
 
+    private static final String MASK_PREFIX = "******";
+
     private final LogSourceRepository logSourceRepository;
     private final ProjectRepository projectRepository;
     private final LogPathValidator logPathValidator;
@@ -234,7 +236,7 @@ public class LogSourceService {
             if (request.getUsername() != null) {
                 existing.setUsername(request.getUsername());
             }
-            if (request.getPassword() != null) {
+            if (shouldUpdateSecret(request.getPassword())) {
                 existing.setPassword(request.getPassword());
             }
             if (request.getEncoding() != null) {
@@ -448,9 +450,30 @@ public class LogSourceService {
             projectOpt.ifPresent(project -> response.setProjectName(project.getName()));
         }
 
-        // 返回原始密码
-        response.setPassword(logSource.getPassword());
+        String rawPassword = logSource.getPassword();
+        boolean passwordConfigured = rawPassword != null && !rawPassword.isBlank();
+        response.setPasswordConfigured(passwordConfigured);
+        response.setPassword(passwordConfigured ? maskSecret(rawPassword) : null);
 
         return response;
+    }
+
+    private boolean shouldUpdateSecret(String secret) {
+        if (secret == null || secret.isBlank()) {
+            return false;
+        }
+        return !isMaskedSecret(secret);
+    }
+
+    private boolean isMaskedSecret(String secret) {
+        return secret != null && secret.startsWith(MASK_PREFIX);
+    }
+
+    private String maskSecret(String secret) {
+        if (secret == null || secret.isBlank()) {
+            return null;
+        }
+        int visibleCount = Math.min(4, secret.length());
+        return MASK_PREFIX + secret.substring(secret.length() - visibleCount);
     }
 }

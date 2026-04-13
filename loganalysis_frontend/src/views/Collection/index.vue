@@ -148,7 +148,15 @@
             <el-input v-model="form.username" placeholder="SSH用户名" />
           </el-form-item>
           <el-form-item label="密码" prop="password">
-            <el-input v-model="form.password" type="password" placeholder="SSH密码" show-password />
+            <el-input
+              v-model="form.password"
+              type="password"
+              :placeholder="isEdit && sshPasswordConfigured ? '已配置（留空则保留原密码）' : 'SSH密码'"
+              show-password
+            />
+            <span v-if="isEdit && sshPasswordConfigured" class="form-tip">
+              未输入新密码时将保留已保存密码；如需重新测试连接，请输入新密码。
+            </span>
           </el-form-item>
           <el-form-item>
             <el-button
@@ -473,6 +481,7 @@ const projectSelectDialogVisible = ref(false)
 const projectSearchText = ref('')
 const testingSsh = ref(false)
 const sshTestResult = ref(null)
+const sshPasswordConfigured = ref(false)
 const testingPath = ref(false)
 const pathTestResult = ref(null)
 const pathTestMessage = ref('')
@@ -543,7 +552,24 @@ const rules = {
   sourceType: [{ required: true, message: '请选择类型', trigger: 'change' }],
   host: [{ required: true, message: '请输入SSH主机地址', trigger: 'blur' }],
   username: [{ required: true, message: '请输入SSH用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入SSH密码', trigger: 'blur' }],
+  password: [{
+    validator: (rule, value, callback) => {
+      if (form.value.sourceType !== 'SSH') {
+        callback()
+        return
+      }
+      if (value && String(value).trim()) {
+        callback()
+        return
+      }
+      if (isEdit.value && sshPasswordConfigured.value) {
+        callback()
+        return
+      }
+      callback(new Error('请输入SSH密码'))
+    },
+    trigger: 'blur'
+  }],
 }
 
 const getStatusType = (status) => {
@@ -662,6 +688,7 @@ const handleCreateSource = () => {
   testingPath.value = false
   pathTestResult.value = null
   pathTestMessage.value = ''
+  sshPasswordConfigured.value = false
   form.value = {
     id: null,
     name: '',
@@ -718,6 +745,7 @@ const handleEdit = (row) => {
   testingPath.value = false
   pathTestResult.value = null
   pathTestMessage.value = ''
+  sshPasswordConfigured.value = row.passwordConfigured === true
 
   let parsedPaths = []
   if (row.paths && Array.isArray(row.paths)) {
@@ -732,6 +760,7 @@ const handleEdit = (row) => {
 
   form.value = {
     ...row,
+    password: '',
     paths: parsedPaths,
     desensitizationEnabled: row.desensitizationEnabled || false,
     aggregationLevel: row.aggregationLevel || null,
@@ -786,6 +815,10 @@ const handleTestSsh = async () => {
     return
   }
   if (!form.value.password) {
+    if (isEdit.value && sshPasswordConfigured.value) {
+      ElMessage.warning('当前为保留旧密码模式，输入新密码后可执行连接测试')
+      return
+    }
     ElMessage.warning('请输入密码')
     return
   }
@@ -864,8 +897,15 @@ const handleSubmit = async () => {
   // SSH 类型：点击确定时先执行连接和路径测试
   if (form.value.sourceType === 'SSH') {
     const paths = form.value.paths?.filter(p => p && p.trim()) || []
-    if (!form.value.host || !form.value.username || !form.value.password) {
+    const hasInputPassword = !!form.value.password?.trim()
+    const keepExistingPassword = isEdit.value && sshPasswordConfigured.value && !hasInputPassword
+
+    if (!form.value.host || !form.value.username) {
       ElMessage.warning('请填写完整的 SSH 连接信息')
+      return
+    }
+    if (!hasInputPassword && !keepExistingPassword) {
+      ElMessage.warning('请填写 SSH 密码')
       return
     }
     if (paths.length === 0) {
@@ -873,63 +913,68 @@ const handleSubmit = async () => {
       return
     }
 
-    // 1. 测试 SSH 连接
-    testingSsh.value = true
-    sshTestResult.value = null
-    let sshOk = false
-    try {
-      const res = await logSourceApi.testSshConnection({
-        host: form.value.host,
-        port: form.value.port || 22,
-        username: form.value.username,
-        password: form.value.password
-      })
-      sshOk = res.data.success
-      sshTestResult.value = sshOk
-      if (!sshOk) {
-        ElMessage.error('SSH 连接失败: ' + (res.data.message || '连接失败'))
+    if (hasInputPassword) {
+      // 1. 测试 SSH 连接
+      testingSsh.value = true
+      sshTestResult.value = null
+      let sshOk = false
+      try {
+        const res = await logSourceApi.testSshConnection({
+          host: form.value.host,
+          port: form.value.port || 22,
+          username: form.value.username,
+          password: form.value.password
+        })
+        sshOk = res.data.success
+        sshTestResult.value = sshOk
+        if (!sshOk) {
+          ElMessage.error('SSH 连接失败: ' + (res.data.message || '连接失败'))
+        }
+      } catch (error) {
+        sshTestResult.value = false
+        ElMessage.error('SSH 连接失败: ' + (error.message || '连接失败'))
+      } finally {
+        testingSsh.value = false
       }
-    } catch (error) {
-      sshTestResult.value = false
-      ElMessage.error('SSH 连接失败: ' + (error.message || '连接失败'))
-    } finally {
-      testingSsh.value = false
-    }
-    if (!sshOk) return
+      if (!sshOk) return
 
-    // 2. 测试路径是否存在
-    testingPath.value = true
-    pathTestResult.value = null
-    pathTestMessage.value = ''
-    let pathOk = false
-    try {
-      const res = await logSourceApi.testPathExists({
-        sourceType: 'SSH',
-        paths: paths,
-        host: form.value.host,
-        port: form.value.port || 22,
-        username: form.value.username,
-        password: form.value.password
-      })
-      pathOk = res.data.success
-      pathTestResult.value = pathOk
-      pathTestMessage.value = res.data.message || (pathOk ? '路径存在' : '路径不存在')
-      if (!pathOk) {
-        ElMessage.error('路径验证失败: ' + (res.data.message || '路径不存在'))
+      // 2. 测试路径是否存在
+      testingPath.value = true
+      pathTestResult.value = null
+      pathTestMessage.value = ''
+      let pathOk = false
+      try {
+        const res = await logSourceApi.testPathExists({
+          sourceType: 'SSH',
+          paths: paths,
+          host: form.value.host,
+          port: form.value.port || 22,
+          username: form.value.username,
+          password: form.value.password
+        })
+        pathOk = res.data.success
+        pathTestResult.value = pathOk
+        pathTestMessage.value = res.data.message || (pathOk ? '路径存在' : '路径不存在')
+        if (!pathOk) {
+          ElMessage.error('路径验证失败: ' + (res.data.message || '路径不存在'))
+        }
+      } catch (error) {
+        pathTestResult.value = false
+        pathTestMessage.value = error.message || '验证失败'
+        ElMessage.error('路径验证失败: ' + (error.message || '验证失败'))
+      } finally {
+        testingPath.value = false
       }
-    } catch (error) {
-      pathTestResult.value = false
-      pathTestMessage.value = error.message || '验证失败'
-      ElMessage.error('路径验证失败: ' + (error.message || '验证失败'))
-    } finally {
-      testingPath.value = false
+      if (!pathOk) return
     }
-    if (!pathOk) return
   }
 
   submitting.value = true
   try {
     const submitData = { ...form.value }
+    if (!submitData.password || !submitData.password.trim()) {
+      delete submitData.password
+    }
 
     if (submitData.logFormat === 'NGINX') {
       if (submitData.paths && submitData.paths.length >= 2) {

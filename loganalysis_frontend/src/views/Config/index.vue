@@ -16,7 +16,7 @@
           <div class="config-tip">
             <el-alert type="info" :closable="false" show-icon>
               <template #title>
-                <span>启用渠道后，告警规则才能选择对应的通知渠道。未启用的渠道不会在告警规则中显示。</span>
+                <span>启用渠道后，告警规则才能选择对应的通知渠道。未启用的渠道不会在告警规则中显示。密钥类字段留空或保持掩码时，将保留旧值。</span>
               </template>
             </el-alert>
           </div>
@@ -45,7 +45,9 @@
                   </el-input>
                   <el-input
                     v-model="row.configParams.secret"
-                    placeholder="请输入加签密钥(可选)"
+                    placeholder="加签密钥（留空或保留掩码则不变）"
+                    type="password"
+                    show-password
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >
@@ -110,7 +112,7 @@
                   />
                   <el-input
                     v-model="row.configParams.password"
-                    placeholder="密码"
+                    placeholder="密码（留空或保留掩码则不变）"
                     type="password"
                     show-password
                     :disabled="!row.enabled"
@@ -152,7 +154,9 @@
                   </el-input>
                   <el-input
                     v-model="row.configParams.secret"
-                    placeholder="请输入飞书机器人加签密钥(可选)"
+                    placeholder="飞书加签密钥（留空或保留掩码则不变）"
+                    type="password"
+                    show-password
                     :disabled="!row.enabled"
                     style="margin-bottom: 8px;"
                   >

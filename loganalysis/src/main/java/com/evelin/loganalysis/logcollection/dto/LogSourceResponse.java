@@ -80,9 +80,14 @@ public class LogSourceResponse {
     private String encoding;
 
     /**
-     * SSH 密码（查询时直接返回原始值，前端不需要脱敏）
+     * SSH 密码掩码（仅用于前端展示占位，不返回明文）
      */
     private String password;
+
+    /**
+     * 是否已配置 SSH 密码
+     */
+    private Boolean passwordConfigured;
 
     /**
      * 是否启用
