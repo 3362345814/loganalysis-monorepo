@@ -102,14 +102,10 @@ public class ErrorLogParser implements ParseStrategy {
             message = matcher.group(3);
         }
 
+        LocalDateTime logTime = UtcTimestampParser.parseUtc(timeStr, TIME_FORMATTER);
+
         // 解析时间
-        try {
-            LocalDateTime logTime = LocalDateTime.parse(timeStr, TIME_FORMATTER);
-            fields.put("log_time", logTime);
-        } catch (Exception e) {
-            log.debug("Failed to parse time: {}", timeStr);
-            fields.put("time_local", timeStr);
-        }
+        fields.put("log_time", logTime);
 
         fields.put("level", level);
         fields.put("message", message);
@@ -124,6 +120,7 @@ public class ErrorLogParser implements ParseStrategy {
         return ParseResult.builder()
                 .success(true)
                 .logType("nginx_error")
+                .timestamp(logTime)
                 .level(logLevel)
                 .message(message)
                 .fields(fields)

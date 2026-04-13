@@ -237,6 +237,27 @@
   margin-top: var(--space-16);
 }
 
+.trace-intro-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-top: var(--space-10);
+}
+
+.trace-intro-item {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-primary);
+  background: rgba(63, 111, 176, 0.05);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trace-intro-item strong {
+  color: var(--text-primary);
+}
+
 @keyframes fadeInUp {
   to {
     opacity: 1;
@@ -321,5 +342,10 @@
 
   .chart-container {
     height: 260px;
+  }
+
+  .trace-intro-item {
+    width: 100%;
+    border-radius: var(--radius-small);
   }
 }

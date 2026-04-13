@@ -254,7 +254,7 @@ public class Log4jLogParser implements ParseStrategy {
 
             // 设置时间戳（如果没有从 token 中设置）
             if (result.getTimestamp() == null) {
-                result.setTimestamp(LocalDateTime.now());
+                result.setTimestamp(UtcTimestampParser.nowUtc());
             }
 
             return result;
@@ -388,7 +388,7 @@ public class Log4jLogParser implements ParseStrategy {
 
         return ParseResult.builder()
                 .success(true)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcTimestampParser.nowUtc())
                 .level(level)
                 .thread(thread)
                 .className(fullClassName)
@@ -401,14 +401,14 @@ public class Log4jLogParser implements ParseStrategy {
 
     private LocalDateTime parseTimestamp(String timestampStr, DateTimeFormatter formatter) {
         try {
-            return LocalDateTime.parse(timestampStr, formatter);
+            return UtcTimestampParser.parseUtc(timestampStr, formatter);
         } catch (Exception e) {
             try {
                 String normalized = timestampStr.replace(',', '.');
-                return LocalDateTime.parse(normalized, FORMATTER_COMMA_MS);
+                return UtcTimestampParser.parseUtc(normalized, FORMATTER_COMMA_MS);
             } catch (Exception ex) {
                 log.warn("Failed to parse timestamp: {}", timestampStr);
-                return LocalDateTime.now();
+                return UtcTimestampParser.nowUtc();
             }
         }
     }
@@ -456,7 +456,7 @@ public class Log4jLogParser implements ParseStrategy {
 
         return ParseResult.builder()
                 .success(true)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcTimestampParser.nowUtc())
                 .level(level)
                 .message(content)
                 .fields(parseFields(content))

@@ -25,7 +25,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -45,7 +45,11 @@ public class LogElasticsearchRepository {
     private static final String INDEX_NAME = "loganalysis-logs";
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-            .withZone(ZoneId.systemDefault());
+            .withZone(ZoneOffset.UTC);
+
+    private static long toUtcEpochMillis(java.time.LocalDateTime dateTime) {
+        return dateTime.toInstant(ZoneOffset.UTC).toEpochMilli();
+    }
 
     /**
      * 检查索引是否存在，不存在则创建
@@ -219,12 +223,10 @@ public class LogElasticsearchRepository {
                     .range(r -> {
                         r.field("originalLogTime");
                         if (request.getStartTime() != null) {
-                            r.gte(co.elastic.clients.json.JsonData.of(
-                                    DATE_FORMATTER.format(request.getStartTime())));
+                            r.gte(co.elastic.clients.json.JsonData.of(toUtcEpochMillis(request.getStartTime())));
                         }
                         if (request.getEndTime() != null) {
-                            r.lte(co.elastic.clients.json.JsonData.of(
-                                    DATE_FORMATTER.format(request.getEndTime())));
+                            r.lte(co.elastic.clients.json.JsonData.of(toUtcEpochMillis(request.getEndTime())));
                         }
                         return r;
                     })
@@ -375,7 +377,6 @@ public class LogElasticsearchRepository {
 
         long total = response.hits().total() != null ? response.hits().total().value() : 0;
         int totalPages = (int) Math.ceil((double) total / request.getSize());
-
         return EsLogSearchResponse.builder()
                 .total(total)
                 .page(request.getPage())
@@ -421,12 +422,10 @@ public class LogElasticsearchRepository {
                     .range(r -> {
                         r.field("originalLogTime");
                         if (request.getStartTime() != null) {
-                            r.gte(co.elastic.clients.json.JsonData.of(
-                                    DATE_FORMATTER.format(request.getStartTime())));
+                            r.gte(co.elastic.clients.json.JsonData.of(toUtcEpochMillis(request.getStartTime())));
                         }
                         if (request.getEndTime() != null) {
-                            r.lte(co.elastic.clients.json.JsonData.of(
-                                    DATE_FORMATTER.format(request.getEndTime())));
+                            r.lte(co.elastic.clients.json.JsonData.of(toUtcEpochMillis(request.getEndTime())));
                         }
                         return r;
                     })

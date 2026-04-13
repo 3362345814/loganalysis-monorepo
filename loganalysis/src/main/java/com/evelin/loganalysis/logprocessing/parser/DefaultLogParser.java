@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -91,7 +92,7 @@ public class DefaultLogParser implements ParseStrategy {
 
         return ParseResult.builder()
                 .success(true)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcTimestampParser.nowUtc())
                 .level(level)
                 .message(content)
                 .fields(parseFields(content))
@@ -99,29 +100,19 @@ public class DefaultLogParser implements ParseStrategy {
     }
 
     private LocalDateTime parseTimestamp(String timestampStr) {
-        try {
-            // 尝试各种时间格式
-            String[] formats = {
-                    "yyyy-MM-dd HH:mm:ss.SSS",
-                    "yyyy-MM-dd HH:mm:ss",
-                    "yyyy-MM-dd'T'HH:mm:ss",
-                    "yyyy-MM-dd'T'HH:mm:ss.SSS"
-            };
-
-            for (String format : formats) {
-                try {
-                    return java.time.LocalDateTime.parse(
-                            timestampStr.replace(' ', 'T'),
-                            java.time.format.DateTimeFormatter.ofPattern(format)
-                    );
-                } catch (Exception e) {
-                    // 继续尝试下一个格式
-                }
-            }
-        } catch (Exception e) {
+        DateTimeFormatter[] formatters = {
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"),
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        };
+        LocalDateTime parsed = UtcTimestampParser.parseUtc(timestampStr, formatters);
+        if (parsed == null) {
             log.debug("Failed to parse timestamp: {}", timestampStr);
+            return UtcTimestampParser.nowUtc();
         }
-        return LocalDateTime.now();
+        return parsed;
     }
 
     private String normalizeLevel(String level) {

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -91,28 +92,22 @@ public class JsonLogParser implements ParseStrategy {
     }
 
     private LocalDateTime parseTimestamp(JsonNode node) {
+        DateTimeFormatter[] formatters = {
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+        };
+
         for (String field : TIMESTAMP_FIELDS) {
             JsonNode timestampNode = node.get(field);
             if (timestampNode != null) {
                 String value = timestampNode.asText();
-                try {
-                    // 尝试 ISO 格式
-                    return LocalDateTime.parse(value);
-                } catch (Exception e) {
-                    try {
-                        // 尝试毫秒时间戳
-                        long millis = Long.parseLong(value);
-                        return LocalDateTime.ofInstant(
-                                java.time.Instant.ofEpochMilli(millis),
-                                java.time.ZoneId.systemDefault()
-                        );
-                    } catch (Exception e2) {
-                        // 继续尝试其他格式
-                    }
-                }
+                return UtcTimestampParser.parseUtc(value, formatters);
             }
         }
-        return LocalDateTime.now();
+        return UtcTimestampParser.nowUtc();
     }
 
     private String parseLevel(JsonNode node) {
@@ -218,7 +213,7 @@ public class JsonLogParser implements ParseStrategy {
     private ParseResult parseFallback(String content) {
         return ParseResult.builder()
                 .success(true)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcTimestampParser.nowUtc())
                 .level("INFO")
                 .message(content)
                 .fields(new HashMap<>())

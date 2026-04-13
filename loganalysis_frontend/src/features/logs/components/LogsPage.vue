@@ -9,7 +9,14 @@
           </el-select>
         </el-form-item>
         <el-form-item label="日志源">
-          <el-select v-model="filter.sourceId" placeholder="请选择日志源" clearable @change="handleSourceChange" style="width: 180px">
+          <el-select
+            v-model="filter.sourceId"
+            :disabled="!filter.projectId"
+            :placeholder="filter.projectId ? '请选择日志源' : '请先选择项目'"
+            clearable
+            @change="handleSourceChange"
+            style="width: 180px"
+          >
             <el-option v-for="source in filteredSources" :key="source.id" :label="source.name" :value="source.id" />
           </el-select>
         </el-form-item>
@@ -228,6 +235,27 @@ const highlightTime = ref(null)
 const highlightId = ref(null)
 const highlightedIndex = ref(-1)
 const hasScrolledToHighlight = ref(false)
+const cachedContextSize = ref(10)
+let esQuerySeq = 0
+let logFileQuerySeq = 0
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const normalizeUuid = (value) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return null
+  return UUID_REGEX.test(trimmed) ? trimmed : null
+}
+
+const buildLogsRouteQuery = () => {
+  const query = {}
+  const sourceId = normalizeUuid(filter.value.sourceId)
+  if (sourceId) query.sourceId = sourceId
+  if (filter.value.projectId && filter.value.projectId !== 'undefined' && filter.value.projectId !== 'null') {
+    query.projectId = filter.value.projectId
+  }
+  return query
+}
 
 const parsedInfoTableData = computed(() => {
   const data = []
@@ -264,7 +292,7 @@ const nginxLogFiles = ref([])
 
 const filteredSources = computed(() => {
   if (!filter.value.projectId) {
-    return sources.value
+    return []
   }
   return sources.value.filter(s => s.projectId === filter.value.projectId)
 })
@@ -286,30 +314,37 @@ const availableLogFiles = computed(() => {
 
 // ES 搜索方法
 const loadEsLogs = async () => {
-  if (!filter.value.sourceId) {
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (!validSourceId) {
     logs.value = []
     total.value = 0
     return
   }
 
+  const querySeq = ++esQuerySeq
   try {
     loading.value = true
+    // 开始新查询时先清空旧结果，避免视觉上误以为时间筛选未生效
+    logs.value = []
+    total.value = 0
 
     const currentHighlightTime = highlightTime.value
     const currentHighlightId = highlightId.value
     let params = {
-      sourceId: filter.value.sourceId,
+      sourceId: validSourceId,
       page: esFilter.value.page,
       size: esFilter.value.size
     }
 
-    if (currentHighlightTime) {
+    const hasManualDateRange = esFilter.value.dateRange && esFilter.value.dateRange.length === 2
+
+    if (currentHighlightTime && !hasManualDateRange) {
       const targetDate = new Date(currentHighlightTime)
       const startTime = new Date(targetDate.getTime() - 30 * 60 * 1000)
       const endTime = new Date(targetDate.getTime() + 30 * 60 * 1000)
       params.startTime = startTime.toISOString().slice(0, 19)
       params.endTime = endTime.toISOString().slice(0, 19)
-    } else if (esFilter.value.dateRange && esFilter.value.dateRange.length === 2) {
+    } else if (hasManualDateRange) {
       params.startTime = esFilter.value.dateRange[0]
       params.endTime = esFilter.value.dateRange[1]
     }
@@ -328,12 +363,15 @@ const loadEsLogs = async () => {
     }
 
     const res = await esLogApi.search(params)
+    // 仅保留最后一次查询结果，防止旧请求晚返回覆盖新筛选
+    if (querySeq !== esQuerySeq) return
 
     // 使用 count API 获取准确的总数
     const countParams = { ...params }
     delete countParams.page
     delete countParams.size
     const countRes = await esLogApi.count(countParams)
+    if (querySeq !== esQuerySeq) return
     total.value = countRes.data?.count ?? 0
 
     if (res.data && res.data.hits) {
@@ -401,7 +439,7 @@ const loadEsLogs = async () => {
           setTimeout(() => {
             clearHighlight()
             if (route.query.highlightId || route.query.highlightTime) {
-              router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+              router.replace({ path: '/logs', query: buildLogsRouteQuery() })
             }
           }, 3000)
         })
@@ -412,7 +450,7 @@ const loadEsLogs = async () => {
           }
           clearHighlight()
           if (route.query.highlightId || route.query.highlightTime) {
-            router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+            router.replace({ path: '/logs', query: buildLogsRouteQuery() })
           }
         })
       }
@@ -424,39 +462,45 @@ const loadEsLogs = async () => {
     console.error('ES搜索失败:', error)
     ElMessage.error('ES搜索失败: ' + (error.message || '请检查ES连接'))
   } finally {
-    loading.value = false
+    if (querySeq === esQuerySeq) {
+      loading.value = false
+    }
   }
 }
 
 const loadLogFilesForSource = async () => {
-  if (!filter.value.sourceId) {
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (!validSourceId) {
     nginxLogFiles.value = []
     return
   }
-  
+
   if (!isNginxSource.value) {
     nginxLogFiles.value = []
     return
   }
-  
+
+  const querySeq = ++logFileQuerySeq
   try {
-    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const countRes = await rawLogApi.getCount(validSourceId)
+    if (querySeq !== logFileQuerySeq) return
     const totalCount = countRes.data?.count || 0
-    
+
     let allLogs = []
     const batchSize = 1000
     const totalPages = Math.ceil(totalCount / batchSize)
-    
+
     for (let page = 0; page < totalPages; page++) {
       const params = {
         page: page,
         size: batchSize
       }
-      const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+      const res = await rawLogApi.getBySourceId(validSourceId, params)
+      if (querySeq !== logFileQuerySeq) return
       const logs = res.data?.content || []
       allLogs = allLogs.concat(logs)
     }
-    
+
     const fileMap = new Map()
     allLogs.forEach(log => {
       const filePath = log.filePath || ''
@@ -465,13 +509,14 @@ const loadLogFilesForSource = async () => {
         fileMap.set(fileName, filePath)
       }
     })
-    
+
+    if (querySeq !== logFileQuerySeq) return
     nginxLogFiles.value = Array.from(fileMap.entries()).map(([name, path]) => ({
       name,
       path
     }))
-    
-    const savedLogFiles = localStorage.getItem(`logFiles_${filter.value.sourceId}`)
+
+    const savedLogFiles = localStorage.getItem(`logFiles_${validSourceId}`)
     if (savedLogFiles) {
       try {
         const parsed = JSON.parse(savedLogFiles)
@@ -502,7 +547,8 @@ const loadSources = async () => {
     sources.value = res.data || []
 
     // 如果有路由参数传入的 sourceId，在日志源加载完成后自动查询日志
-    if (route.query.sourceId && !logs.value.length) {
+    const routeSourceId = normalizeUuid(route.query.sourceId)
+    if (routeSourceId && !logs.value.length) {
       // 如果有项目ID，设置项目筛选
       if (route.query.projectId) {
         filter.value.projectId = route.query.projectId
@@ -526,10 +572,13 @@ const loadSources = async () => {
 const handleProjectChange = () => {
   filter.value.sourceId = null
   filter.value.page = 1
+  esQuerySeq++
+  logFileQuerySeq++
 }
 
 const loadLogs = async () => {
-  if (!filter.value.sourceId) {
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (!validSourceId) {
     logs.value = []
     total.value = 0
     return
@@ -538,7 +587,7 @@ const loadLogs = async () => {
   try {
     loading.value = true
     
-    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const countRes = await rawLogApi.getCount(validSourceId)
     const totalCount = countRes.data?.count || 0
     total.value = totalCount
     
@@ -567,7 +616,7 @@ const loadLogs = async () => {
       }
     }
     
-    const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+    const res = await rawLogApi.getBySourceId(validSourceId, params)
     let allLogs = res.data?.content || []
     
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
@@ -611,7 +660,7 @@ const loadLogs = async () => {
           clearHighlight()
           // 清除URL参数，避免刷新时重复定位
           if (route.query.highlightId || route.query.highlightTime) {
-            router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+            router.replace({ path: '/logs', query: buildLogsRouteQuery() })
           }
         }, 3000)
       })
@@ -624,7 +673,7 @@ const loadLogs = async () => {
         // 清除定位状态和URL参数
         clearHighlight()
         if (route.query.highlightId || route.query.highlightTime) {
-          router.replace({ path: '/logs', query: { sourceId: filter.value.sourceId, projectId: filter.value.projectId } })
+          router.replace({ path: '/logs', query: buildLogsRouteQuery() })
         }
       })
     }
@@ -642,14 +691,15 @@ let lastScrollHeight = 0
 const handleScroll = (e) => {
   const target = e.target
   lastScrollHeight = target.scrollHeight - target.clientHeight
-  
-  if (target.scrollTop === 0 && !loading.value && filter.value.sourceId && filter.value.refreshInterval === 0) {
+
+  if (target.scrollTop === 0 && !loading.value && normalizeUuid(filter.value.sourceId) && filter.value.refreshInterval === 0) {
     loadMoreLogsAtTop()
   }
 }
 
 const loadMoreLogsAtTop = async () => {
-  if (!filter.value.sourceId || loading.value) return
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (!validSourceId || loading.value) return
 
   
   try {
@@ -670,8 +720,8 @@ const loadMoreLogsAtTop = async () => {
       page: nextPage,
       size: 1000
     }
-    
-    const res = await rawLogApi.getBySourceId(filter.value.sourceId, params)
+
+    const res = await rawLogApi.getBySourceId(validSourceId, params)
     let newLogs = res.data?.content || []
     
     if (filter.value.logFiles && filter.value.logFiles.length > 0) {
@@ -706,7 +756,7 @@ const loadMoreLogsAtTop = async () => {
       })
     }
     
-    const countRes = await rawLogApi.getCount(filter.value.sourceId)
+    const countRes = await rawLogApi.getCount(validSourceId)
     const totalCount = countRes.data?.count || 0
     total.value = totalCount
     
@@ -737,17 +787,25 @@ const getLogTimestamp = (log) => {
 const handleSourceChange = () => {
   filter.value.page = 1
   filter.value.logFiles = []
-  if (!filter.value.sourceId) {
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (!validSourceId) {
+    esQuerySeq++
+    logFileQuerySeq++
+    filter.value.sourceId = null
     nginxLogFiles.value = []
     logs.value = []
+    total.value = 0
+    stopRefresh()
     return
   }
+  filter.value.sourceId = validSourceId
   loadLogFilesForSource()
 }
 
 const handleLogFileChange = () => {
-  if (filter.value.sourceId) {
-    localStorage.setItem(`logFiles_${filter.value.sourceId}`, JSON.stringify(filter.value.logFiles))
+  const validSourceId = normalizeUuid(filter.value.sourceId)
+  if (validSourceId) {
+    localStorage.setItem(`logFiles_${validSourceId}`, JSON.stringify(filter.value.logFiles))
     filter.value.page = 1
     esFilter.value.page = 0
     loadEsLogs()
@@ -784,21 +842,25 @@ const handleReset = () => {
 
 // 时间范围变化时自动搜索
 const handleDateRangeChange = () => {
-  if (filter.value.sourceId) {
+  if (normalizeUuid(filter.value.sourceId)) {
+    // 手动时间筛选时，不再使用路由高亮时间覆盖查询区间
+    clearHighlight()
+    filter.value.page = 1
+    esFilter.value.page = 0
     loadEsLogs()
   }
 }
 
 // 关键字输入时自动搜索
 const handleKeywordInput = () => {
-  if (filter.value.sourceId) {
+  if (normalizeUuid(filter.value.sourceId)) {
     loadEsLogs()
   }
 }
 
 // 日志级别变化时自动搜索
 const handleLogLevelsChange = () => {
-  if (filter.value.sourceId) {
+  if (normalizeUuid(filter.value.sourceId)) {
     loadEsLogs()
   }
 }
@@ -927,7 +989,7 @@ const getLogLevelClass = (level) => {
 
 const startRefresh = () => {
   stopRefresh()
-  if (filter.value.refreshInterval > 0 && filter.value.sourceId) {
+  if (filter.value.refreshInterval > 0 && normalizeUuid(filter.value.sourceId)) {
     refreshTimer = setInterval(() => {
       loadEsLogs()
     }, filter.value.refreshInterval)
@@ -1042,16 +1104,19 @@ const openTraceTimelineFromDetail = () => {
 }
 
 watch(() => filter.value.refreshInterval, () => {
-  if (filter.value.sourceId) {
+  if (normalizeUuid(filter.value.sourceId)) {
     startRefresh()
   }
 })
 
 watch(() => filter.value.sourceId, (newVal, oldVal) => {
-  if (newVal && newVal !== oldVal) {
+  const validNewSourceId = normalizeUuid(newVal)
+  if (validNewSourceId && newVal !== oldVal) {
     loadEsLogs()
     startRefresh()
-  } else if (!newVal) {
+  } else if (!validNewSourceId) {
+    esQuerySeq++
+    logFileQuerySeq++
     stopRefresh()
     logs.value = []
     total.value = 0
@@ -1085,8 +1150,9 @@ onMounted(() => {
   }
 
   // 设置日志源ID
-  if (route.query.sourceId) {
-    filter.value.sourceId = route.query.sourceId
+  const routeSourceId = normalizeUuid(route.query.sourceId)
+  if (routeSourceId) {
+    filter.value.sourceId = routeSourceId
 
     // 优先使用ID精确定位
     if (route.query.highlightId) {

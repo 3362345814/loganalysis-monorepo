@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -418,14 +419,66 @@ public class LogElasticsearchService {
     /**
      * 获取链路追踪耗时分布（P50/P95/P99）
      */
-    public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days) {
+    public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days, String interval) {
+        boolean halfHourInterval = "HALF_HOUR".equalsIgnoreCase(interval) || "30M".equalsIgnoreCase(interval);
+
+        if (halfHourInterval) {
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).withSecond(0).withNano(0);
+            int minute = now.getMinute();
+            LocalDateTime endBucket = now.withMinute(minute < 30 ? 0 : 30);
+            LocalDateTime startBucket = endBucket.minusMinutes(47L * 30);
+            LocalDateTime startTime = startBucket;
+            LocalDateTime endTime = LocalDateTime.now(ZoneOffset.UTC);
+
+            Map<LocalDateTime, Quantiles> quantilesByBucket = new HashMap<>();
+            Map<LocalDateTime, Long> sampleCountByBucket = new HashMap<>();
+            try {
+                List<Object[]> rows = projectId == null
+                        ? rawLogEventRepository.findTraceDurationPercentilesByHalfHour(startTime, endTime, TRACE_MAX_DURATION_SEC)
+                        : rawLogEventRepository.findTraceDurationPercentilesByHalfHourAndProject(startTime, endTime, projectId, TRACE_MAX_DURATION_SEC);
+                for (Object[] row : rows) {
+                    LocalDateTime bucket = toLocalDateTime(row[0]);
+                    if (bucket == null) {
+                        continue;
+                    }
+                    Quantiles q = new Quantiles(toDouble(row[1]), toDouble(row[2]), toDouble(row[3]));
+                    quantilesByBucket.put(bucket, q);
+                    sampleCountByBucket.put(bucket, toLong(row.length > 4 ? row[4] : null));
+                }
+            } catch (Exception e) {
+                log.error("Failed to load half-hour trace distribution", e);
+            }
+
+            List<String> labels = new java.util.ArrayList<>(48);
+            List<Double> p50 = new java.util.ArrayList<>(48);
+            List<Double> p95 = new java.util.ArrayList<>(48);
+            List<Double> p99 = new java.util.ArrayList<>(48);
+            List<Long> sampleCount = new java.util.ArrayList<>(48);
+
+            for (int i = 0; i < 48; i++) {
+                LocalDateTime bucket = startBucket.plusMinutes(i * 30L);
+                labels.add(bucket.toString());
+                Quantiles q = quantilesByBucket.get(bucket);
+                p50.add(q == null ? null : q.p50());
+                p95.add(q == null ? null : q.p95());
+                p99.add(q == null ? null : q.p99());
+                sampleCount.add(sampleCountByBucket.getOrDefault(bucket, 0L));
+            }
+
+            return TraceDistributionResponse.builder()
+                    .labels(labels)
+                    .p50(p50)
+                    .p95(p95)
+                    .p99(p99)
+                    .sampleCount(sampleCount)
+                    .build();
+        }
+
         int safeDays = days == null ? 30 : Math.max(1, Math.min(days, 60));
-        LocalDate endDate = LocalDate.now();
+        LocalDate endDate = LocalDate.now(ZoneOffset.UTC);
         LocalDate startDate = endDate.minusDays(safeDays - 1L);
         LocalDateTime startTime = startDate.atStartOfDay();
-        LocalDateTime endTime = LocalDateTime.now();
-        log.info("trace-distribution query start, projectId={}, days={}, startTime={}, endTime={}",
-                projectId, safeDays, startTime, endTime);
+        LocalDateTime endTime = LocalDateTime.now(ZoneOffset.UTC);
 
         Map<LocalDate, Quantiles> quantilesByDay = new HashMap<>();
         Map<LocalDate, Long> sampleCountByDay = new HashMap<>();
@@ -433,24 +486,17 @@ public class LogElasticsearchService {
             List<Object[]> rows = projectId == null
                     ? rawLogEventRepository.findTraceDurationPercentilesByDay(startTime, endTime, TRACE_MAX_DURATION_SEC)
                     : rawLogEventRepository.findTraceDurationPercentilesByDayAndProject(startTime, endTime, projectId, TRACE_MAX_DURATION_SEC);
-            log.info("trace-distribution raw rows size={}", rows.size());
             for (Object[] row : rows) {
                 LocalDate day = toLocalDate(row[0]);
                 if (day == null) {
                     continue;
                 }
-                Quantiles q = new Quantiles(
-                        toDouble(row[1]),
-                        toDouble(row[2]),
-                        toDouble(row[3])
-                );
+                Quantiles q = new Quantiles(toDouble(row[1]), toDouble(row[2]), toDouble(row[3]));
                 quantilesByDay.put(day, q);
                 sampleCountByDay.put(day, toLong(row.length > 4 ? row[4] : null));
-                log.info("trace-distribution raw day={}, p50={}, p95={}, p99={}",
-                        day, q.p50(), q.p95(), q.p99());
             }
         } catch (Exception e) {
-            log.error("Failed to load trace distribution", e);
+            log.error("Failed to load day trace distribution", e);
         }
 
         List<String> labels = new java.util.ArrayList<>(safeDays);
@@ -462,24 +508,11 @@ public class LogElasticsearchService {
         for (int i = 0; i < safeDays; i++) {
             LocalDate day = startDate.plusDays(i);
             labels.add(day.toString());
-
             Quantiles q = quantilesByDay.get(day);
             p50.add(q == null ? null : q.p50());
             p95.add(q == null ? null : q.p95());
             p99.add(q == null ? null : q.p99());
             sampleCount.add(sampleCountByDay.getOrDefault(day, 0L));
-        }
-
-        long nonNullDays = p50.stream().filter(java.util.Objects::nonNull).count();
-        int todayIndex = labels.size() - 1;
-        Double todayP50 = todayIndex >= 0 ? p50.get(todayIndex) : null;
-        Double todayP95 = todayIndex >= 0 ? p95.get(todayIndex) : null;
-        Double todayP99 = todayIndex >= 0 ? p99.get(todayIndex) : null;
-        log.info("trace-distribution result summary: nonNullDays={}, todayLabel={}, todayP50={}, todayP95={}, todayP99={}",
-                nonNullDays, todayIndex >= 0 ? labels.get(todayIndex) : null, todayP50, todayP95, todayP99);
-        if (nonNullDays == 0) {
-            log.warn("trace-distribution result all-null for projectId={}, startTime={}, endTime={}",
-                    projectId, startTime, endTime);
         }
 
         return TraceDistributionResponse.builder()
@@ -506,6 +539,26 @@ public class LogElasticsearchService {
         }
         try {
             return LocalDate.parse(String.valueOf(value));
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private static LocalDateTime toLocalDateTime(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime.withSecond(0).withNano(0);
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime().withSecond(0).withNano(0);
+        }
+        if (value instanceof LocalDate localDate) {
+            return localDate.atStartOfDay();
+        }
+        try {
+            return LocalDateTime.parse(String.valueOf(value)).withSecond(0).withNano(0);
         } catch (Exception ignore) {
             return null;
         }

@@ -51,14 +51,20 @@
           >
             <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
           </el-select>
+          <el-select
+            v-model="selectedTrendRange"
+            @change="handleTrendRangeChange"
+          >
+            <el-option v-for="item in trendRangeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
         </div>
       </header>
 
       <div class="panel-grid panel-grid-4">
         <article class="chart-panel">
           <div class="chart-panel-top">
-            <h3>日志吞吐与估算带宽</h3>
-            <span class="level-hint">近24小时，30分钟粒度</span>
+            <h3>平均日志吞吐与带宽</h3>
+            <span class="level-hint">按所选范围展示（24小时为30分钟粒度）</span>
           </div>
           <div class="chart-container" v-loading="trafficLoading">
             <v-chart :option="trafficOption" autoresize />
@@ -68,7 +74,7 @@
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>异常率趋势</h3>
-            <span class="level-hint">WARN/ERROR/FATAL 占比</span>
+            <span class="level-hint">WARN/ERROR/FATAL 占比（24小时为30分钟粒度）</span>
           </div>
           <div class="chart-container" v-loading="anomalyLoading">
             <v-chart :option="anomalyOption" autoresize />
@@ -88,7 +94,13 @@
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>链路追踪分布</h3>
-            <span class="level-hint">近30天按日分位（P50 / P95 / P99）</span>
+            <span class="level-hint">按所选范围分位（24小时为30分钟粒度）</span>
+          </div>
+          <div class="trace-intro-list">
+            <span class="trace-intro-item"><strong>P50</strong>：50% 链路耗时不超过该值（中位数）</span>
+            <span class="trace-intro-item"><strong>P95</strong>：95% 链路耗时不超过该值</span>
+            <span class="trace-intro-item"><strong>P99</strong>：99% 链路耗时不超过该值</span>
+            <span class="trace-intro-item"><strong>样本数</strong>：当天参与统计的 trace 条数</span>
           </div>
           <div class="chart-container" v-loading="traceLoading">
             <v-chart :option="traceDistributionOption" autoresize />
@@ -107,6 +119,8 @@ import { useHomeDashboard } from '@/composables/useHomeDashboard'
 const {
   stats,
   selectedProjectId,
+  selectedTrendRange,
+  trendRangeOptions,
   projects,
   logIngestionTrendLoading,
   logIngestionTrendOption,
@@ -118,6 +132,7 @@ const {
   sourceHealthOption,
   traceLoading,
   traceDistributionOption,
+  handleTrendRangeChange,
   handleProjectChange
 } = useHomeDashboard()
 

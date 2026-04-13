@@ -7,10 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -113,29 +110,19 @@ public class NginxJsonLogParser implements ParseStrategy {
         String timeStr = value.toString().trim();
         if (timeStr.isEmpty()) return null;
 
-        // 尝试多种格式
         DateTimeFormatter[] formatters = {
-                // Nginx 标准格式: 13/Mar/2026:14:59:16 +0000
                 DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss X").withLocale(java.util.Locale.US),
-                // 另一种: 13/Mar/2026:14:59:16 +00:00
                 DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss XXX").withLocale(java.util.Locale.US),
-                // ISO 格式
                 DateTimeFormatter.ISO_OFFSET_DATE_TIME,
-                // 简单格式
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME,
                 DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         };
 
-        for (DateTimeFormatter formatter : formatters) {
-            try {
-                ZonedDateTime zdt = ZonedDateTime.parse(timeStr, formatter);
-                return zdt.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-            } catch (DateTimeParseException e) {
-                // 尝试下一个
-            }
+        LocalDateTime parsed = UtcTimestampParser.parseUtc(timeStr, formatters);
+        if (parsed == null) {
+            log.debug("Failed to parse time field '{}': {}", timeField, timeStr);
         }
-
-        log.debug("Failed to parse time field '{}': {}", timeField, timeStr);
-        return null;
+        return parsed;
     }
 
     private Object convertValue(Object value) {

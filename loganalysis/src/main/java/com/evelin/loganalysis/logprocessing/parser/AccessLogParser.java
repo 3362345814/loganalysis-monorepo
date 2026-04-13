@@ -3,6 +3,8 @@ package com.evelin.loganalysis.logprocessing.parser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,6 +44,8 @@ public class AccessLogParser implements ParseStrategy {
 
     private Pattern pattern;
     private List<String> fieldNames;
+    private static final DateTimeFormatter TIME_LOCAL_FORMATTER =
+            DateTimeFormatter.ofPattern("dd/MMM/yyyy:HH:mm:ss Z").withLocale(Locale.US);
 
     /**
      * 配置 log_format
@@ -182,11 +186,26 @@ public class AccessLogParser implements ParseStrategy {
             }
         }
 
+        LocalDateTime timestamp = extractTimestamp(fields);
+
         return ParseResult.builder()
                 .success(true)
                 .logType("nginx_access")
+                .timestamp(timestamp)
                 .fields(fields)
                 .build();
+    }
+
+    private LocalDateTime extractTimestamp(Map<String, Object> fields) {
+        Object timeLocal = fields.get("time_local");
+        if (timeLocal != null) {
+            return UtcTimestampParser.parseUtc(String.valueOf(timeLocal), TIME_LOCAL_FORMATTER);
+        }
+        Object timestamp = fields.get("timestamp");
+        if (timestamp != null) {
+            return UtcTimestampParser.parseUtc(String.valueOf(timestamp), DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        }
+        return UtcTimestampParser.nowUtc();
     }
 
     private void parseRequestField(Map<String, Object> fields, String request) {

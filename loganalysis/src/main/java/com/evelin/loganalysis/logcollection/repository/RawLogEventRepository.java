@@ -267,18 +267,19 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
     @Query(value = """
             WITH trace_durations AS (
                 SELECT
-                    CAST(date_trunc('day', MIN(COALESCE(r.original_log_time, r.collection_time))) AS date) AS day_date,
+                    CAST(date_trunc('day', MIN(r.original_log_time)) AS date) AS day_date,
                     EXTRACT(EPOCH FROM (
-                        MAX(COALESCE(r.original_log_time, r.collection_time))
-                        - MIN(COALESCE(r.original_log_time, r.collection_time))
+                        MAX(r.original_log_time)
+                        - MIN(r.original_log_time)
                     )) AS duration_sec,
                     COUNT(*) AS log_count
                 FROM raw_log_events r
                 LEFT JOIN log_sources s ON s.id = r.source_id
                 WHERE r.trace_id IS NOT NULL
                   AND r.trace_id <> ''
-                  AND COALESCE(r.original_log_time, r.collection_time) >= :startTime
-                  AND COALESCE(r.original_log_time, r.collection_time) <= :endTime
+                  AND r.original_log_time IS NOT NULL
+                  AND r.original_log_time >= :startTime
+                  AND r.original_log_time <= :endTime
                   AND s.project_id = :projectId
                 GROUP BY r.trace_id
                 HAVING COUNT(*) >= 2
@@ -290,7 +291,7 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
                 percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
                 COUNT(*) AS sample_count
             FROM trace_durations
-            WHERE duration_sec >= 0 AND duration_sec <= :maxDurationSec
+            WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
             GROUP BY day_date
             ORDER BY day_date
             """, nativeQuery = true)
@@ -304,17 +305,18 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
     @Query(value = """
             WITH trace_durations AS (
                 SELECT
-                    CAST(date_trunc('day', MIN(COALESCE(r.original_log_time, r.collection_time))) AS date) AS day_date,
+                    CAST(date_trunc('day', MIN(r.original_log_time)) AS date) AS day_date,
                     EXTRACT(EPOCH FROM (
-                        MAX(COALESCE(r.original_log_time, r.collection_time))
-                        - MIN(COALESCE(r.original_log_time, r.collection_time))
+                        MAX(r.original_log_time)
+                        - MIN(r.original_log_time)
                     )) AS duration_sec,
                     COUNT(*) AS log_count
                 FROM raw_log_events r
                 WHERE r.trace_id IS NOT NULL
                   AND r.trace_id <> ''
-                  AND COALESCE(r.original_log_time, r.collection_time) >= :startTime
-                  AND COALESCE(r.original_log_time, r.collection_time) <= :endTime
+                  AND r.original_log_time IS NOT NULL
+                  AND r.original_log_time >= :startTime
+                  AND r.original_log_time <= :endTime
                 GROUP BY r.trace_id
                 HAVING COUNT(*) >= 2
             )
@@ -325,11 +327,84 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
                 percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
                 COUNT(*) AS sample_count
             FROM trace_durations
-            WHERE duration_sec >= 0 AND duration_sec <= :maxDurationSec
+            WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
             GROUP BY day_date
             ORDER BY day_date
             """, nativeQuery = true)
     List<Object[]> findTraceDurationPercentilesByDay(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("maxDurationSec") Double maxDurationSec
+    );
+
+    @Query(value = """
+            WITH trace_durations AS (
+                SELECT
+                    date_trunc('hour', MIN(r.original_log_time))
+                    + (FLOOR(EXTRACT(MINUTE FROM MIN(r.original_log_time)) / 30) * INTERVAL '30 minutes') AS bucket_time,
+                    EXTRACT(EPOCH FROM (
+                        MAX(r.original_log_time)
+                        - MIN(r.original_log_time)
+                    )) AS duration_sec
+                FROM raw_log_events r
+                LEFT JOIN log_sources s ON s.id = r.source_id
+                WHERE r.trace_id IS NOT NULL
+                  AND r.trace_id <> ''
+                  AND r.original_log_time IS NOT NULL
+                  AND r.original_log_time >= :startTime
+                  AND r.original_log_time <= :endTime
+                  AND s.project_id = :projectId
+                GROUP BY r.trace_id
+                HAVING COUNT(*) >= 2
+            )
+            SELECT
+                bucket_time,
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
+                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                COUNT(*) AS sample_count
+            FROM trace_durations
+            WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
+            GROUP BY bucket_time
+            ORDER BY bucket_time
+            """, nativeQuery = true)
+    List<Object[]> findTraceDurationPercentilesByHalfHourAndProject(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("projectId") UUID projectId,
+            @Param("maxDurationSec") Double maxDurationSec
+    );
+
+    @Query(value = """
+            WITH trace_durations AS (
+                SELECT
+                    date_trunc('hour', MIN(r.original_log_time))
+                    + (FLOOR(EXTRACT(MINUTE FROM MIN(r.original_log_time)) / 30) * INTERVAL '30 minutes') AS bucket_time,
+                    EXTRACT(EPOCH FROM (
+                        MAX(r.original_log_time)
+                        - MIN(r.original_log_time)
+                    )) AS duration_sec
+                FROM raw_log_events r
+                WHERE r.trace_id IS NOT NULL
+                  AND r.trace_id <> ''
+                  AND r.original_log_time IS NOT NULL
+                  AND r.original_log_time >= :startTime
+                  AND r.original_log_time <= :endTime
+                GROUP BY r.trace_id
+                HAVING COUNT(*) >= 2
+            )
+            SELECT
+                bucket_time,
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
+                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                COUNT(*) AS sample_count
+            FROM trace_durations
+            WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
+            GROUP BY bucket_time
+            ORDER BY bucket_time
+            """, nativeQuery = true)
+    List<Object[]> findTraceDurationPercentilesByHalfHour(
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime,
             @Param("maxDurationSec") Double maxDurationSec

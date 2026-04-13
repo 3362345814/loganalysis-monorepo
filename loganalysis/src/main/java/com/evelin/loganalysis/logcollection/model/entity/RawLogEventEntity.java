@@ -14,7 +14,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.OffsetDateTime;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Map;
 
 /**
@@ -194,10 +197,7 @@ public class RawLogEventEntity extends BaseEntity {
         if (parsedFields != null) {
             Object time = parsedFields.get("logTime");
             if (time instanceof String) {
-                try {
-                    logTime = LocalDateTime.parse((String) time);
-                } catch (Exception e) {
-                }
+                logTime = parseAsUtcLocalDateTime((String) time);
             } else if (time instanceof LocalDateTime) {
                 logTime = (LocalDateTime) time;
             }
@@ -234,5 +234,25 @@ public class RawLogEventEntity extends BaseEntity {
                 .aggregationGroupId(dto.getAggregationGroupId())
                 .traceId(traceId)
                 .build();
+    }
+
+    private static LocalDateTime parseAsUtcLocalDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        try {
+            return OffsetDateTime.parse(trimmed).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (Exception ignored) {
+        }
+        try {
+            return ZonedDateTime.parse(trimmed).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDateTime.parse(trimmed);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

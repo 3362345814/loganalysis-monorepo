@@ -1,11 +1,11 @@
 package com.evelin.loganalysis.logprocessing.parser.token;
 
 import com.evelin.loganalysis.logprocessing.parser.ParseResult;
+import com.evelin.loganalysis.logprocessing.parser.UtcTimestampParser;
 import com.evelin.loganalysis.logprocessing.parser.context.ParseContext;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 
 /**
  * 日期 Token
@@ -86,36 +86,17 @@ public class DateToken extends Token {
      */
     private LocalDateTime parseTimestamp(String value) {
         if (value == null || value.isEmpty()) {
-            return LocalDateTime.now();
+            return UtcTimestampParser.nowUtc();
         }
 
         String trimmed = value.trim();
-
-        // 先尝试使用配置的格式
-        try {
-            return LocalDateTime.parse(trimmed, formatter);
-        } catch (DateTimeParseException e) {
-            // 忽略，尝试其他格式
-        }
-
-        // 尝试常见格式（处理 , 和 . 的毫秒分隔符差异）
         String normalized = trimmed.replace(',', '.');
-
-        String[] formats = {
-                "yyyy-MM-dd HH:mm:ss.SSS",
-                "yyyy-MM-dd HH:mm:ss.SSSSS",
-                "yyyy-MM-dd HH:mm:ss"
-        };
-
-        for (String fmt : formats) {
-            try {
-                DateTimeFormatter fmtFormatter = DateTimeFormatter.ofPattern(fmt);
-                return LocalDateTime.parse(trimmed, fmtFormatter);
-            } catch (DateTimeParseException e) {
-                // 尝试下一个格式
-            }
-        }
-
-        return LocalDateTime.now();
+        return UtcTimestampParser.parseUtc(normalized,
+                formatter,
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSS"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }
 }

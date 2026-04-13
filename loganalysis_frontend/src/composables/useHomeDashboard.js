@@ -21,6 +21,32 @@ const createMiniAreaGradient = () => {
 
 const toIsoSecondString = (target) => dayjs(target).format('YYYY-MM-DDTHH:mm:ss')
 const toBucketKey = (value) => dayjs(value).format('YYYY-MM-DD HH:mm')
+const parseEsUtcKeyToLocal = (value) => {
+  if (!value || typeof value !== 'string') {
+    return dayjs.invalid()
+  }
+
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+  const withSecond = normalized.length === 16 ? `${normalized}:00` : normalized
+  const asUtc = new Date(`${withSecond}Z`)
+
+  if (!Number.isNaN(asUtc.getTime())) {
+    return dayjs(asUtc)
+  }
+  return dayjs(normalized)
+}
+
+const parseUtcDateTimeStringToLocal = (value) => {
+  if (!value || typeof value !== 'string') {
+    return dayjs.invalid()
+  }
+  const withSecond = value.length === 16 ? `${value}:00` : value
+  const asUtc = new Date(`${withSecond}Z`)
+  if (!Number.isNaN(asUtc.getTime())) {
+    return dayjs(asUtc)
+  }
+  return dayjs(value)
+}
 
 const estimateByteSize = (text) => {
   if (!text) {
@@ -48,6 +74,18 @@ const getLast24HoursWindow = () => {
   }
 }
 
+const getLast30DaysWindow = () => {
+  const endDay = dayjs().startOf('day')
+  const startDay = endDay.subtract(29, 'day')
+
+  return {
+    start: startDay,
+    end: dayjs().endOf('minute'),
+    labels: Array.from({ length: 30 }, (_, index) => startDay.add(index, 'day').format('MM-DD')),
+    keys: Array.from({ length: 30 }, (_, index) => startDay.add(index, 'day').format('YYYY-MM-DD'))
+  }
+}
+
 const getMiniWindow = () => {
   const nowHour = dayjs().startOf('hour')
   const start = nowHour.subtract(23, 'hour')
@@ -66,10 +104,23 @@ const aggregateMinuteBucketsToHalfHour = (buckets) => {
   buckets
     .filter((item) => typeof item?.key === 'string')
     .forEach((item) => {
-      const time = dayjs(String(item.key).replace(' ', 'T')).startOf('minute')
+      const time = parseEsUtcKeyToLocal(String(item.key)).startOf('minute')
       const rounded = time.minute(Math.floor(time.minute() / 30) * 30).second(0).millisecond(0)
       const key = toBucketKey(rounded)
       map.set(key, (map.get(key) ?? 0) + Number(item.docCount ?? 0))
+    })
+
+  return map
+}
+
+const aggregateBucketsToDay = (buckets) => {
+  const map = new Map()
+
+  buckets
+    .filter((item) => typeof item?.key === 'string')
+    .forEach((item) => {
+      const dayKey = parseEsUtcKeyToLocal(String(item.key)).format('YYYY-MM-DD')
+      map.set(dayKey, (map.get(dayKey) ?? 0) + Number(item.docCount ?? 0))
     })
 
   return map
@@ -81,7 +132,7 @@ const toBucketMap = (buckets) => {
   buckets
     .filter((item) => typeof item?.key === 'string')
     .forEach((item) => {
-      map.set(toBucketKey(dayjs(String(item.key).replace(' ', 'T'))), Number(item.docCount ?? 0))
+      map.set(toBucketKey(parseEsUtcKeyToLocal(String(item.key))), Number(item.docCount ?? 0))
     })
 
   return map
@@ -96,6 +147,26 @@ const avg = (numbers) => {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const TRACE_DISTRIBUTION_DAYS = 30
+const RANGE_24H = '24h'
+const RANGE_30D = '30d'
+const toNullableNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const formatLatency = (value, unit) => {
+  if (value === null || value === undefined) {
+    return '-'
+  }
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '-'
+  }
+  return `${numeric.toFixed(unit === 'ms' ? 2 : 3)} ${unit}`
+}
 
 export const useHomeDashboard = () => {
   const stats = reactive({
@@ -106,8 +177,13 @@ export const useHomeDashboard = () => {
   })
 
   const selectedProjectId = shallowRef('')
+  const selectedTrendRange = shallowRef(RANGE_24H)
   const projects = shallowRef([])
   const sourceList = shallowRef([])
+  const trendRangeOptions = Object.freeze([
+    { label: '24小时', value: RANGE_24H },
+    { label: '30天', value: RANGE_30D }
+  ])
 
   const logIngestionTrendLoading = shallowRef(false)
   const miniTrend = shallowRef(
@@ -138,6 +214,32 @@ export const useHomeDashboard = () => {
   const traceP99 = shallowRef([])
   const traceSampleCount = shallowRef([])
 
+  const traceDisplayUnit = computed(() => {
+    const values = [...traceP50.value, ...traceP95.value, ...traceP99.value]
+      .map((item) => toNullableNumber(item))
+      .filter((item) => item !== null && item > 0)
+
+    if (!values.length) {
+      return 's'
+    }
+
+    return Math.max(...values) < 1 ? 'ms' : 's'
+  })
+
+  const traceUnitFactor = computed(() => traceDisplayUnit.value === 'ms' ? 1000 : 1)
+  const traceP50Display = computed(() => traceP50.value.map((item) => {
+    const numeric = toNullableNumber(item)
+    return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+  const traceP95Display = computed(() => traceP95.value.map((item) => {
+    const numeric = toNullableNumber(item)
+    return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+  const traceP99Display = computed(() => traceP99.value.map((item) => {
+    const numeric = toNullableNumber(item)
+    return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+
   const collectingStatuses = Object.freeze(new Set(['RUNNING', 'COLLECTING']))
 
   const isCollectingSource = (source) => {
@@ -152,6 +254,14 @@ export const useHomeDashboard = () => {
 
     return sourceList.value.filter((item) => item.projectId === selectedProjectId.value)
   })
+
+  const operationalWindow = computed(() => (
+    selectedTrendRange.value === RANGE_30D ? getLast30DaysWindow() : getLast24HoursWindow()
+  ))
+
+  const operationalInterval = computed(() => (
+    selectedTrendRange.value === RANGE_30D ? 'day' : 'minute'
+  ))
 
   const logIngestionTrendOption = computed(() => ({
     grid: { left: 6, right: 6, top: 8, bottom: 6 },
@@ -216,13 +326,13 @@ export const useHomeDashboard = () => {
       },
       {
         type: 'value',
-        name: 'MB/30m',
+        name: selectedTrendRange.value === RANGE_30D ? 'MB/天' : 'MB/30m',
         splitLine: { show: false }
       }
     ],
     series: [
       {
-        name: '日志吞吐',
+        name: '平均日志吞吐',
         type: 'line',
         smooth: true,
         yAxisIndex: 0,
@@ -232,7 +342,7 @@ export const useHomeDashboard = () => {
         data: trafficLogs.value
       },
       {
-        name: '估算带宽',
+        name: '平均估算带宽',
         type: 'bar',
         yAxisIndex: 1,
         barWidth: '46%',
@@ -337,7 +447,26 @@ export const useHomeDashboard = () => {
   }))
 
   const traceDistributionOption = computed(() => ({
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const lines = []
+        const axisLabel = params?.[0]?.axisValueLabel ?? ''
+        if (axisLabel) {
+          lines.push(axisLabel)
+        }
+
+        params?.forEach((item) => {
+          if (item.seriesName === '样本数') {
+            const count = item.data === null || item.data === undefined ? '-' : Number(item.data).toLocaleString('zh-CN')
+            lines.push(`${item.marker}${item.seriesName}: ${count}`)
+            return
+          }
+          lines.push(`${item.marker}${item.seriesName}: ${formatLatency(item.data, traceDisplayUnit.value)}`)
+        })
+        return lines.join('<br/>')
+      }
+    },
     legend: { top: 0, textStyle: { color: '#5d6d89' } },
     grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {
@@ -347,12 +476,20 @@ export const useHomeDashboard = () => {
       axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
       data: traceLabels.value
     },
-    yAxis: {
-      type: 'value',
-      name: '秒',
-      min: 0,
-      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
-    },
+    yAxis: [
+      {
+        type: 'value',
+        name: traceDisplayUnit.value === 'ms' ? '毫秒' : '秒',
+        min: 0,
+        splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+      },
+      {
+        type: 'value',
+        name: '样本数',
+        min: 0,
+        splitLine: { show: false }
+      }
+    ],
     series: [
       {
         name: 'P50',
@@ -362,7 +499,7 @@ export const useHomeDashboard = () => {
         connectNulls: true,
         lineStyle: { width: 2.2, color: '#3f6fb0' },
         itemStyle: { color: '#3f6fb0' },
-        data: traceP50.value
+        data: traceP50Display.value
       },
       {
         name: 'P95',
@@ -372,7 +509,7 @@ export const useHomeDashboard = () => {
         connectNulls: true,
         lineStyle: { width: 2.2, color: '#c96442' },
         itemStyle: { color: '#c96442' },
-        data: traceP95.value
+        data: traceP95Display.value
       },
       {
         name: 'P99',
@@ -382,7 +519,15 @@ export const useHomeDashboard = () => {
         connectNulls: true,
         lineStyle: { width: 2.2, color: '#b87a2e' },
         itemStyle: { color: '#b87a2e' },
-        data: traceP99.value
+        data: traceP99Display.value
+      },
+      {
+        name: '样本数',
+        type: 'bar',
+        yAxisIndex: 1,
+        barMaxWidth: 14,
+        itemStyle: { color: 'rgba(93, 109, 137, 0.35)', borderRadius: [3, 3, 0, 0] },
+        data: traceSampleCount.value
       }
     ]
   }))
@@ -392,7 +537,7 @@ export const useHomeDashboard = () => {
       sourceId,
       startTime: toIsoSecondString(start),
       endTime: toIsoSecondString(end),
-      timeInterval: 'minute',
+      timeInterval: operationalInterval.value,
       page: 0,
       size: 30,
       highlight: false,
@@ -400,10 +545,21 @@ export const useHomeDashboard = () => {
       sortOrder: 'desc'
     }
 
-    const [totalRes, abnormalRes] = await Promise.all([
+    const countBaseParams = {
+      sourceId,
+      startTime: toIsoSecondString(start),
+      endTime: toIsoSecondString(end)
+    }
+
+    const [totalRes, abnormalRes, totalCountRes, abnormalCountRes] = await Promise.all([
       esLogApi.search(baseParams),
       esLogApi.search({
         ...baseParams,
+        logLevels: ABNORMAL_LEVELS
+      }),
+      esLogApi.count(countBaseParams),
+      esLogApi.count({
+        ...countBaseParams,
         logLevels: ABNORMAL_LEVELS
       })
     ])
@@ -420,13 +576,17 @@ export const useHomeDashboard = () => {
       ? Math.max(120, avg(hits.map((item) => estimateByteSize(item?.rawContent ?? item?.desensitizedContent ?? ''))) ?? 220)
       : 220
 
-    const latestTime = hits[0]?.originalLogTime ?? hits[0]?.collectionTime ?? null
+    const latestTime = hits[0]?.originalLogTime ?? null
 
     return {
-      totalMap: aggregateMinuteBucketsToHalfHour(totalBuckets),
-      abnormalMap: aggregateMinuteBucketsToHalfHour(abnormalBuckets),
-      total: Number(totalRes.data?.total ?? 0),
-      abnormalTotal: Number(abnormalRes.data?.total ?? 0),
+      totalMap: selectedTrendRange.value === RANGE_30D
+        ? aggregateBucketsToDay(totalBuckets)
+        : aggregateMinuteBucketsToHalfHour(totalBuckets),
+      abnormalMap: selectedTrendRange.value === RANGE_30D
+        ? aggregateBucketsToDay(abnormalBuckets)
+        : aggregateMinuteBucketsToHalfHour(abnormalBuckets),
+      total: Number(totalCountRes.data?.count ?? 0),
+      abnormalTotal: Number(abnormalCountRes.data?.count ?? 0),
       avgBytes,
       latestTime
     }
@@ -515,7 +675,7 @@ export const useHomeDashboard = () => {
 
     try {
       const sources = filteredSources.value
-      const window = getLast24HoursWindow()
+      const window = operationalWindow.value
       trafficLabels.value = window.labels
       anomalyLabels.value = window.labels
 
@@ -540,16 +700,19 @@ export const useHomeDashboard = () => {
         })
       )
 
-      trafficLogs.value = window.keys.map((key) =>
+      const sourceCount = sourceMetrics.length || 1
+      const totalLogsByBucket = window.keys.map((key) =>
         sourceMetrics.reduce((sum, source) => sum + (source.totalMap.get(key) ?? 0), 0)
       )
+
+      trafficLogs.value = totalLogsByBucket.map((count) => Number((count / sourceCount).toFixed(2)))
 
       trafficBandwidth.value = window.keys.map((key) => {
         const totalBytes = sourceMetrics.reduce((sum, source) => {
           const count = source.totalMap.get(key) ?? 0
           return sum + count * source.avgBytes
         }, 0)
-        return Number((totalBytes / (1024 * 1024)).toFixed(3))
+        return Number(((totalBytes / (1024 * 1024)) / sourceCount).toFixed(3))
       })
 
       anomalyCounts.value = window.keys.map((key) =>
@@ -557,7 +720,7 @@ export const useHomeDashboard = () => {
       )
 
       anomalyRates.value = window.keys.map((key, index) => {
-        const total = trafficLogs.value[index] ?? 0
+        const total = totalLogsByBucket[index] ?? 0
         const abnormal = anomalyCounts.value[index] ?? 0
         return total > 0 ? Number(((abnormal / total) * 100).toFixed(2)) : 0
       })
@@ -567,7 +730,7 @@ export const useHomeDashboard = () => {
         .map((source) => {
           const abnormalRate = source.total > 0 ? source.abnormalTotal / source.total : 1
           const freshnessMins = source.latestTime
-            ? Math.max(0, now.diff(dayjs(source.latestTime), 'minute'))
+            ? Math.max(0, now.diff(parseUtcDateTimeStringToLocal(source.latestTime), 'minute'))
             : 24 * 60
           const freshnessPenalty = Math.min(30, freshnessMins / 60)
           const volumeBonus = Math.min(10, Math.log10(source.total + 1) * 3)
@@ -601,20 +764,48 @@ export const useHomeDashboard = () => {
     traceLoading.value = true
 
     try {
-      const params = { days: TRACE_DISTRIBUTION_DAYS }
+      const window = operationalWindow.value
+      const params = {
+        days: selectedTrendRange.value === RANGE_30D ? TRACE_DISTRIBUTION_DAYS : 1,
+        interval: selectedTrendRange.value === RANGE_30D ? 'DAY' : 'HALF_HOUR'
+      }
       if (selectedProjectId.value) {
         params.projectId = selectedProjectId.value
       }
 
       const res = await esLogApi.getTraceDistribution(params)
       const payload = res.data ?? {}
+      const rawLabels = Array.isArray(payload.labels) ? payload.labels : []
+      const rawP50 = Array.isArray(payload.p50) ? payload.p50 : []
+      const rawP95 = Array.isArray(payload.p95) ? payload.p95 : []
+      const rawP99 = Array.isArray(payload.p99) ? payload.p99 : []
+      const rawSample = Array.isArray(payload.sampleCount) ? payload.sampleCount : []
 
-      const labels = Array.isArray(payload.labels) ? payload.labels : []
-      traceLabels.value = labels.map((item) => dayjs(item).isValid() ? dayjs(item).format('MM-DD') : String(item))
-      traceP50.value = Array.isArray(payload.p50) ? payload.p50 : []
-      traceP95.value = Array.isArray(payload.p95) ? payload.p95 : []
-      traceP99.value = Array.isArray(payload.p99) ? payload.p99 : []
-      traceSampleCount.value = Array.isArray(payload.sampleCount) ? payload.sampleCount : []
+      // 横轴标签与吞吐/异常图统一：24h 使用 HH:mm，30d 使用 MM-DD
+      traceLabels.value = window.labels
+
+      const p50Map = new Map()
+      const p95Map = new Map()
+      const p99Map = new Map()
+      const sampleMap = new Map()
+
+      rawLabels.forEach((label, idx) => {
+        const local = parseEsUtcKeyToLocal(String(label))
+        if (!local.isValid()) return
+        const key = selectedTrendRange.value === RANGE_30D
+          ? local.format('YYYY-MM-DD')
+          : toBucketKey(local.startOf('minute'))
+
+        p50Map.set(key, toNullableNumber(rawP50[idx]))
+        p95Map.set(key, toNullableNumber(rawP95[idx]))
+        p99Map.set(key, toNullableNumber(rawP99[idx]))
+        sampleMap.set(key, Number(rawSample[idx] ?? 0))
+      })
+
+      traceP50.value = window.keys.map((k) => p50Map.has(k) ? p50Map.get(k) : null)
+      traceP95.value = window.keys.map((k) => p95Map.has(k) ? p95Map.get(k) : null)
+      traceP99.value = window.keys.map((k) => p99Map.has(k) ? p99Map.get(k) : null)
+      traceSampleCount.value = window.keys.map((k) => sampleMap.get(k) ?? 0)
     } catch (error) {
       console.error('加载链路追踪分布失败:', error)
       traceLabels.value = []
@@ -646,6 +837,10 @@ export const useHomeDashboard = () => {
     void refreshDashboard()
   }
 
+  const handleTrendRangeChange = () => {
+    void Promise.all([loadLogOperationalCharts(), loadTraceDistribution()])
+  }
+
   onMounted(async () => {
     await Promise.all([loadProjects(), refreshDashboard()])
   })
@@ -653,6 +848,8 @@ export const useHomeDashboard = () => {
   return {
     stats,
     selectedProjectId,
+    selectedTrendRange,
+    trendRangeOptions,
     projects,
     logIngestionTrendLoading,
     logIngestionTrendOption,
@@ -664,6 +861,7 @@ export const useHomeDashboard = () => {
     sourceHealthOption,
     traceLoading,
     traceDistributionOption,
+    handleTrendRangeChange,
     handleProjectChange
   }
 }

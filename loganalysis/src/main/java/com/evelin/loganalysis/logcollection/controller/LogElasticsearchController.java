@@ -11,7 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.OffsetDateTime;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +42,8 @@ public class LogElasticsearchController {
             @RequestParam(required = false) String regex,
             @RequestParam(required = false) UUID sourceId,
             @RequestParam(required = false) List<String> logLevels,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
             @RequestParam(required = false) String filePath,
             @RequestParam(required = false) String traceId,
             @RequestParam(required = false) String aggregationGroupId,
@@ -52,13 +55,23 @@ public class LogElasticsearchController {
             @RequestParam(required = false, defaultValue = "originalLogTime") String sortField,
             @RequestParam(required = false, defaultValue = "desc") String sortOrder
     ) {
+        LocalDateTime normalizedStartTime = parseQueryDateTime(startTime);
+        LocalDateTime normalizedEndTime = parseQueryDateTime(endTime);
+        if (normalizedStartTime != null && normalizedEndTime != null && normalizedStartTime.isAfter(normalizedEndTime)) {
+            LocalDateTime tmp = normalizedStartTime;
+            normalizedStartTime = normalizedEndTime;
+            normalizedEndTime = tmp;
+        }
+        log.info("ES search time-range rawStart={}, rawEnd={}, normalizedStart={}, normalizedEnd={}, sourceId={}",
+                startTime, endTime, normalizedStartTime, normalizedEndTime, sourceId);
+
         EsLogQueryRequest request = EsLogQueryRequest.builder()
                 .keyword(keyword)
                 .regex(regex)
                 .sourceId(sourceId)
                 .logLevels(logLevels)
-                .startTime(startTime)
-                .endTime(endTime)
+                .startTime(normalizedStartTime)
+                .endTime(normalizedEndTime)
                 .filePath(filePath)
                 .traceId(traceId)
                 .aggregationGroupId(aggregationGroupId)
@@ -151,19 +164,29 @@ public class LogElasticsearchController {
             @RequestParam(required = false) String regex,
             @RequestParam(required = false) UUID sourceId,
             @RequestParam(required = false) List<String> logLevels,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime,
             @RequestParam(required = false) String filePath,
             @RequestParam(required = false) String traceId,
             @RequestParam(required = false) String aggregationGroupId
     ) {
+        LocalDateTime normalizedStartTime = parseQueryDateTime(startTime);
+        LocalDateTime normalizedEndTime = parseQueryDateTime(endTime);
+        if (normalizedStartTime != null && normalizedEndTime != null && normalizedStartTime.isAfter(normalizedEndTime)) {
+            LocalDateTime tmp = normalizedStartTime;
+            normalizedStartTime = normalizedEndTime;
+            normalizedEndTime = tmp;
+        }
+        log.info("ES count time-range rawStart={}, rawEnd={}, normalizedStart={}, normalizedEnd={}, sourceId={}",
+                startTime, endTime, normalizedStartTime, normalizedEndTime, sourceId);
+
         EsLogQueryRequest request = EsLogQueryRequest.builder()
                 .keyword(keyword)
                 .regex(regex)
                 .sourceId(sourceId)
                 .logLevels(logLevels)
-                .startTime(startTime)
-                .endTime(endTime)
+                .startTime(normalizedStartTime)
+                .endTime(normalizedEndTime)
                 .filePath(filePath)
                 .traceId(traceId)
                 .aggregationGroupId(aggregationGroupId)
@@ -181,8 +204,30 @@ public class LogElasticsearchController {
     @GetMapping("/trace-distribution")
     public Result<TraceDistributionResponse> getTraceDistribution(
             @RequestParam(required = false) UUID projectId,
-            @RequestParam(required = false, defaultValue = "30") Integer days
+            @RequestParam(required = false, defaultValue = "30") Integer days,
+            @RequestParam(required = false, defaultValue = "DAY") String interval
     ) {
-        return Result.success(esService.getTraceDistribution(projectId, days));
+        return Result.success(esService.getTraceDistribution(projectId, days, interval));
+    }
+
+    private LocalDateTime parseQueryDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim().replace(' ', 'T');
+        try {
+            return OffsetDateTime.parse(normalized).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (Exception ignored) {
+        }
+        try {
+            return ZonedDateTime.parse(normalized).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDateTime.parse(normalized);
+        } catch (Exception ignored) {
+            log.warn("Failed to parse query datetime: {}", value);
+            return null;
+        }
     }
 }

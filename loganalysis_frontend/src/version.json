@@ -1,12 +1,16 @@
 {
-  "version": "v0.2.7",
-  "releaseDate": "2026-04-12",
+  "version": "v0.3.0",
+  "releaseDate": "2026-04-13",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041204",
+    "buildNumber": "2026041301",
     "environment": "production"
   }, 
   "updateInfo": [
-    "优化了CI流程"
+    "优化了首页图表",
+    "修复了日志采集时检查点保存失败的bug",
+    "优化了一些界面",
+    "修复了时间不统一的bug",
+    "修复了日志查询的大量bug"
   ]
 }

@@ -285,38 +285,18 @@ public class NginxLogParser implements ParseStrategy {
 
     private LocalDateTime parseTimestamp(String timeStr) {
         if (timeStr == null || timeStr.isEmpty()) {
-            return LocalDateTime.now();
+            return UtcTimestampParser.nowUtc();
         }
 
-        try {
-            return LocalDateTime.parse(timeStr, NGINX_FORMATTER);
-        } catch (Exception e) {
-        }
-
-        try {
-            return LocalDateTime.parse(timeStr, NGINX_ISO_FORMATTER);
-        } catch (Exception e) {
-        }
-
-        try {
-            return LocalDateTime.parse(timeStr, NGINX_DATELESS_FORMATTER);
-        } catch (Exception e) {
-        }
-
-        return LocalDateTime.now();
+        return UtcTimestampParser.parseUtc(timeStr, NGINX_FORMATTER, NGINX_ISO_FORMATTER, NGINX_DATELESS_FORMATTER);
     }
 
     private LocalDateTime parseErrorTimestamp(String timeStr) {
         if (timeStr == null || timeStr.isEmpty()) {
-            return LocalDateTime.now();
+            return UtcTimestampParser.nowUtc();
         }
 
-        try {
-            return LocalDateTime.parse(timeStr, NGINX_ERROR_DATE_FORMATTER);
-        } catch (Exception e) {
-        }
-
-        return LocalDateTime.now();
+        return UtcTimestampParser.parseUtc(timeStr, NGINX_ERROR_DATE_FORMATTER);
     }
 
     private Double parseUpstreamTime(String timeStr) {
@@ -373,7 +353,7 @@ public class NginxLogParser implements ParseStrategy {
 
         return ParseResult.builder()
                 .success(true)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcTimestampParser.nowUtc())
                 .level("INFO")
                 .message(content)
                 .fields(fields)

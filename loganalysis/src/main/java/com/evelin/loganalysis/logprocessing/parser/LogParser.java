@@ -208,7 +208,7 @@ public class LogParser {
                 .id(IdGenerator.nextId())
                 .sourceId(rawLogEvent.getSourceId() != null ? rawLogEvent.getSourceId().toString() : null)
                 .sourceName(rawLogEvent.getSourceName())
-                .logTime(parseResult.getTimestamp() != null ? parseResult.getTimestamp() : LocalDateTime.now())
+                .logTime(parseResult.getTimestamp() != null ? parseResult.getTimestamp() : UtcTimestampParser.nowUtc())
                 .logLevel(parseResult.getLevel() != null ? parseResult.getLevel() : "INFO")
                 .loggerName(parseResult.getLogger())
                 .threadName(parseResult.getThread())
