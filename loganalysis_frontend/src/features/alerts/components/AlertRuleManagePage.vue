@@ -23,9 +23,9 @@
               :closable="false"
               class="channel-warning-alert"
             >
-              请先在"系统配置"中配置通知渠道
+              当前未配置通知渠道，规则仍可创建，但触发时不会发送通知
             </el-alert>
-            <el-button type="primary" @click="handleCreate" :disabled="enabledChannels.length === 0">
+            <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>创建规则
             </el-button>
           </div>
@@ -56,7 +56,7 @@
         <el-table-column prop="notificationChannels" label="通知渠道" width="150">
           <template #default="{ row }">
             <el-tag
-              v-for="channel in row.notificationChannels"
+              v-for="channel in (row.notificationChannels || [])"
               :key="channel"
               type="info"
               size="small"
@@ -124,13 +124,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="触发条件" prop="conditionExpression">
-          <el-input v-model="form.conditionExpression" placeholder="请输入触发条件">
-            <template #append>
-              <el-tooltip content="关键词: 直接输入关键词&#13;正则: 使用正则表达式&#13;级别: ERROR, WARN&#13;阈值: ERROR > 100">
-                <el-icon><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </template>
-          </el-input>
+          <el-input v-model="form.conditionExpression" placeholder="请输入触发条件" />
           <div class="form-tip" v-if="form.ruleType === 'KEYWORD'">例如: NullPointerException, Connection refused</div>
           <div class="form-tip" v-if="form.ruleType === 'REGEX'">例如: (Exception|Error).*</div>
           <div class="form-tip" v-if="form.ruleType === 'LEVEL'">例如: ERROR, WARN, ERROR,WARN</div>
@@ -159,12 +153,10 @@
             <el-checkbox label="FEISHU" :disabled="!enabledChannels.includes('FEISHU')">飞书</el-checkbox>
             <el-checkbox label="WEBHOOK" :disabled="!enabledChannels.includes('WEBHOOK')">Webhook</el-checkbox>
           </el-checkbox-group>
-          <div class="form-tip" v-if="enabledChannels.length === 0">
-            请先在"系统配置"中配置并启用通知渠道
-          </div>
+          <div class="form-tip">可不选择通知渠道，仅创建规则用于统计与触发记录</div>
         </el-form-item>
         <el-form-item label="冷却时间" prop="cooldownMinutes">
-          <el-input-number v-model="form.cooldownMinutes" :min="1" :max="1440" />
+          <el-input-number v-model="form.cooldownMinutes" :min="1" :max="1440" :controls="false" />
           <span class="form-unit">分钟</span>
         </el-form-item>
         <el-form-item label="是否启用">
@@ -182,7 +174,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, QuestionFilled } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { alertRuleApi, notificationChannelApi } from '@/api/alertApi'
 import { projectApi } from '@/api'
 
@@ -240,22 +232,11 @@ const form = reactive({
 
 // 表单验证
 const rules = {
+  projectId: [{ required: true, message: '请选择所属项目', trigger: 'change' }],
   name: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
   ruleType: [{ required: true, message: '请选择规则类型', trigger: 'change' }],
   conditionExpression: [{ required: true, message: '请输入触发条件', trigger: 'blur' }],
-  alertLevel: [{ required: true, message: '请选择告警级别', trigger: 'change' }],
-  notificationChannels: [
-    { 
-      validator: (rule, value, callback) => {
-        if (enabledChannels.value.length > 0 && (!value || value.length === 0)) {
-          callback(new Error('请至少选择一个通知渠道'))
-        } else {
-          callback()
-        }
-      }, 
-      trigger: 'change' 
-    }
-  ]
+  alertLevel: [{ required: true, message: '请选择告警级别', trigger: 'change' }]
 }
 
 // 获取规则列表

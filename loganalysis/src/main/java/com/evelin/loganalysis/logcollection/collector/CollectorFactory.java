@@ -6,12 +6,14 @@ import com.evelin.loganalysis.logcollection.config.CollectionConfig;
 import com.evelin.loganalysis.logcollection.enums.LogSourceType;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.service.CheckpointManager;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,6 +33,7 @@ public class CollectorFactory {
     private final RabbitTemplate rabbitTemplate;
 
     private final Map<String, LogCollector> collectorCache = new ConcurrentHashMap<>();
+    private final Map<String, ReentrantLock> collectorLocks = new ConcurrentHashMap<>();
 
     /**
      * 采集器创建器函数式接口
@@ -83,18 +86,42 @@ public class CollectorFactory {
     public LogCollector create(LogSource logSource) {
         String sourceId = logSource.getId().toString();
 
-        if (collectorCache.containsKey(sourceId)) {
-            log.warn("Collector already exists for source: {}", sourceId);
-            return collectorCache.get(sourceId);
+        LogCollector cached = collectorCache.get(sourceId);
+        if (cached != null) {
+            return cached;
         }
 
-        LogCollector collector = createCollector(logSource);
-        collectorCache.put(sourceId, collector);
+        LogCollector created = createCollector(logSource);
+        LogCollector raced = collectorCache.putIfAbsent(sourceId, created);
+        if (raced != null) {
+            log.warn("Collector create raced, reuse existing collector: sourceId={}", sourceId);
+            return raced;
+        }
 
         log.info("Created {} collector: sourceId={}, name={}, path={}",
                 logSource.getSourceType(), sourceId, logSource.getName(), logSource.getPath());
+        return created;
+    }
 
-        return collector;
+    /**
+     * 按 sourceId 串行化启动，避免重复启动/恢复并发导致竞态。
+     */
+    public LogCollector createAndStart(LogSource logSource) {
+        String sourceId = logSource.getId().toString();
+        ReentrantLock lock = collectorLocks.computeIfAbsent(sourceId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            LogCollector collector = create(logSource);
+            if (!collector.isRunning()) {
+                collector.start();
+            }
+            return collector;
+        } finally {
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                collectorLocks.remove(sourceId, lock);
+            }
+        }
     }
 
     /**
@@ -150,16 +177,25 @@ public class CollectorFactory {
      * @return 被移除的采集器，如果不存在返回 null
      */
     public LogCollector remove(String sourceId) {
-        LogCollector collector = collectorCache.remove(sourceId);
+        ReentrantLock lock = collectorLocks.computeIfAbsent(sourceId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            LogCollector collector = collectorCache.remove(sourceId);
 
-        if (collector != null) {
-            if (collector.isRunning()) {
-                collector.stop();
+            if (collector != null) {
+                if (collector.isRunning()) {
+                    collector.stop();
+                }
+                log.info("Removed collector: sourceId={}, type={}", sourceId, collector.getClass().getSimpleName());
             }
-            log.info("Removed collector: sourceId={}, type={}", sourceId, collector.getClass().getSimpleName());
-        }
 
-        return collector;
+            return collector;
+        } finally {
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                collectorLocks.remove(sourceId, lock);
+            }
+        }
     }
 
     /**
@@ -190,6 +226,11 @@ public class CollectorFactory {
 
         collectorCache.clear();
         log.info("All collectors shut down");
+    }
+
+    @PreDestroy
+    public void onShutdown() {
+        shutdownAll();
     }
 
     /**

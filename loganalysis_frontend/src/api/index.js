@@ -298,4 +298,8 @@ export const esLogApi = {
 
   // ES 健康检查
   health: () => service.get('/collection/logs/es/health')
+  ,
+
+  // 链路追踪耗时分布（P50/P95/P99）
+  getTraceDistribution: (params) => service.get('/collection/logs/es/trace-distribution', { params })
 }

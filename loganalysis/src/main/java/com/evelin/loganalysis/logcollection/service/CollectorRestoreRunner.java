@@ -55,15 +55,8 @@ public class CollectorRestoreRunner implements ApplicationRunner {
                     continue;
                 }
 
-                // 检查是否已存在运行中的采集器
-                if (collectorFactory.get(source) != null && collectorFactory.get(source).isRunning()) {
-                    log.info("Collector already running: {} - {}", source.getId(), source.getName());
-                    continue;
-                }
-
-                // 创建并启动采集器
-                LogCollector collector = collectorFactory.create(source);
-                collector.start();
+                // 创建并启动采集器（工厂内部按 sourceId 串行化）
+                LogCollector collector = collectorFactory.createAndStart(source);
 
                 log.info("Successfully restored collector: {} - {}", source.getId(), source.getName());
 

@@ -3,66 +3,11 @@ import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { esLogApi, logSourceApi, projectApi, rawLogApi } from '@/api'
 import { alertStatisticsApi } from '@/api/alertApi'
 
-const levelColorMap = Object.freeze({
-  CRITICAL: '#b53333',
-  HIGH: '#c96442',
-  MEDIUM: '#b87a2e',
-  LOW: '#1f8a65',
-  INFO: '#9fbbe0'
-})
+const SOURCE_COLORS = Object.freeze(['#1f8a65', '#c96442', '#3f6fb0', '#b87a2e', '#6f58a8', '#2f7d96'])
+const MAX_HEALTH_SOURCES = 8
+const ABNORMAL_LEVELS = Object.freeze(['WARN', 'WARNING', 'ERROR', 'FATAL'])
 
-const levelLabelMap = Object.freeze({
-  CRITICAL: '严重',
-  HIGH: '高',
-  MEDIUM: '中',
-  LOW: '低',
-  INFO: '信息'
-})
-
-const logLevelColorMap = Object.freeze({
-  FATAL: '#8f2d56',
-  ERROR: '#b53333',
-  WARN: '#c96442',
-  WARNING: '#c96442',
-  INFO: '#1f8a65',
-  DEBUG: '#3f6fb0',
-  TRACE: '#7a879d'
-})
-
-const logLevelLabelMap = Object.freeze({
-  FATAL: '致命',
-  ERROR: '错误',
-  WARN: '警告',
-  WARNING: '警告',
-  INFO: '信息',
-  DEBUG: '调试',
-  TRACE: '追踪'
-})
-
-const sourceLinePalette = Object.freeze([
-  '#1f8a65',
-  '#c96442',
-  '#3f6fb0',
-  '#b87a2e',
-  '#6f58a8',
-  '#2f7d96'
-])
-
-const MAX_LOG_SOURCE_SERIES = 6
-
-const createAreaGradient = () => {
-  const graphic = globalThis.echarts?.graphic
-  if (!graphic?.LinearGradient) {
-    return 'rgba(201, 100, 66, 0.16)'
-  }
-
-  return new graphic.LinearGradient(0, 0, 0, 1, [
-    { offset: 0, color: 'rgba(201, 100, 66, 0.32)' },
-    { offset: 1, color: 'rgba(201, 100, 66, 0.04)' }
-  ])
-}
-
-const createLogTrendGradient = () => {
+const createMiniAreaGradient = () => {
   const graphic = globalThis.echarts?.graphic
   if (!graphic?.LinearGradient) {
     return 'rgba(31, 138, 101, 0.14)'
@@ -74,69 +19,83 @@ const createLogTrendGradient = () => {
   ])
 }
 
-const EMPTY_LOG_TREND = Object.freeze(
-  Array.from({ length: 24 }, (_, index) => ({
-    label: `${String(index).padStart(2, '0')}:00`,
-    count: 0
-  }))
-)
-
 const toIsoSecondString = (target) => dayjs(target).format('YYYY-MM-DDTHH:mm:ss')
-const normalizeLogLevel = (value) => String(value ?? '').trim().toUpperCase()
-
 const toBucketKey = (value) => dayjs(value).format('YYYY-MM-DD HH:mm')
 
-const getRecent24hWindow = () => {
-  const nowHour = dayjs().startOf('hour')
-  return {
-    start: nowHour.subtract(23, 'hour'),
-    end: nowHour.endOf('hour')
+const estimateByteSize = (text) => {
+  if (!text) {
+    return 0
+  }
+
+  try {
+    return new TextEncoder().encode(text).length
+  } catch {
+    return String(text).length
   }
 }
 
-const getHalfHourWindow = (rangeHours) => {
-  const nowMinute = dayjs().startOf('minute')
-  const alignedEnd = nowMinute.minute(Math.floor(nowMinute.minute() / 30) * 30).second(0).millisecond(0)
-  const nodeCount = rangeHours * 2
-  const start = alignedEnd.subtract((nodeCount - 1) * 30, 'minute')
+const getLast24HoursWindow = () => {
+  const now = dayjs().startOf('minute')
+  const alignedEnd = now.minute(Math.floor(now.minute() / 30) * 30).second(0).millisecond(0)
+  const points = 48
+  const start = alignedEnd.subtract((points - 1) * 30, 'minute')
 
   return {
     start,
-    end: alignedEnd.endOf('minute'),
-    labels: Array.from({ length: nodeCount }, (_, index) => start.add(index * 30, 'minute').format('HH:mm')),
-    keys: Array.from({ length: nodeCount }, (_, index) => toBucketKey(start.add(index * 30, 'minute')))
+    end: now.endOf('minute'),
+    labels: Array.from({ length: points }, (_, index) => start.add(index * 30, 'minute').format('HH:mm')),
+    keys: Array.from({ length: points }, (_, index) => toBucketKey(start.add(index * 30, 'minute')))
   }
 }
 
-const aggregateMinuteHistogramToHalfHour = (buckets) => {
-  const result = new Map()
+const getMiniWindow = () => {
+  const nowHour = dayjs().startOf('hour')
+  const start = nowHour.subtract(23, 'hour')
+
+  return {
+    start,
+    end: nowHour.endOf('hour'),
+    labels: Array.from({ length: 24 }, (_, index) => start.add(index, 'hour').format('HH:mm')),
+    keys: Array.from({ length: 24 }, (_, index) => toBucketKey(start.add(index, 'hour')))
+  }
+}
+
+const aggregateMinuteBucketsToHalfHour = (buckets) => {
+  const map = new Map()
 
   buckets
     .filter((item) => typeof item?.key === 'string')
     .forEach((item) => {
       const time = dayjs(String(item.key).replace(' ', 'T')).startOf('minute')
-      const flooredMinute = Math.floor(time.minute() / 30) * 30
-      const normalized = time.minute(flooredMinute).second(0).millisecond(0)
-      const key = toBucketKey(normalized)
-      result.set(key, (result.get(key) ?? 0) + Number(item.docCount ?? 0))
+      const rounded = time.minute(Math.floor(time.minute() / 30) * 30).second(0).millisecond(0)
+      const key = toBucketKey(rounded)
+      map.set(key, (map.get(key) ?? 0) + Number(item.docCount ?? 0))
     })
 
-  return result
+  return map
 }
 
-const extractLevelBuckets = (response) => {
-  const buckets = Array.isArray(response?.data?.aggregations?.field_agg)
-    ? response.data.aggregations.field_agg
-    : []
+const toBucketMap = (buckets) => {
+  const map = new Map()
 
-  return buckets
+  buckets
     .filter((item) => typeof item?.key === 'string')
-    .map((item) => ({
-      level: normalizeLogLevel(item.key),
-      count: Number(item.docCount ?? 0)
-    }))
-    .filter((item) => item.level && item.count > 0)
+    .forEach((item) => {
+      map.set(toBucketKey(dayjs(String(item.key).replace(' ', 'T'))), Number(item.docCount ?? 0))
+    })
+
+  return map
 }
+
+const avg = (numbers) => {
+  if (!numbers.length) {
+    return null
+  }
+  return numbers.reduce((sum, item) => sum + item, 0) / numbers.length
+}
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+const TRACE_DISTRIBUTION_DAYS = 30
 
 export const useHomeDashboard = () => {
   const stats = reactive({
@@ -150,155 +109,58 @@ export const useHomeDashboard = () => {
   const projects = shallowRef([])
   const sourceList = shallowRef([])
 
-  const overviewMode = shallowRef('alert')
-
-  const trendDays = shallowRef('7')
-  const trendLoading = shallowRef(false)
-  const levelLoading = shallowRef(false)
-  const trendData = shallowRef([])
-  const levelData = shallowRef([])
-
   const logIngestionTrendLoading = shallowRef(false)
-  const logIngestionHourlyTrend = shallowRef([...EMPTY_LOG_TREND])
+  const miniTrend = shallowRef(
+    Array.from({ length: 24 }, (_, index) => ({
+      label: `${String(index).padStart(2, '0')}:00`,
+      count: 0
+    }))
+  )
 
-  const logTrendRange = shallowRef('24')
-  const logOverviewTrendLoading = shallowRef(false)
-  const logOverviewLevelLoading = shallowRef(false)
-  const logOverviewTimeLabels = shallowRef([])
-  const logOverviewTrendSeries = shallowRef([])
-  const logOverviewLevelData = shallowRef([])
+  const trafficLoading = shallowRef(false)
+  const anomalyLoading = shallowRef(false)
+  const healthLoading = shallowRef(false)
+  const traceLoading = shallowRef(false)
 
-  const logLevelSourceId = shallowRef('')
+  const trafficLabels = shallowRef([])
+  const trafficLogs = shallowRef([])
+  const trafficBandwidth = shallowRef([])
 
-  const logOverviewSourceMeta = reactive({
-    total: 0,
-    shown: 0
-  })
+  const anomalyLabels = shallowRef([])
+  const anomalyCounts = shallowRef([])
+  const anomalyRates = shallowRef([])
 
-  const getProjectParams = () => (selectedProjectId.value ? { projectId: selectedProjectId.value } : {})
+  const healthRows = shallowRef([])
+
+  const traceLabels = shallowRef([])
+  const traceP50 = shallowRef([])
+  const traceP95 = shallowRef([])
+  const traceP99 = shallowRef([])
+  const traceSampleCount = shallowRef([])
+
   const collectingStatuses = Object.freeze(new Set(['RUNNING', 'COLLECTING']))
 
   const isCollectingSource = (source) => {
-    const normalizedStatus = String(source?.status ?? '').trim().toUpperCase()
-    return source?.running === true || collectingStatuses.has(normalizedStatus)
+    const status = String(source?.status ?? '').trim().toUpperCase()
+    return source?.running === true || collectingStatuses.has(status)
   }
 
   const filteredSources = computed(() => {
     if (!selectedProjectId.value) {
       return sourceList.value
     }
+
     return sourceList.value.filter((item) => item.projectId === selectedProjectId.value)
   })
 
-  const logLevelSourceOptions = computed(() => [
-    { id: '', name: '全部日志源' },
-    ...filteredSources.value.map((item) => ({ id: item.id, name: item.name }))
-  ])
-
-  const trendOption = computed(() => ({
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'line' }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '13%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.26)' } },
-      data: trendData.value.map(({ date }) => date)
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.12)' } }
-    },
-    series: [
-      {
-        name: '告警数量',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 7,
-        areaStyle: {
-          color: createAreaGradient()
-        },
-        lineStyle: { color: '#c96442', width: 2.5 },
-        itemStyle: { color: '#c96442' },
-        data: trendData.value.map(({ count }) => count)
-      }
-    ]
-  }))
-
-  const alertLevelHint = computed(() => {
-    if (!levelData.value.length) {
-      return '暂无级别分布数据'
-    }
-
-    const sortedData = [...levelData.value].sort((first, second) => (second.count ?? 0) - (first.count ?? 0))
-    const topLevel = sortedData[0]
-    const levelName = levelLabelMap[topLevel.level] ?? topLevel.level
-
-    return `${levelName}级告警占比最高`
-  })
-
-  const levelOption = computed(() => ({
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      right: '3%',
-      top: 'center',
-      textStyle: { color: '#5d6d89' }
-    },
-    series: [
-      {
-        name: '告警级别',
-        type: 'pie',
-        radius: ['42%', '70%'],
-        center: ['34%', '50%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 6,
-          borderColor: '#ffffff',
-          borderWidth: 2
-        },
-        label: { show: false },
-        emphasis: {
-          label: { show: true, fontSize: 14, fontWeight: 'bold' }
-        },
-        data: levelData.value.map(({ count, level }) => ({
-          value: count,
-          name: level,
-          itemStyle: { color: levelColorMap[level] ?? '#7a879d' }
-        }))
-      }
-    ]
-  }))
-
   const logIngestionTrendOption = computed(() => ({
-    grid: {
-      left: 6,
-      right: 6,
-      top: 8,
-      bottom: 6
-    },
+    grid: { left: 6, right: 6, top: 8, bottom: 6 },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'line' },
       formatter: (params) => {
         const point = params?.[0]
-        if (!point) {
-          return ''
-        }
+        if (!point) return ''
         return `${point.axisValue}<br/>入库: ${Number(point.data ?? 0).toLocaleString('zh-CN')}`
       }
     },
@@ -309,7 +171,7 @@ export const useHomeDashboard = () => {
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: { show: true, lineStyle: { color: 'rgba(54, 80, 120, 0.05)' } },
-      data: logIngestionHourlyTrend.value.map(({ label }) => label)
+      data: miniTrend.value.map((item) => item.label)
     },
     yAxis: {
       type: 'value',
@@ -324,390 +186,464 @@ export const useHomeDashboard = () => {
         name: '每小时入库',
         type: 'line',
         smooth: 0.25,
-        symbol: 'circle',
         showSymbol: false,
         symbolSize: 4,
         lineStyle: { color: '#1f8a65', width: 2.2 },
         itemStyle: { color: '#1f8a65' },
-        areaStyle: { color: createLogTrendGradient() },
-        data: logIngestionHourlyTrend.value.map(({ count }) => count)
+        areaStyle: { color: createMiniAreaGradient() },
+        data: miniTrend.value.map((item) => item.count)
       }
     ]
   }))
 
-  const logOverviewTrendHint = computed(() => {
-    const rangeHours = Number(logTrendRange.value) || 24
-
-    if (logOverviewSourceMeta.total === 0) {
-      return `近${rangeHours}小时暂无可展示日志源`
-    }
-
-    if (logOverviewSourceMeta.total > logOverviewSourceMeta.shown) {
-      return `展示 ${logOverviewSourceMeta.shown}/${logOverviewSourceMeta.total} 个日志源`
-    }
-
-    return `${logOverviewSourceMeta.total} 个日志源`
-  })
-
-  const logOverviewTrendOption = computed(() => ({
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'line' }
-    },
-    legend: {
-      type: 'scroll',
-      top: 0,
-      textStyle: { color: '#5d6d89' }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '18%',
-      containLabel: true
-    },
+  const trafficOption = computed(() => ({
+    tooltip: { trigger: 'axis' },
+    legend: { top: 0, textStyle: { color: '#5d6d89' } },
+    grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.26)' } },
-      axisLabel: {
-        color: '#5d6d89',
-        interval: 'auto'
+      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
+      data: trafficLabels.value
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '条数',
+        minInterval: 1,
+        splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
       },
-      data: logOverviewTimeLabels.value
-    },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.12)' } }
-    },
-    series: logOverviewTrendSeries.value.map((item, index) => ({
-      name: item.name,
-      type: 'line',
-      smooth: 0.28,
-      showSymbol: false,
-      symbol: 'circle',
-      symbolSize: 5,
-      lineStyle: { width: 2.2, color: item.color ?? sourceLinePalette[index % sourceLinePalette.length] },
-      itemStyle: { color: item.color ?? sourceLinePalette[index % sourceLinePalette.length] },
-      data: item.data
-    }))
-  }))
-
-  const logOverviewLevelHint = computed(() => {
-    if (!logOverviewLevelData.value.length) {
-      return '暂无日志级别数据'
-    }
-
-    const topLevel = [...logOverviewLevelData.value].sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0]
-    const levelName = logLevelLabelMap[topLevel.name] ?? topLevel.name
-    return `${levelName}级日志占比最高`
-  })
-
-  const logOverviewLevelOption = computed(() => ({
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      right: '3%',
-      top: 'center',
-      textStyle: { color: '#5d6d89' }
-    },
+      {
+        type: 'value',
+        name: 'MB/30m',
+        splitLine: { show: false }
+      }
+    ],
     series: [
       {
-        name: '日志级别',
-        type: 'pie',
-        radius: ['42%', '70%'],
-        center: ['34%', '50%'],
-        minAngle: 2,
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 6,
-          borderColor: '#ffffff',
-          borderWidth: 2
-        },
-        label: { show: false },
-        emphasis: {
-          label: { show: true, fontSize: 14, fontWeight: 'bold' }
-        },
-        data: logOverviewLevelData.value
+        name: '日志吞吐',
+        type: 'line',
+        smooth: true,
+        yAxisIndex: 0,
+        showSymbol: false,
+        lineStyle: { width: 2.4, color: '#1f8a65' },
+        itemStyle: { color: '#1f8a65' },
+        data: trafficLogs.value
+      },
+      {
+        name: '估算带宽',
+        type: 'bar',
+        yAxisIndex: 1,
+        barWidth: '46%',
+        itemStyle: { color: 'rgba(63, 111, 176, 0.62)', borderRadius: [4, 4, 0, 0] },
+        data: trafficBandwidth.value
       }
     ]
   }))
 
+  const anomalyOption = computed(() => ({
+    tooltip: { trigger: 'axis' },
+    legend: { top: 0, textStyle: { color: '#5d6d89' } },
+    grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
+      data: anomalyLabels.value
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '异常条数',
+        minInterval: 1,
+        splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+      },
+      {
+        type: 'value',
+        name: '异常率(%)',
+        min: 0,
+        max: 100,
+        splitLine: { show: false }
+      }
+    ],
+    series: [
+      {
+        name: '异常条数',
+        type: 'bar',
+        yAxisIndex: 0,
+        barWidth: '42%',
+        itemStyle: { color: 'rgba(181, 51, 51, 0.58)', borderRadius: [4, 4, 0, 0] },
+        data: anomalyCounts.value
+      },
+      {
+        name: '异常率',
+        type: 'line',
+        smooth: true,
+        yAxisIndex: 1,
+        showSymbol: false,
+        lineStyle: { width: 2.4, color: '#c96442' },
+        itemStyle: { color: '#c96442' },
+        data: anomalyRates.value
+      }
+    ]
+  }))
+
+  const sourceHealthOption = computed(() => ({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const point = params?.[0]
+        if (!point) return ''
+        const row = healthRows.value[point.dataIndex]
+        if (!row) return ''
+        return [
+          `<strong>${row.name}</strong>`,
+          `健康分: ${row.score.toFixed(1)}`,
+          `24h日志: ${row.total.toLocaleString('zh-CN')}`,
+          `异常率: ${(row.abnormalRate * 100).toFixed(2)}%`,
+          `最近日志: ${row.freshnessMins} 分钟前`
+        ].join('<br/>')
+      }
+    },
+    grid: { left: '4%', right: '4%', top: '10%', bottom: '5%', containLabel: true },
+    xAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    yAxis: {
+      type: 'category',
+      inverse: true,
+      axisTick: { show: false },
+      data: healthRows.value.map((item) => item.name)
+    },
+    series: [
+      {
+        type: 'bar',
+        barWidth: 14,
+        data: healthRows.value.map((item) => ({
+          value: Number(item.score.toFixed(1)),
+          itemStyle: {
+            color: item.score >= 80 ? '#1f8a65' : item.score >= 60 ? '#b87a2e' : '#b53333',
+            borderRadius: [0, 6, 6, 0]
+          }
+        }))
+      }
+    ]
+  }))
+
+  const traceDistributionOption = computed(() => ({
+    tooltip: { trigger: 'axis' },
+    legend: { top: 0, textStyle: { color: '#5d6d89' } },
+    grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
+      data: traceLabels.value
+    },
+    yAxis: {
+      type: 'value',
+      name: '秒',
+      min: 0,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    series: [
+      {
+        name: 'P50',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        connectNulls: true,
+        lineStyle: { width: 2.2, color: '#3f6fb0' },
+        itemStyle: { color: '#3f6fb0' },
+        data: traceP50.value
+      },
+      {
+        name: 'P95',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        connectNulls: true,
+        lineStyle: { width: 2.2, color: '#c96442' },
+        itemStyle: { color: '#c96442' },
+        data: traceP95.value
+      },
+      {
+        name: 'P99',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        connectNulls: true,
+        lineStyle: { width: 2.2, color: '#b87a2e' },
+        itemStyle: { color: '#b87a2e' },
+        data: traceP99.value
+      }
+    ]
+  }))
+
+  const fetchSourceOperationalMetrics = async (sourceId, start, end) => {
+    const baseParams = {
+      sourceId,
+      startTime: toIsoSecondString(start),
+      endTime: toIsoSecondString(end),
+      timeInterval: 'minute',
+      page: 0,
+      size: 30,
+      highlight: false,
+      sortField: 'originalLogTime',
+      sortOrder: 'desc'
+    }
+
+    const [totalRes, abnormalRes] = await Promise.all([
+      esLogApi.search(baseParams),
+      esLogApi.search({
+        ...baseParams,
+        logLevels: ABNORMAL_LEVELS
+      })
+    ])
+
+    const totalBuckets = Array.isArray(totalRes.data?.aggregations?.time_histogram)
+      ? totalRes.data.aggregations.time_histogram
+      : []
+    const abnormalBuckets = Array.isArray(abnormalRes.data?.aggregations?.time_histogram)
+      ? abnormalRes.data.aggregations.time_histogram
+      : []
+
+    const hits = Array.isArray(totalRes.data?.hits) ? totalRes.data.hits : []
+    const avgBytes = hits.length
+      ? Math.max(120, avg(hits.map((item) => estimateByteSize(item?.rawContent ?? item?.desensitizedContent ?? ''))) ?? 220)
+      : 220
+
+    const latestTime = hits[0]?.originalLogTime ?? hits[0]?.collectionTime ?? null
+
+    return {
+      totalMap: aggregateMinuteBucketsToHalfHour(totalBuckets),
+      abnormalMap: aggregateMinuteBucketsToHalfHour(abnormalBuckets),
+      total: Number(totalRes.data?.total ?? 0),
+      abnormalTotal: Number(abnormalRes.data?.total ?? 0),
+      avgBytes,
+      latestTime
+    }
+  }
+
   const loadStats = async () => {
     try {
-      const [sourcesRes, logsRes, alertRes] = await Promise.all([
+      const [sourcesRes, alertRes] = await Promise.all([
         logSourceApi.getAll(),
-        rawLogApi.getAll({ page: 0, size: 1 }),
-        alertStatisticsApi.getStatistics(getProjectParams())
+        alertStatisticsApi.getStatistics(selectedProjectId.value ? { projectId: selectedProjectId.value } : {})
       ])
 
       const allSources = Array.isArray(sourcesRes.data) ? sourcesRes.data : []
       sourceList.value = allSources
 
-      stats.sources = allSources.length
-      stats.collecting = allSources.filter(isCollectingSource).length
-      stats.logs = logsRes.data?.total ?? 0
-      stats.alerts = alertRes.data?.totalAlerts ?? 0
+      const scopedSources = selectedProjectId.value
+        ? allSources.filter((item) => item.projectId === selectedProjectId.value)
+        : allSources
+
+      stats.sources = scopedSources.length
+      stats.collecting = scopedSources.filter(isCollectingSource).length
+      if (!scopedSources.length) {
+        stats.logs = 0
+      } else {
+        const countResults = await Promise.all(
+          scopedSources.map((source) => rawLogApi.getCount(source.id))
+        )
+        stats.logs = countResults.reduce((sum, res) => sum + Number(res.data?.count ?? 0), 0)
+      }
+      stats.alerts = Number(alertRes.data?.totalAlerts ?? 0)
     } catch (error) {
       console.error('加载统计数据失败:', error)
     }
   }
 
-  const loadLogIngestionTrend = async () => {
+  const loadMiniTrend = async () => {
     logIngestionTrendLoading.value = true
 
     try {
-      const { start, end } = getRecent24hWindow()
-      const res = await esLogApi.search({
-        startTime: toIsoSecondString(start),
-        endTime: toIsoSecondString(end),
-        timeInterval: 'hour',
-        page: 0,
-        size: 0,
-        highlight: false
-      })
+      const window = getMiniWindow()
 
-      const buckets = Array.isArray(res.data?.aggregations?.time_histogram)
-        ? res.data.aggregations.time_histogram
-        : []
-      const bucketMap = new Map(
-        buckets
-          .filter((item) => typeof item?.key === 'string')
-          .map((item) => [toBucketKey(dayjs(String(item.key).replace(' ', 'T'))), Number(item.docCount ?? 0)])
+      if (!filteredSources.value.length) {
+        miniTrend.value = window.labels.map((label) => ({ label, count: 0 }))
+        return
+      }
+
+      const results = await Promise.all(
+        filteredSources.value.map((source) =>
+          esLogApi.search({
+            sourceId: source.id,
+            startTime: toIsoSecondString(window.start),
+            endTime: toIsoSecondString(window.end),
+            timeInterval: 'hour',
+            page: 0,
+            size: 0,
+            highlight: false
+          })
+        )
       )
 
-      logIngestionHourlyTrend.value = Array.from({ length: 24 }, (_, index) => {
-        const hour = start.add(index, 'hour')
-        const key = toBucketKey(hour)
-        return {
-          label: hour.format('HH:mm'),
-          count: bucketMap.get(key) ?? 0
-        }
+      const aggregate = new Map()
+      results.forEach((res) => {
+        const buckets = Array.isArray(res.data?.aggregations?.time_histogram) ? res.data.aggregations.time_histogram : []
+        const map = toBucketMap(buckets)
+        window.keys.forEach((key) => {
+          aggregate.set(key, (aggregate.get(key) ?? 0) + (map.get(key) ?? 0))
+        })
       })
+
+      miniTrend.value = window.labels.map((label, index) => ({
+        label,
+        count: aggregate.get(window.keys[index]) ?? 0
+      }))
     } catch (error) {
-      console.error('加载日志入库趋势失败:', error)
-      logIngestionHourlyTrend.value = [...EMPTY_LOG_TREND]
+      console.error('加载日志小趋势失败:', error)
+      miniTrend.value = miniTrend.value.map((item) => ({ ...item, count: 0 }))
     } finally {
       logIngestionTrendLoading.value = false
     }
   }
 
-  const loadLogOverviewTrendData = async () => {
-    logOverviewTrendLoading.value = true
+  const loadLogOperationalCharts = async () => {
+    trafficLoading.value = true
+    anomalyLoading.value = true
+    healthLoading.value = true
 
     try {
-      const activeSources = filteredSources.value
-      logOverviewSourceMeta.total = activeSources.length
+      const sources = filteredSources.value
+      const window = getLast24HoursWindow()
+      trafficLabels.value = window.labels
+      anomalyLabels.value = window.labels
 
-      const rangeHours = Number(logTrendRange.value) || 24
-      const window = getHalfHourWindow(rangeHours)
-      logOverviewTimeLabels.value = window.labels
-
-      if (!activeSources.length) {
-        logOverviewSourceMeta.shown = 0
-        logOverviewTrendSeries.value = []
+      if (!sources.length) {
+        trafficLogs.value = window.keys.map(() => 0)
+        trafficBandwidth.value = window.keys.map(() => 0)
+        anomalyCounts.value = window.keys.map(() => 0)
+        anomalyRates.value = window.keys.map(() => 0)
+        healthRows.value = []
         return
       }
 
-      const results = await Promise.all(
-        activeSources.map(async (source) => {
-          try {
-            const res = await esLogApi.search({
-              sourceId: source.id,
-              startTime: toIsoSecondString(window.start),
-              endTime: toIsoSecondString(window.end),
-              timeInterval: 'minute',
-              page: 0,
-              size: 0,
-              highlight: false
-            })
-
-            const histogramBuckets = Array.isArray(res.data?.aggregations?.time_histogram)
-              ? res.data.aggregations.time_histogram
-              : []
-            const aggregated = aggregateMinuteHistogramToHalfHour(histogramBuckets)
-            const counts = window.keys.map((key) => aggregated.get(key) ?? 0)
-            const total = counts.reduce((sum, value) => sum + value, 0)
-
-            return {
-              name: source.name || source.id,
-              counts,
-              total
-            }
-          } catch (error) {
-            console.error(`加载日志源趋势失败: ${source?.name ?? source?.id ?? '-'}`, error)
-            return null
+      const sourceMetrics = await Promise.all(
+        sources.map(async (source, index) => {
+          const metrics = await fetchSourceOperationalMetrics(source.id, window.start, window.end)
+          return {
+            ...metrics,
+            id: source.id,
+            name: source.name || source.id,
+            color: SOURCE_COLORS[index % SOURCE_COLORS.length]
           }
         })
       )
 
-      const validResults = results.filter(Boolean)
-      const sortedByTotal = [...validResults].sort((a, b) => b.total - a.total)
-      const displayed = sortedByTotal.slice(0, MAX_LOG_SOURCE_SERIES)
+      trafficLogs.value = window.keys.map((key) =>
+        sourceMetrics.reduce((sum, source) => sum + (source.totalMap.get(key) ?? 0), 0)
+      )
 
-      logOverviewSourceMeta.shown = displayed.length
-      logOverviewTrendSeries.value = displayed.map((item, index) => ({
-        name: item.name,
-        color: sourceLinePalette[index % sourceLinePalette.length],
-        data: item.counts
-      }))
-    } catch (error) {
-      console.error('加载日志概览趋势失败:', error)
-      logOverviewSourceMeta.shown = 0
-      logOverviewTrendSeries.value = []
-    } finally {
-      logOverviewTrendLoading.value = false
-    }
-  }
-
-  const loadLogOverviewLevelData = async () => {
-    logOverviewLevelLoading.value = true
-
-    try {
-      let levelItems = []
-
-      if (logLevelSourceId.value) {
-        const res = await esLogApi.search({
-          sourceId: logLevelSourceId.value,
-          aggregationField: 'logLevel',
-          page: 0,
-          size: 0,
-          highlight: false
-        })
-        levelItems = extractLevelBuckets(res)
-      } else if (selectedProjectId.value) {
-        const activeSources = filteredSources.value
-        if (!activeSources.length) {
-          levelItems = []
-        } else {
-          const levelResults = await Promise.all(
-            activeSources.map(async (source) => {
-              try {
-                const res = await esLogApi.search({
-                  sourceId: source.id,
-                  aggregationField: 'logLevel',
-                  page: 0,
-                  size: 0,
-                  highlight: false
-                })
-                return extractLevelBuckets(res)
-              } catch (error) {
-                console.error(`加载日志源级别分布失败: ${source?.name ?? source?.id ?? '-'}`, error)
-                return []
-              }
-            })
-          )
-          levelItems = levelResults.flat()
-        }
-      } else {
-        const res = await esLogApi.search({
-          aggregationField: 'logLevel',
-          page: 0,
-          size: 0,
-          highlight: false
-        })
-        levelItems = extractLevelBuckets(res)
-      }
-
-      const levelCounter = new Map()
-      levelItems.forEach((item) => {
-        levelCounter.set(item.level, (levelCounter.get(item.level) ?? 0) + item.count)
+      trafficBandwidth.value = window.keys.map((key) => {
+        const totalBytes = sourceMetrics.reduce((sum, source) => {
+          const count = source.totalMap.get(key) ?? 0
+          return sum + count * source.avgBytes
+        }, 0)
+        return Number((totalBytes / (1024 * 1024)).toFixed(3))
       })
 
-      logOverviewLevelData.value = [...levelCounter.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([level, count]) => ({
-          name: level,
-          value: count,
-          itemStyle: { color: logLevelColorMap[level] ?? '#7a879d' }
-        }))
+      anomalyCounts.value = window.keys.map((key) =>
+        sourceMetrics.reduce((sum, source) => sum + (source.abnormalMap.get(key) ?? 0), 0)
+      )
+
+      anomalyRates.value = window.keys.map((key, index) => {
+        const total = trafficLogs.value[index] ?? 0
+        const abnormal = anomalyCounts.value[index] ?? 0
+        return total > 0 ? Number(((abnormal / total) * 100).toFixed(2)) : 0
+      })
+
+      const now = dayjs()
+      healthRows.value = sourceMetrics
+        .map((source) => {
+          const abnormalRate = source.total > 0 ? source.abnormalTotal / source.total : 1
+          const freshnessMins = source.latestTime
+            ? Math.max(0, now.diff(dayjs(source.latestTime), 'minute'))
+            : 24 * 60
+          const freshnessPenalty = Math.min(30, freshnessMins / 60)
+          const volumeBonus = Math.min(10, Math.log10(source.total + 1) * 3)
+          const score = clamp(100 - abnormalRate * 100 * 0.9 - freshnessPenalty + volumeBonus, 0, 100)
+
+          return {
+            name: source.name,
+            score,
+            total: source.total,
+            abnormalRate,
+            freshnessMins
+          }
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_HEALTH_SOURCES)
     } catch (error) {
-      console.error('加载日志概览级别分布失败:', error)
-      logOverviewLevelData.value = []
+      console.error('加载日志运营图表失败:', error)
+      trafficLogs.value = []
+      trafficBandwidth.value = []
+      anomalyCounts.value = []
+      anomalyRates.value = []
+      healthRows.value = []
     } finally {
-      logOverviewLevelLoading.value = false
+      trafficLoading.value = false
+      anomalyLoading.value = false
+      healthLoading.value = false
     }
   }
 
-  const loadTrendData = async () => {
-    trendLoading.value = true
+  const loadTraceDistribution = async () => {
+    traceLoading.value = true
 
     try {
-      const params = {
-        days: Number.parseInt(trendDays.value, 10),
-        ...getProjectParams()
+      const params = { days: TRACE_DISTRIBUTION_DAYS }
+      if (selectedProjectId.value) {
+        params.projectId = selectedProjectId.value
       }
 
-      const res = await alertStatisticsApi.getTrend(params)
-      trendData.value = Array.isArray(res.data) ? res.data : []
+      const res = await esLogApi.getTraceDistribution(params)
+      const payload = res.data ?? {}
+
+      const labels = Array.isArray(payload.labels) ? payload.labels : []
+      traceLabels.value = labels.map((item) => dayjs(item).isValid() ? dayjs(item).format('MM-DD') : String(item))
+      traceP50.value = Array.isArray(payload.p50) ? payload.p50 : []
+      traceP95.value = Array.isArray(payload.p95) ? payload.p95 : []
+      traceP99.value = Array.isArray(payload.p99) ? payload.p99 : []
+      traceSampleCount.value = Array.isArray(payload.sampleCount) ? payload.sampleCount : []
     } catch (error) {
-      console.error('加载告警趋势失败:', error)
-      trendData.value = []
+      console.error('加载链路追踪分布失败:', error)
+      traceLabels.value = []
+      traceP50.value = []
+      traceP95.value = []
+      traceP99.value = []
+      traceSampleCount.value = []
     } finally {
-      trendLoading.value = false
+      traceLoading.value = false
     }
   }
 
-  const loadLevelData = async () => {
-    levelLoading.value = true
-
-    try {
-      const res = await alertStatisticsApi.getLevelDistribution(getProjectParams())
-      levelData.value = Array.isArray(res.data) ? res.data : []
-    } catch (error) {
-      console.error('加载告警级别分布失败:', error)
-      levelData.value = []
-    } finally {
-      levelLoading.value = false
-    }
+  const refreshDashboard = async () => {
+    await loadStats()
+    await Promise.all([loadMiniTrend(), loadLogOperationalCharts(), loadTraceDistribution()])
   }
 
   const loadProjects = async () => {
     try {
       const res = await projectApi.getAll()
-      projects.value = res.data ?? []
+      projects.value = Array.isArray(res.data) ? res.data : []
     } catch (error) {
       console.error('加载项目列表失败:', error)
       projects.value = []
     }
   }
 
-  const refreshDashboard = async () => {
-    await Promise.all([loadStats(), loadTrendData(), loadLevelData(), loadLogIngestionTrend()])
-
-    if (overviewMode.value === 'log') {
-      await Promise.all([loadLogOverviewTrendData(), loadLogOverviewLevelData()])
-    }
-  }
-
   const handleProjectChange = () => {
-    if (logLevelSourceId.value && !filteredSources.value.some((item) => item.id === logLevelSourceId.value)) {
-      logLevelSourceId.value = ''
-    }
     void refreshDashboard()
-  }
-
-  const handleOverviewModeChange = async () => {
-    if (overviewMode.value === 'log') {
-      await Promise.all([loadLogOverviewTrendData(), loadLogOverviewLevelData()])
-    }
-  }
-
-  const handleLogTrendRangeChange = async () => {
-    if (overviewMode.value === 'log') {
-      await loadLogOverviewTrendData()
-    }
-  }
-
-  const handleLogLevelSourceChange = async () => {
-    if (overviewMode.value === 'log') {
-      await loadLogOverviewLevelData()
-    }
   }
 
   onMounted(async () => {
@@ -718,28 +654,16 @@ export const useHomeDashboard = () => {
     stats,
     selectedProjectId,
     projects,
-    overviewMode,
-    trendDays,
-    trendLoading,
-    levelLoading,
-    trendOption,
-    levelOption,
     logIngestionTrendLoading,
     logIngestionTrendOption,
-    logTrendRange,
-    logOverviewTrendLoading,
-    logOverviewLevelLoading,
-    logOverviewTrendOption,
-    logOverviewLevelOption,
-    logLevelSourceId,
-    logLevelSourceOptions,
-    alertLevelHint,
-    logOverviewLevelHint,
-    logOverviewTrendHint,
-    loadTrendData,
-    handleProjectChange,
-    handleOverviewModeChange,
-    handleLogTrendRangeChange,
-    handleLogLevelSourceChange
+    trafficLoading,
+    trafficOption,
+    anomalyLoading,
+    anomalyOption,
+    healthLoading,
+    sourceHealthOption,
+    traceLoading,
+    traceDistributionOption,
+    handleProjectChange
   }
 }

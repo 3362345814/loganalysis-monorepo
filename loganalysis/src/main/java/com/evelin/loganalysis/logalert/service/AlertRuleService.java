@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,7 +49,9 @@ public class AlertRuleService {
                 .alertLevel(request.getAlertLevel())
                 .alertTitle(request.getAlertTitle())
                 .alertMessage(request.getAlertMessage())
-                .notificationChannels(request.getNotificationChannels())
+                .notificationChannels(request.getNotificationChannels() != null
+                        ? request.getNotificationChannels()
+                        : new ArrayList<>())
                 .sourceIds(request.getSourceIds())
                 .scheduleCron(request.getScheduleCron())
                 .cooldownMinutes(request.getCooldownMinutes() != null ? request.getCooldownMinutes() : 10)

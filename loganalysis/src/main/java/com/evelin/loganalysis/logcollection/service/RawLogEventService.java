@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -306,5 +308,23 @@ public class RawLogEventService {
      */
     public long countByTraceId(String traceId) {
         return rawLogEventRepository.countByTraceId(traceId);
+    }
+
+    /**
+     * 按 sourceId 分组统计日志数量（包含 null）
+     */
+    public Map<UUID, Long> countGroupBySourceId() {
+        List<Object[]> rows = rawLogEventRepository.countGroupBySourceId();
+        Map<UUID, Long> result = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            UUID sourceId = row[0] instanceof UUID ? (UUID) row[0] : null;
+            Long count = row[1] instanceof Number ? ((Number) row[1]).longValue() : 0L;
+            result.put(sourceId, count);
+        }
+        return result;
+    }
+
+    public long countWithNullSourceId() {
+        return rawLogEventRepository.countBySourceIdIsNull();
     }
 }

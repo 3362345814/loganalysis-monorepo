@@ -44,7 +44,8 @@
             :name="route.meta.transition || 'route-fade'"
             mode="out-in"
           >
-            <component :is="Component" :key="route.path" />
+            <component v-if="Component" :is="Component" :key="route.path" />
+            <div v-else :key="`${route.path}-placeholder`"></div>
           </transition>
         </router-view>
       </el-main>

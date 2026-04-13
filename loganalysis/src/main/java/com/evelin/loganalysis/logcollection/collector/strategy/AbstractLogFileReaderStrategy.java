@@ -603,8 +603,12 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
     }
 
     protected void saveCheckpointSync() {
-        String filePath = getPrimaryFilePath();
-        flushBuffer(filePath);
+        try {
+            // 停止前强制保存所有文件检查点，降低非优雅停机后的重读窗口
+            saveAllCheckpoints();
+        } catch (Exception e) {
+            log.warn("Failed to save checkpoints synchronously during shutdown", e);
+        }
     }
 
     protected String getPrimaryFilePath() {

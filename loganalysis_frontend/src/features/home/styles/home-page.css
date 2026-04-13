@@ -93,7 +93,7 @@
   flex: 0 0 min(35%, 148px);
   min-width: 112px;
   height: 92px;
-  margin-top: 4px;
+  margin-top: 14px;
 }
 
 .quick-actions {
@@ -173,6 +173,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-24);
+}
+
+.panel-grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .chart-panel {

@@ -5,6 +5,7 @@ import co.elastic.clients.elasticsearch.cluster.HealthResponse;
 import com.evelin.loganalysis.logcollection.config.EsSyncConfig;
 import com.evelin.loganalysis.logcollection.dto.EsLogQueryRequest;
 import com.evelin.loganalysis.logcollection.dto.EsLogSearchResponse;
+import com.evelin.loganalysis.logcollection.dto.TraceDistributionResponse;
 import com.evelin.loganalysis.logcollection.model.LogIndexDocument;
 import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.repository.LogElasticsearchRepository;
@@ -15,8 +16,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +43,10 @@ public class LogElasticsearchService {
     private final RawLogEventRepository rawLogEventRepository;
     private final ElasticsearchClient esClient;
     private final EsSyncConfig syncConfig;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    private static final String ES_SYNC_CURSOR_KEY = "loganalysis:es:sync:last-synced-id";
+    private static final double TRACE_MAX_DURATION_SEC = 3600D;
 
     /**
      * 记录上次同步完成的最后一个日志 ID，用于增量同步
@@ -58,11 +67,13 @@ public class LogElasticsearchService {
     public LogElasticsearchService(LogElasticsearchRepository esRepository,
                                   RawLogEventRepository rawLogEventRepository,
                                   ElasticsearchClient esClient,
-                                  EsSyncConfig syncConfig) {
+                                  EsSyncConfig syncConfig,
+                                  StringRedisTemplate stringRedisTemplate) {
         this.esRepository = esRepository;
         this.rawLogEventRepository = rawLogEventRepository;
         this.esClient = esClient;
         this.syncConfig = syncConfig;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     /**
@@ -83,6 +94,14 @@ public class LogElasticsearchService {
 
         long startTime = System.currentTimeMillis();
         UUID lastId = lastSyncedId.get();
+        if (lastId == null) {
+            UUID persistedCursor = loadCursorFromRedis();
+            if (persistedCursor != null) {
+                lastSyncedId.set(persistedCursor);
+                lastId = persistedCursor;
+                log.info("ES sync loaded persisted cursor: {}", persistedCursor);
+            }
+        }
 
         try {
             int totalIndexed = 0;
@@ -91,31 +110,29 @@ public class LogElasticsearchService {
             UUID currentLastId = lastId;
             boolean firstRun = (lastId == null);
 
-            // 首次运行（应用重启后内存状态丢失）：
-            // 找到 DB 中最大 ID，从头开始同步，完成后记录 maxId 作为游标
+            // 首次运行（没有持久化游标）：
+            // 将游标初始化到当前 DB 最大 ID，避免重启后全量回扫造成日志洪峰。
             if (firstRun) {
                 UUID maxId = rawLogEventRepository.findMaxId();
                 if (maxId == null) {
                     log.info("ES scheduled sync: no logs in DB yet, skipping");
                     lastSyncedId.set(UUID.fromString("00000000-0000-0000-0000-000000000000"));
+                    persistCursorToRedis(lastSyncedId.get());
                     lastSyncTime.set(System.currentTimeMillis());
                     syncInProgress.set(false);
                     return;
                 }
-                log.info("ES scheduled sync: first run, DB maxId={}, syncing all from beginning", maxId);
+                lastSyncedId.set(maxId);
+                persistCursorToRedis(maxId);
+                lastSyncTime.set(System.currentTimeMillis());
+                log.info("ES scheduled sync bootstrap cursor to latest DB id={}, skip historical backfill", maxId);
+                return;
             }
 
             while (totalIndexed < maxPerRun) {
-                Page<RawLogEventEntity> entityPage;
-                if (firstRun) {
-                    // 首次运行：从头按 ID 升序遍历全表
-                    entityPage = rawLogEventRepository.findAllOrderByIdAsc(PageRequest.of(0, batchSize));
-                } else {
-                    // 增量：id > currentLastId
-                    entityPage = rawLogEventRepository.findAllByIdGreaterThanOrderByIdAsc(
-                            currentLastId, PageRequest.of(0, batchSize));
-                }
-
+                // 增量：id > currentLastId
+                Page<RawLogEventEntity> entityPage = rawLogEventRepository.findAllByIdGreaterThanOrderByIdAsc(
+                        currentLastId, PageRequest.of(0, batchSize));
                 List<RawLogEventEntity> entities = entityPage.getContent();
                 if (entities.isEmpty()) {
                     break;
@@ -138,9 +155,11 @@ public class LogElasticsearchService {
             // 更新同步游标：首次运行全表完成后记录 maxId，增量运行记录 lastId
             if (firstRun) {
                 lastSyncedId.set(currentLastId);
+                persistCursorToRedis(currentLastId);
                 log.info("ES first-run full sync completed, switch to incremental mode, lastId={}", currentLastId);
             } else if (totalIndexed > 0) {
                 lastSyncedId.set(currentLastId);
+                persistCursorToRedis(currentLastId);
             }
             lastSyncTime.set(System.currentTimeMillis());
 
@@ -152,6 +171,30 @@ public class LogElasticsearchService {
             log.error("ES scheduled incremental sync failed", e);
         } finally {
             syncInProgress.set(false);
+        }
+    }
+
+    private UUID loadCursorFromRedis() {
+        try {
+            String value = stringRedisTemplate.opsForValue().get(ES_SYNC_CURSOR_KEY);
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            return UUID.fromString(value);
+        } catch (Exception e) {
+            log.warn("Failed to load ES sync cursor from Redis: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void persistCursorToRedis(UUID cursor) {
+        if (cursor == null) {
+            return;
+        }
+        try {
+            stringRedisTemplate.opsForValue().set(ES_SYNC_CURSOR_KEY, cursor.toString());
+        } catch (Exception e) {
+            log.warn("Failed to persist ES sync cursor to Redis: {}", e.getMessage());
         }
     }
 
@@ -370,5 +413,135 @@ public class LogElasticsearchService {
             health.put("error", e.getMessage());
         }
         return health;
+    }
+
+    /**
+     * 获取链路追踪耗时分布（P50/P95/P99）
+     */
+    public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days) {
+        int safeDays = days == null ? 30 : Math.max(1, Math.min(days, 60));
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(safeDays - 1L);
+        LocalDateTime startTime = startDate.atStartOfDay();
+        LocalDateTime endTime = LocalDateTime.now();
+        log.info("trace-distribution query start, projectId={}, days={}, startTime={}, endTime={}",
+                projectId, safeDays, startTime, endTime);
+
+        Map<LocalDate, Quantiles> quantilesByDay = new HashMap<>();
+        Map<LocalDate, Long> sampleCountByDay = new HashMap<>();
+        try {
+            List<Object[]> rows = projectId == null
+                    ? rawLogEventRepository.findTraceDurationPercentilesByDay(startTime, endTime, TRACE_MAX_DURATION_SEC)
+                    : rawLogEventRepository.findTraceDurationPercentilesByDayAndProject(startTime, endTime, projectId, TRACE_MAX_DURATION_SEC);
+            log.info("trace-distribution raw rows size={}", rows.size());
+            for (Object[] row : rows) {
+                LocalDate day = toLocalDate(row[0]);
+                if (day == null) {
+                    continue;
+                }
+                Quantiles q = new Quantiles(
+                        toDouble(row[1]),
+                        toDouble(row[2]),
+                        toDouble(row[3])
+                );
+                quantilesByDay.put(day, q);
+                sampleCountByDay.put(day, toLong(row.length > 4 ? row[4] : null));
+                log.info("trace-distribution raw day={}, p50={}, p95={}, p99={}",
+                        day, q.p50(), q.p95(), q.p99());
+            }
+        } catch (Exception e) {
+            log.error("Failed to load trace distribution", e);
+        }
+
+        List<String> labels = new java.util.ArrayList<>(safeDays);
+        List<Double> p50 = new java.util.ArrayList<>(safeDays);
+        List<Double> p95 = new java.util.ArrayList<>(safeDays);
+        List<Double> p99 = new java.util.ArrayList<>(safeDays);
+        List<Long> sampleCount = new java.util.ArrayList<>(safeDays);
+
+        for (int i = 0; i < safeDays; i++) {
+            LocalDate day = startDate.plusDays(i);
+            labels.add(day.toString());
+
+            Quantiles q = quantilesByDay.get(day);
+            p50.add(q == null ? null : q.p50());
+            p95.add(q == null ? null : q.p95());
+            p99.add(q == null ? null : q.p99());
+            sampleCount.add(sampleCountByDay.getOrDefault(day, 0L));
+        }
+
+        long nonNullDays = p50.stream().filter(java.util.Objects::nonNull).count();
+        int todayIndex = labels.size() - 1;
+        Double todayP50 = todayIndex >= 0 ? p50.get(todayIndex) : null;
+        Double todayP95 = todayIndex >= 0 ? p95.get(todayIndex) : null;
+        Double todayP99 = todayIndex >= 0 ? p99.get(todayIndex) : null;
+        log.info("trace-distribution result summary: nonNullDays={}, todayLabel={}, todayP50={}, todayP95={}, todayP99={}",
+                nonNullDays, todayIndex >= 0 ? labels.get(todayIndex) : null, todayP50, todayP95, todayP99);
+        if (nonNullDays == 0) {
+            log.warn("trace-distribution result all-null for projectId={}, startTime={}, endTime={}",
+                    projectId, startTime, endTime);
+        }
+
+        return TraceDistributionResponse.builder()
+                .labels(labels)
+                .p50(p50)
+                .p95(p95)
+                .p99(p99)
+                .sampleCount(sampleCount)
+                .build();
+    }
+
+    private static LocalDate toLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime.toLocalDate();
+        }
+        try {
+            return LocalDate.parse(String.valueOf(value));
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private static Double toDouble(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal bigDecimal) {
+            return bigDecimal.doubleValue();
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private static Long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception ignore) {
+            return 0L;
+        }
+    }
+
+    private record Quantiles(Double p50, Double p95, Double p99) {
     }
 }

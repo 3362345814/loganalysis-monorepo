@@ -2,6 +2,7 @@ package com.evelin.loganalysis.logcollection.controller;
 
 import com.evelin.loganalysis.logcollection.dto.EsLogQueryRequest;
 import com.evelin.loganalysis.logcollection.dto.EsLogSearchResponse;
+import com.evelin.loganalysis.logcollection.dto.TraceDistributionResponse;
 import com.evelin.loganalysis.logcollection.service.LogElasticsearchService;
 import com.evelin.loganalysis.logcommon.model.Result;
 import jakarta.validation.Valid;
@@ -172,5 +173,16 @@ public class LogElasticsearchController {
         Map<String, Object> result = new HashMap<>();
         result.put("count", count);
         return Result.success(result);
+    }
+
+    /**
+     * 获取链路追踪耗时分布（P50/P95/P99）
+     */
+    @GetMapping("/trace-distribution")
+    public Result<TraceDistributionResponse> getTraceDistribution(
+            @RequestParam(required = false) UUID projectId,
+            @RequestParam(required = false, defaultValue = "30") Integer days
+    ) {
+        return Result.success(esService.getTraceDistribution(projectId, days));
     }
 }

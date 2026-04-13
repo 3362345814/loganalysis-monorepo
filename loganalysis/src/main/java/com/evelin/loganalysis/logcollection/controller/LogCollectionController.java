@@ -146,13 +146,13 @@ public class LogCollectionController {
         LogSource source = sourceOpt.get();
 
         // 2. 检查是否已启动
-        if (collectorFactory.get(source) != null && collectorFactory.get(source).isRunning()) {
+        LogCollector existing = collectorFactory.get(source);
+        if (existing != null && existing.isRunning()) {
             return Result.error("采集器已在运行中");
         }
 
-        // 3. 创建并启动采集器
-        LogCollector collector = collectorFactory.create(source);
-        collector.start();
+        // 3. 创建并启动采集器（工厂内部按 sourceId 串行化）
+        LogCollector collector = collectorFactory.createAndStart(source);
 
         // 4. 更新数据库状态
         logSourceService.updateStatus(sourceId, CollectionStatus.RUNNING);
@@ -523,6 +523,56 @@ public class LogCollectionController {
         Map<String, Object> result = new HashMap<>();
         result.put("traceId", traceId);
         result.put("count", count);
+        return Result.success(result);
+    }
+
+    /**
+     * 调试接口：按 sourceId 统计日志分布，定位“总数与当前日志源求和不一致”的问题
+     */
+    @GetMapping("/logs/count-breakdown")
+    public Result<Map<String, Object>> countBreakdown() {
+        List<LogSourceResponse> sources = logSourceService.findAll();
+        Map<String, LogSourceResponse> sourceMap = sources.stream()
+                .collect(Collectors.toMap(item -> item.getId().toString(), item -> item));
+
+        Map<UUID, Long> grouped = rawLogEventService.countGroupBySourceId();
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        long total = 0L;
+        long knownSourcesTotal = 0L;
+        long unknownSourcesTotal = 0L;
+
+        for (Map.Entry<UUID, Long> entry : grouped.entrySet()) {
+            UUID sourceId = entry.getKey();
+            long count = entry.getValue() == null ? 0L : entry.getValue();
+            total += count;
+
+            String sourceIdText = sourceId == null ? null : sourceId.toString();
+            LogSourceResponse source = sourceIdText == null ? null : sourceMap.get(sourceIdText);
+            boolean exists = source != null;
+            if (exists) {
+                knownSourcesTotal += count;
+            } else {
+                unknownSourcesTotal += count;
+            }
+
+            Map<String, Object> row = new HashMap<>();
+            row.put("sourceId", sourceIdText);
+            row.put("sourceName", source == null ? null : source.getName());
+            row.put("existsInCurrentSources", exists);
+            row.put("count", count);
+            rows.add(row);
+        }
+
+        rows.sort((a, b) -> Long.compare((Long) b.get("count"), (Long) a.get("count")));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", total);
+        result.put("knownSourcesTotal", knownSourcesTotal);
+        result.put("unknownSourcesTotal", unknownSourcesTotal);
+        result.put("nullSourceIdCount", rawLogEventService.countWithNullSourceId());
+        result.put("currentSources", sources.size());
+        result.put("rows", rows);
         return Result.success(result);
     }
 

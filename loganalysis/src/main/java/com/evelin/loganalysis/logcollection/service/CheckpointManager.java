@@ -268,8 +268,17 @@ public class CheckpointManager {
     private CollectionCheckpoint convertMapToCollectionCheckpoint(Map<String, Object> map) {
         String sourceId = (String) map.get("sourceId");
         String filePath = (String) map.get("filePath");
-        Long offset = map.get("fileOffset") != null ? ((Number) map.get("fileOffset")).longValue() : 0L;
-        Long fileSize = map.get("fileSize") != null ? ((Number) map.get("fileSize")).longValue() : 0L;
+        // 兼容两种字段命名：
+        // 1) CollectionCheckpoint: offset
+        // 2) LogCheckpoint: fileOffset
+        Object offsetObj = map.get("offset");
+        if (offsetObj == null) {
+            offsetObj = map.get("fileOffset");
+        }
+        Long offset = offsetObj instanceof Number ? ((Number) offsetObj).longValue() : 0L;
+
+        Object fileSizeObj = map.get("fileSize");
+        Long fileSize = fileSizeObj instanceof Number ? ((Number) fileSizeObj).longValue() : 0L;
         String fileInode = (String) map.get("fileInode");
         Object fileMtimeObj = map.get("fileMtime");
         LocalDateTime fileMtime = null;
@@ -280,6 +289,8 @@ public class CheckpointManager {
                 fileMtime = LocalDateTime.ofEpochSecond((Long) fileMtimeObj / 1000, 0, java.time.ZoneOffset.UTC);
             }
         }
+        log.debug("Converted checkpoint map: sourceId={}, filePath={}, offset={}, fileSize={}",
+                sourceId, filePath, offset, fileSize);
         return CollectionCheckpoint.of(sourceId, filePath, offset, fileSize, fileInode, fileMtime);
     }
 }

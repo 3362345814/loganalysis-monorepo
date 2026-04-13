@@ -204,7 +204,6 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         }
 
         if (tempFile.length() == 0) {
-            log.warn("Downloaded file is empty: localPath={}, remotePath={}", tempFilePath, filePath);
             return;
         }
 

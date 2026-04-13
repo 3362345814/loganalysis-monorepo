@@ -246,4 +246,92 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
      */
     @Query("SELECT MAX(e.id) FROM RawLogEventEntity e")
     UUID findMaxId();
+
+    /**
+     * 按 sourceId 分组统计日志数量（包含 null）
+     */
+    @Query("SELECT r.sourceId, COUNT(r) FROM RawLogEventEntity r GROUP BY r.sourceId")
+    List<Object[]> countGroupBySourceId();
+
+    /**
+     * sourceId 为空的日志数量
+     */
+    long countBySourceIdIsNull();
+
+    /**
+     * 按天统计链路耗时分位（P50/P95/P99）
+     *
+     * 先按 traceId 计算每条链路耗时（同一 trace 最早/最晚日志时间差，单位秒），
+     * 再按天计算分位值。
+     */
+    @Query(value = """
+            WITH trace_durations AS (
+                SELECT
+                    CAST(date_trunc('day', MIN(COALESCE(r.original_log_time, r.collection_time))) AS date) AS day_date,
+                    EXTRACT(EPOCH FROM (
+                        MAX(COALESCE(r.original_log_time, r.collection_time))
+                        - MIN(COALESCE(r.original_log_time, r.collection_time))
+                    )) AS duration_sec,
+                    COUNT(*) AS log_count
+                FROM raw_log_events r
+                LEFT JOIN log_sources s ON s.id = r.source_id
+                WHERE r.trace_id IS NOT NULL
+                  AND r.trace_id <> ''
+                  AND COALESCE(r.original_log_time, r.collection_time) >= :startTime
+                  AND COALESCE(r.original_log_time, r.collection_time) <= :endTime
+                  AND s.project_id = :projectId
+                GROUP BY r.trace_id
+                HAVING COUNT(*) >= 2
+            )
+            SELECT
+                day_date,
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
+                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                COUNT(*) AS sample_count
+            FROM trace_durations
+            WHERE duration_sec >= 0 AND duration_sec <= :maxDurationSec
+            GROUP BY day_date
+            ORDER BY day_date
+            """, nativeQuery = true)
+    List<Object[]> findTraceDurationPercentilesByDayAndProject(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("projectId") UUID projectId,
+            @Param("maxDurationSec") Double maxDurationSec
+    );
+
+    @Query(value = """
+            WITH trace_durations AS (
+                SELECT
+                    CAST(date_trunc('day', MIN(COALESCE(r.original_log_time, r.collection_time))) AS date) AS day_date,
+                    EXTRACT(EPOCH FROM (
+                        MAX(COALESCE(r.original_log_time, r.collection_time))
+                        - MIN(COALESCE(r.original_log_time, r.collection_time))
+                    )) AS duration_sec,
+                    COUNT(*) AS log_count
+                FROM raw_log_events r
+                WHERE r.trace_id IS NOT NULL
+                  AND r.trace_id <> ''
+                  AND COALESCE(r.original_log_time, r.collection_time) >= :startTime
+                  AND COALESCE(r.original_log_time, r.collection_time) <= :endTime
+                GROUP BY r.trace_id
+                HAVING COUNT(*) >= 2
+            )
+            SELECT
+                day_date,
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
+                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                COUNT(*) AS sample_count
+            FROM trace_durations
+            WHERE duration_sec >= 0 AND duration_sec <= :maxDurationSec
+            GROUP BY day_date
+            ORDER BY day_date
+            """, nativeQuery = true)
+    List<Object[]> findTraceDurationPercentilesByDay(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("maxDurationSec") Double maxDurationSec
+    );
 }
