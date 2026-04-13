@@ -259,7 +259,7 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
     long countBySourceIdIsNull();
 
     /**
-     * 按天统计链路耗时分位（P50/P95/P99）
+     * 按天统计链路耗时分布（min/p25/p50/p75/max）
      *
      * 先按 traceId 计算每条链路耗时（同一 trace 最早/最晚日志时间差，单位秒），
      * 再按天计算分位值。
@@ -286,9 +286,11 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
             )
             SELECT
                 day_date,
+                MIN(duration_sec) AS min_duration,
+                percentile_cont(0.25) WITHIN GROUP (ORDER BY duration_sec) AS p25,
                 percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
-                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                percentile_cont(0.75) WITHIN GROUP (ORDER BY duration_sec) AS p75,
+                MAX(duration_sec) AS max_duration,
                 COUNT(*) AS sample_count
             FROM trace_durations
             WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
@@ -322,9 +324,11 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
             )
             SELECT
                 day_date,
+                MIN(duration_sec) AS min_duration,
+                percentile_cont(0.25) WITHIN GROUP (ORDER BY duration_sec) AS p25,
                 percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
-                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                percentile_cont(0.75) WITHIN GROUP (ORDER BY duration_sec) AS p75,
+                MAX(duration_sec) AS max_duration,
                 COUNT(*) AS sample_count
             FROM trace_durations
             WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
@@ -359,9 +363,11 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
             )
             SELECT
                 bucket_time,
+                MIN(duration_sec) AS min_duration,
+                percentile_cont(0.25) WITHIN GROUP (ORDER BY duration_sec) AS p25,
                 percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
-                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                percentile_cont(0.75) WITHIN GROUP (ORDER BY duration_sec) AS p75,
+                MAX(duration_sec) AS max_duration,
                 COUNT(*) AS sample_count
             FROM trace_durations
             WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec
@@ -395,9 +401,11 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
             )
             SELECT
                 bucket_time,
+                MIN(duration_sec) AS min_duration,
+                percentile_cont(0.25) WITHIN GROUP (ORDER BY duration_sec) AS p25,
                 percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec) AS p50,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_sec) AS p95,
-                percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_sec) AS p99,
+                percentile_cont(0.75) WITHIN GROUP (ORDER BY duration_sec) AS p75,
+                MAX(duration_sec) AS max_duration,
                 COUNT(*) AS sample_count
             FROM trace_durations
             WHERE duration_sec > 0 AND duration_sec <= :maxDurationSec

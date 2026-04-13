@@ -417,7 +417,7 @@ public class LogElasticsearchService {
     }
 
     /**
-     * 获取链路追踪耗时分布（P50/P95/P99）
+     * 获取链路追踪耗时分布（min/p25/p50/p75/max）
      */
     public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days, String interval) {
         boolean halfHourInterval = "HALF_HOUR".equalsIgnoreCase(interval) || "30M".equalsIgnoreCase(interval);
@@ -441,35 +441,47 @@ public class LogElasticsearchService {
                     if (bucket == null) {
                         continue;
                     }
-                    Quantiles q = new Quantiles(toDouble(row[1]), toDouble(row[2]), toDouble(row[3]));
+                    Quantiles q = new Quantiles(
+                            toDouble(row[1]),
+                            toDouble(row[2]),
+                            toDouble(row[3]),
+                            toDouble(row[4]),
+                            toDouble(row[5])
+                    );
                     quantilesByBucket.put(bucket, q);
-                    sampleCountByBucket.put(bucket, toLong(row.length > 4 ? row[4] : null));
+                    sampleCountByBucket.put(bucket, toLong(row.length > 6 ? row[6] : null));
                 }
             } catch (Exception e) {
                 log.error("Failed to load half-hour trace distribution", e);
             }
 
             List<String> labels = new java.util.ArrayList<>(48);
+            List<Double> min = new java.util.ArrayList<>(48);
+            List<Double> p25 = new java.util.ArrayList<>(48);
             List<Double> p50 = new java.util.ArrayList<>(48);
-            List<Double> p95 = new java.util.ArrayList<>(48);
-            List<Double> p99 = new java.util.ArrayList<>(48);
+            List<Double> p75 = new java.util.ArrayList<>(48);
+            List<Double> max = new java.util.ArrayList<>(48);
             List<Long> sampleCount = new java.util.ArrayList<>(48);
 
             for (int i = 0; i < 48; i++) {
                 LocalDateTime bucket = startBucket.plusMinutes(i * 30L);
                 labels.add(bucket.toString());
                 Quantiles q = quantilesByBucket.get(bucket);
+                min.add(q == null ? null : q.min());
+                p25.add(q == null ? null : q.p25());
                 p50.add(q == null ? null : q.p50());
-                p95.add(q == null ? null : q.p95());
-                p99.add(q == null ? null : q.p99());
+                p75.add(q == null ? null : q.p75());
+                max.add(q == null ? null : q.max());
                 sampleCount.add(sampleCountByBucket.getOrDefault(bucket, 0L));
             }
 
             return TraceDistributionResponse.builder()
                     .labels(labels)
+                    .min(min)
+                    .p25(p25)
                     .p50(p50)
-                    .p95(p95)
-                    .p99(p99)
+                    .p75(p75)
+                    .max(max)
                     .sampleCount(sampleCount)
                     .build();
         }
@@ -491,35 +503,47 @@ public class LogElasticsearchService {
                 if (day == null) {
                     continue;
                 }
-                Quantiles q = new Quantiles(toDouble(row[1]), toDouble(row[2]), toDouble(row[3]));
+                Quantiles q = new Quantiles(
+                        toDouble(row[1]),
+                        toDouble(row[2]),
+                        toDouble(row[3]),
+                        toDouble(row[4]),
+                        toDouble(row[5])
+                );
                 quantilesByDay.put(day, q);
-                sampleCountByDay.put(day, toLong(row.length > 4 ? row[4] : null));
+                sampleCountByDay.put(day, toLong(row.length > 6 ? row[6] : null));
             }
         } catch (Exception e) {
             log.error("Failed to load day trace distribution", e);
         }
 
         List<String> labels = new java.util.ArrayList<>(safeDays);
+        List<Double> min = new java.util.ArrayList<>(safeDays);
+        List<Double> p25 = new java.util.ArrayList<>(safeDays);
         List<Double> p50 = new java.util.ArrayList<>(safeDays);
-        List<Double> p95 = new java.util.ArrayList<>(safeDays);
-        List<Double> p99 = new java.util.ArrayList<>(safeDays);
+        List<Double> p75 = new java.util.ArrayList<>(safeDays);
+        List<Double> max = new java.util.ArrayList<>(safeDays);
         List<Long> sampleCount = new java.util.ArrayList<>(safeDays);
 
         for (int i = 0; i < safeDays; i++) {
             LocalDate day = startDate.plusDays(i);
             labels.add(day.toString());
             Quantiles q = quantilesByDay.get(day);
+            min.add(q == null ? null : q.min());
+            p25.add(q == null ? null : q.p25());
             p50.add(q == null ? null : q.p50());
-            p95.add(q == null ? null : q.p95());
-            p99.add(q == null ? null : q.p99());
+            p75.add(q == null ? null : q.p75());
+            max.add(q == null ? null : q.max());
             sampleCount.add(sampleCountByDay.getOrDefault(day, 0L));
         }
 
         return TraceDistributionResponse.builder()
                 .labels(labels)
+                .min(min)
+                .p25(p25)
                 .p50(p50)
-                .p95(p95)
-                .p99(p99)
+                .p75(p75)
+                .max(max)
                 .sampleCount(sampleCount)
                 .build();
     }
@@ -595,6 +619,6 @@ public class LogElasticsearchService {
         }
     }
 
-    private record Quantiles(Double p50, Double p95, Double p99) {
+    private record Quantiles(Double min, Double p25, Double p50, Double p75, Double max) {
     }
 }

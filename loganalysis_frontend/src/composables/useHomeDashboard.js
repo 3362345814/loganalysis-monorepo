@@ -168,6 +168,18 @@ const formatLatency = (value, unit) => {
   return `${numeric.toFixed(unit === 'ms' ? 2 : 3)} ${unit}`
 }
 
+const formatLatencyRange = (min, max, unit) => {
+  if (min === null || min === undefined || max === null || max === undefined) {
+    return '-'
+  }
+  const minNum = Number(min)
+  const maxNum = Number(max)
+  if (!Number.isFinite(minNum) || !Number.isFinite(maxNum)) {
+    return '-'
+  }
+  return `${minNum.toFixed(unit === 'ms' ? 2 : 3)} ~ ${maxNum.toFixed(unit === 'ms' ? 2 : 3)} ${unit}`
+}
+
 export const useHomeDashboard = () => {
   const stats = reactive({
     sources: 0,
@@ -209,13 +221,21 @@ export const useHomeDashboard = () => {
   const healthRows = shallowRef([])
 
   const traceLabels = shallowRef([])
+  const traceMin = shallowRef([])
+  const traceP25 = shallowRef([])
   const traceP50 = shallowRef([])
-  const traceP95 = shallowRef([])
-  const traceP99 = shallowRef([])
+  const traceP75 = shallowRef([])
+  const traceMax = shallowRef([])
   const traceSampleCount = shallowRef([])
 
   const traceDisplayUnit = computed(() => {
-    const values = [...traceP50.value, ...traceP95.value, ...traceP99.value]
+    const values = [
+      ...traceMin.value,
+      ...traceP25.value,
+      ...traceP50.value,
+      ...traceP75.value,
+      ...traceMax.value
+    ]
       .map((item) => toNullableNumber(item))
       .filter((item) => item !== null && item > 0)
 
@@ -231,13 +251,39 @@ export const useHomeDashboard = () => {
     const numeric = toNullableNumber(item)
     return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
   }))
-  const traceP95Display = computed(() => traceP95.value.map((item) => {
+  const traceP25Display = computed(() => traceP25.value.map((item) => {
     const numeric = toNullableNumber(item)
     return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
   }))
-  const traceP99Display = computed(() => traceP99.value.map((item) => {
+  const traceP75Display = computed(() => traceP75.value.map((item) => {
     const numeric = toNullableNumber(item)
     return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+  const traceMinDisplay = computed(() => traceMin.value.map((item) => {
+    const numeric = toNullableNumber(item)
+    return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+  const traceMaxDisplay = computed(() => traceMax.value.map((item) => {
+    const numeric = toNullableNumber(item)
+    return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
+  }))
+  const traceBoxplotData = computed(() => traceLabels.value.map((_, index) => {
+    const min = traceMinDisplay.value[index]
+    const p25 = traceP25Display.value[index]
+    const p50 = traceP50Display.value[index]
+    const p75 = traceP75Display.value[index]
+    const max = traceMaxDisplay.value[index]
+    if (min === null || p25 === null || p50 === null || p75 === null || max === null) {
+      return {
+        value: [0, 0, 0, 0, 0],
+        itemStyle: {
+          opacity: 0,
+          borderWidth: 0
+        }
+      }
+    }
+
+    return [min, p25, p50, p75, max]
   }))
 
   const collectingStatuses = Object.freeze(new Set(['RUNNING', 'COLLECTING']))
@@ -457,6 +503,20 @@ export const useHomeDashboard = () => {
         }
 
         params?.forEach((item) => {
+          if (item.seriesType === 'boxplot') {
+            const box = Array.isArray(item.data) ? item.data : item.data?.value
+            const [min, q1, median, q3, max] = Array.isArray(box) ? box : []
+            if ((traceSampleCount.value[item.dataIndex] ?? 0) <= 0) {
+              return
+            }
+            lines.push(`${item.marker}${item.seriesName}: ${formatLatencyRange(min, max, traceDisplayUnit.value)}`)
+            lines.push(`最小值: ${formatLatency(min, traceDisplayUnit.value)}`)
+            lines.push(`Q1: ${formatLatency(q1, traceDisplayUnit.value)}`)
+            lines.push(`中位数: ${formatLatency(median, traceDisplayUnit.value)}`)
+            lines.push(`Q3: ${formatLatency(q3, traceDisplayUnit.value)}`)
+            lines.push(`最大值: ${formatLatency(max, traceDisplayUnit.value)}`)
+            return
+          }
           if (item.seriesName === '样本数') {
             const count = item.data === null || item.data === undefined ? '-' : Number(item.data).toLocaleString('zh-CN')
             lines.push(`${item.marker}${item.seriesName}: ${count}`)
@@ -471,7 +531,7 @@ export const useHomeDashboard = () => {
     grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {
       type: 'category',
-      boundaryGap: false,
+      boundaryGap: true,
       axisTick: { show: false },
       axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
       data: traceLabels.value
@@ -492,34 +552,20 @@ export const useHomeDashboard = () => {
     ],
     series: [
       {
-        name: 'P50',
-        type: 'line',
-        smooth: true,
-        showSymbol: false,
-        connectNulls: true,
-        lineStyle: { width: 2.2, color: '#3f6fb0' },
-        itemStyle: { color: '#3f6fb0' },
-        data: traceP50Display.value
-      },
-      {
-        name: 'P95',
-        type: 'line',
-        smooth: true,
-        showSymbol: false,
-        connectNulls: true,
-        lineStyle: { width: 2.2, color: '#c96442' },
-        itemStyle: { color: '#c96442' },
-        data: traceP95Display.value
-      },
-      {
-        name: 'P99',
-        type: 'line',
-        smooth: true,
-        showSymbol: false,
-        connectNulls: true,
-        lineStyle: { width: 2.2, color: '#b87a2e' },
-        itemStyle: { color: '#b87a2e' },
-        data: traceP99Display.value
+        name: '链路耗时箱线',
+        type: 'boxplot',
+        yAxisIndex: 0,
+        itemStyle: {
+          color: 'rgba(63, 111, 176, 0.22)',
+          borderColor: '#3f6fb0'
+        },
+        emphasis: {
+          itemStyle: {
+            color: 'rgba(63, 111, 176, 0.3)',
+            borderColor: '#2e5488'
+          }
+        },
+        data: traceBoxplotData.value
       },
       {
         name: '样本数',
@@ -776,17 +822,21 @@ export const useHomeDashboard = () => {
       const res = await esLogApi.getTraceDistribution(params)
       const payload = res.data ?? {}
       const rawLabels = Array.isArray(payload.labels) ? payload.labels : []
+      const rawMin = Array.isArray(payload.min) ? payload.min : []
+      const rawP25 = Array.isArray(payload.p25) ? payload.p25 : []
       const rawP50 = Array.isArray(payload.p50) ? payload.p50 : []
-      const rawP95 = Array.isArray(payload.p95) ? payload.p95 : []
-      const rawP99 = Array.isArray(payload.p99) ? payload.p99 : []
+      const rawP75 = Array.isArray(payload.p75) ? payload.p75 : []
+      const rawMax = Array.isArray(payload.max) ? payload.max : []
       const rawSample = Array.isArray(payload.sampleCount) ? payload.sampleCount : []
 
       // 横轴标签与吞吐/异常图统一：24h 使用 HH:mm，30d 使用 MM-DD
       traceLabels.value = window.labels
 
+      const minMap = new Map()
+      const p25Map = new Map()
       const p50Map = new Map()
-      const p95Map = new Map()
-      const p99Map = new Map()
+      const p75Map = new Map()
+      const maxMap = new Map()
       const sampleMap = new Map()
 
       rawLabels.forEach((label, idx) => {
@@ -796,22 +846,28 @@ export const useHomeDashboard = () => {
           ? local.format('YYYY-MM-DD')
           : toBucketKey(local.startOf('minute'))
 
+        minMap.set(key, toNullableNumber(rawMin[idx]))
+        p25Map.set(key, toNullableNumber(rawP25[idx]))
         p50Map.set(key, toNullableNumber(rawP50[idx]))
-        p95Map.set(key, toNullableNumber(rawP95[idx]))
-        p99Map.set(key, toNullableNumber(rawP99[idx]))
+        p75Map.set(key, toNullableNumber(rawP75[idx]))
+        maxMap.set(key, toNullableNumber(rawMax[idx]))
         sampleMap.set(key, Number(rawSample[idx] ?? 0))
       })
 
+      traceMin.value = window.keys.map((k) => minMap.has(k) ? minMap.get(k) : null)
+      traceP25.value = window.keys.map((k) => p25Map.has(k) ? p25Map.get(k) : null)
       traceP50.value = window.keys.map((k) => p50Map.has(k) ? p50Map.get(k) : null)
-      traceP95.value = window.keys.map((k) => p95Map.has(k) ? p95Map.get(k) : null)
-      traceP99.value = window.keys.map((k) => p99Map.has(k) ? p99Map.get(k) : null)
+      traceP75.value = window.keys.map((k) => p75Map.has(k) ? p75Map.get(k) : null)
+      traceMax.value = window.keys.map((k) => maxMap.has(k) ? maxMap.get(k) : null)
       traceSampleCount.value = window.keys.map((k) => sampleMap.get(k) ?? 0)
     } catch (error) {
       console.error('加载链路追踪分布失败:', error)
       traceLabels.value = []
+      traceMin.value = []
+      traceP25.value = []
       traceP50.value = []
-      traceP95.value = []
-      traceP99.value = []
+      traceP75.value = []
+      traceMax.value = []
       traceSampleCount.value = []
     } finally {
       traceLoading.value = false

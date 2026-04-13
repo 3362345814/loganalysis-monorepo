@@ -22,19 +22,29 @@ public class TraceDistributionResponse {
     private List<String> labels;
 
     /**
+     * 最小值（秒）
+     */
+    private List<Double> min;
+
+    /**
+     * P25（秒）
+     */
+    private List<Double> p25;
+
+    /**
      * P50（秒）
      */
     private List<Double> p50;
 
     /**
-     * P95（秒）
+     * P75（秒）
      */
-    private List<Double> p95;
+    private List<Double> p75;
 
     /**
-     * P99（秒）
+     * 最大值（秒）
      */
-    private List<Double> p99;
+    private List<Double> max;
 
     /**
      * 每天有效样本数（满足过滤条件的 trace 数）

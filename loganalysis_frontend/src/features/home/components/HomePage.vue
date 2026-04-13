@@ -97,9 +97,9 @@
             <span class="level-hint">按所选范围分位（24小时为30分钟粒度）</span>
           </div>
           <div class="trace-intro-list">
-            <span class="trace-intro-item"><strong>P50</strong>：50% 链路耗时不超过该值（中位数）</span>
-            <span class="trace-intro-item"><strong>P95</strong>：95% 链路耗时不超过该值</span>
-            <span class="trace-intro-item"><strong>P99</strong>：99% 链路耗时不超过该值</span>
+            <span class="trace-intro-item"><strong>须线</strong>：最小值 ~ 最大值</span>
+            <span class="trace-intro-item"><strong>箱体</strong>：展示链路耗时的核心分布区间（Q1~Q3）</span>
+            <span class="trace-intro-item"><strong>中位数</strong>：箱体中线表示 50% 分位耗时</span>
             <span class="trace-intro-item"><strong>样本数</strong>：当天参与统计的 trace 条数</span>
           </div>
           <div class="chart-container" v-loading="traceLoading">
