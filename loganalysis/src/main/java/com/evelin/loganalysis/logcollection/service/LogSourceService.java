@@ -1,5 +1,6 @@
 package com.evelin.loganalysis.logcollection.service;
 
+import com.evelin.loganalysis.logalert.repository.AlertRecordRepository;
 import com.evelin.loganalysis.logcollection.dto.LogSourceCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.LogSourceResponse;
 import com.evelin.loganalysis.logcollection.dto.LogSourceUpdateRequest;
@@ -48,6 +49,7 @@ public class LogSourceService {
     private final CheckpointRepository checkpointRepository;
     private final RawLogEventRepository rawLogEventRepository;
     private final AggregationGroupService aggregationGroupService;
+    private final AlertRecordRepository alertRecordRepository;
     private final CollectorFactory collectorFactory;
 
     /**
@@ -318,6 +320,12 @@ public class LogSourceService {
             int deletedLogs = rawLogEventRepository.deleteBySourceId(id);
             log.info("删除日志源 {} 关联的日志数据: {} 条", id, deletedLogs);
         }
+
+        // 删除关联的告警记录（source_ids 包含该日志源）
+        int deletedAlerts = alertRecordRepository.deleteBySourceIdInSourceIds(id);
+        if (deletedAlerts > 0) {
+            log.info("删除日志源 {} 关联的告警记录: {} 条", id, deletedAlerts);
+        }
         
         // 删除关联的检查点
         checkpointRepository.deleteBySourceId(id);
@@ -328,7 +336,8 @@ public class LogSourceService {
         // 删除日志源
         logSourceRepository.delete(logSource);
         
-        log.info("删除日志源成功: {}, 关联日志: {} 条, 关联聚合组: {} 个", id, logCount, deletedGroups);
+        log.info("删除日志源成功: {}, 关联日志: {} 条, 关联告警: {} 条, 关联聚合组: {} 个",
+                id, logCount, deletedAlerts, deletedGroups);
     }
 
     /**

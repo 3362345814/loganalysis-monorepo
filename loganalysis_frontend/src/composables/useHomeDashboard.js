@@ -504,10 +504,15 @@ export const useHomeDashboard = () => {
 
         params?.forEach((item) => {
           if (item.seriesType === 'boxplot') {
-            const box = Array.isArray(item.data) ? item.data : item.data?.value
-            const [min, q1, median, q3, max] = Array.isArray(box) ? box : []
+            const source = traceBoxplotData.value[item.dataIndex]
+            const box = Array.isArray(source) ? source : source?.value
+            let [min, q1, median, q3, max] = Array.isArray(box) ? box : []
             if ((traceSampleCount.value[item.dataIndex] ?? 0) <= 0) {
               return
+            }
+            if ([min, q1, median, q3, max].every((v) => Number.isFinite(v))) {
+              const sorted = [min, q1, median, q3, max].sort((a, b) => a - b)
+              ;[min, q1, median, q3, max] = sorted
             }
             lines.push(`${item.marker}${item.seriesName}: ${formatLatencyRange(min, max, traceDisplayUnit.value)}`)
             lines.push(`最小值: ${formatLatency(min, traceDisplayUnit.value)}`)

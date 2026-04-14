@@ -6,6 +6,7 @@ import com.evelin.loganalysis.logalert.model.AlertRecord;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -238,4 +239,19 @@ public interface AlertRecordRepository extends JpaRepository<AlertRecord, UUID> 
            nativeQuery = true)
     List<AlertRecord> findByStatusByProjectId(@Param("projectId") UUID projectId,
                                               @Param("status") AlertStatus status);
+
+    /**
+     * 删除 source_ids 中包含指定日志源ID的告警记录
+     */
+    @Modifying
+    @Query(value = """
+            DELETE FROM alert_records ar
+            WHERE ar.source_ids IS NOT NULL
+              AND EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(ar.source_ids) AS sid
+                    WHERE sid = CAST(:sourceId AS text)
+              )
+            """, nativeQuery = true)
+    int deleteBySourceIdInSourceIds(@Param("sourceId") UUID sourceId);
 }
