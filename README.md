@@ -319,6 +319,8 @@ loganalysis auth passwd
 
 - `--to vX.Y.Z|latest`：目标版本（默认 `latest`）
 - `--allow-major`：允许跨主版本升级（例如 `v1.x -> v2.x`）
+- `--auto-port`：兼容参数，行为同默认值（自动检测并避让端口冲突）
+- `--no-auto-port`：关闭升级过程中的自动端口避让
 
 示例：
 
@@ -331,6 +333,9 @@ loganalysis upgrade --to v0.4.0
 
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
+
+# 若你希望严格按固定端口升级（不自动避让）
+loganalysis upgrade --to v0.3.2 --no-auto-port
 ```
 
 说明：

@@ -368,7 +368,7 @@ func (a *runtimeApp) printHelp() {
 	fmt.Fprintln(a.stdout, "  loganalysis auth set-admin --username <name>")
 	fmt.Fprintln(a.stdout, "  loganalysis auth passwd")
 	fmt.Fprintln(a.stdout, "  loganalysis auth show")
-	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major]")
+	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major] [--auto-port] [--no-auto-port]")
 	fmt.Fprintln(a.stdout, "  loganalysis uninstall [--purge-data]")
 	fmt.Fprintln(a.stdout, "  loganalysis version")
 }
@@ -1090,6 +1090,8 @@ func (a *runtimeApp) cmdUpgrade(args []string) int {
 	fs.SetOutput(a.stderr)
 	to := fs.String("to", "latest", "target version tag")
 	allowMajor := fs.Bool("allow-major", false, "allow major version upgrade")
+	autoPort := fs.Bool("auto-port", true, "auto-resolve host port conflicts")
+	noAutoPort := fs.Bool("no-auto-port", false, "disable auto-resolve host port conflicts")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -1135,12 +1137,38 @@ func (a *runtimeApp) cmdUpgrade(args []string) int {
 		return 1
 	}
 
-	if err := a.applyStack(profile, target, a.cfg.Ports); err != nil {
+	enableAutoPort := *autoPort && !*noAutoPort
+	portsToUse := a.cfg.Ports
+	var portChanges []string
+	if enableAutoPort {
+		resolved, changes, err := autoResolveProfilePorts(profile, a.cfg.Ports, isPortAvailable)
+		if err != nil {
+			fmt.Fprintf(a.stderr, "auto-port failed: %v\n", err)
+			return 1
+		}
+		portsToUse = resolved
+		portChanges = changes
+		if len(portChanges) > 0 {
+			fmt.Fprintln(a.stdout, "auto-port remapped host ports:")
+			for _, item := range portChanges {
+				fmt.Fprintf(a.stdout, "- %s\n", item)
+			}
+		}
+	}
+
+	if err := a.applyStack(profile, target, portsToUse); err != nil {
 		fmt.Fprintf(a.stderr, "upgrade failed, trying rollback: %v\n", err)
 		if rbErr := a.rollback(old); rbErr != nil {
 			fmt.Fprintf(a.stderr, "rollback failed: %v\n", rbErr)
 		}
 		return 1
+	}
+
+	if enableAutoPort && len(portChanges) > 0 {
+		a.cfg.Ports = portsToUse
+		if err := a.saveConfig(); err != nil {
+			fmt.Fprintf(a.stderr, "warning: failed to persist remapped ports: %v\n", err)
+		}
 	}
 
 	a.state.PreviousVersion = old

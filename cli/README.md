@@ -32,7 +32,7 @@ go build ./cmd/loganalysis
 
 ## Auto port avoidance
 
-`loganalysis up` now enables auto-port avoidance by default and persists remapped host ports to `~/.loganalysis/config.json`.
+`loganalysis up` and `loganalysis upgrade` now enable auto-port avoidance by default and persist remapped host ports to `~/.loganalysis/config.json`.
 
 - `--auto-port`: compatibility flag, same behavior as default
 - `--no-auto-port`: disable automatic remap for this run
