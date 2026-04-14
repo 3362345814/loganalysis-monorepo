@@ -1,12 +1,12 @@
 {
-  "version": "v0.3.1",
+  "version": "v0.3.2",
   "releaseDate": "2026-04-14",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041401",
+    "buildNumber": "2026041402",
     "environment": "production"
   }, 
   "updateInfo": [
-    "日志链路追踪图表改为箱线图"
+    "添加了一些图表"
   ]
 }
