@@ -778,8 +778,13 @@ a {
   border-color: var(--border-primary) !important;
 }
 
-.el-table__row:hover > td {
-  background-color: rgba(38, 37, 30, 0.04) !important;
+.el-table__body tr.hover-row > td.el-table__cell {
+  background-color: var(--el-table-row-hover-bg-color) !important;
+}
+
+.el-table__body tr.hover-row > td.el-table-fixed-column--left,
+.el-table__body tr.hover-row > td.el-table-fixed-column--right {
+  background-color: inherit !important;
 }
 
 .el-table__body tr.current-row > td {
