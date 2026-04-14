@@ -163,12 +163,64 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const TRACE_DISTRIBUTION_DAYS = 30
 const RANGE_24H = '24h'
 const RANGE_30D = '30d'
+const TRACE_LOG_AXIS_MIN = 0.001
 const toNullableNumber = (value) => {
   if (value === null || value === undefined || value === '') {
     return null
   }
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
+}
+
+const normalizeTraceForLogAxis = (value) => {
+  const numeric = toNullableNumber(value)
+  if (numeric === null) {
+    return TRACE_LOG_AXIS_MIN
+  }
+  return numeric > TRACE_LOG_AXIS_MIN ? numeric : TRACE_LOG_AXIS_MIN
+}
+
+const formatTraceLogTick = (value) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return ''
+  }
+
+  if (numeric >= 1000) {
+    return numeric.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+  }
+  if (numeric >= 1) {
+    return numeric.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  }
+  return numeric.toLocaleString('zh-CN', { maximumFractionDigits: 3 })
+}
+
+const getConfinedTooltipPosition = (point, _params, dom, _rect, size) => {
+  const [mouseX = 0, mouseY = 0] = Array.isArray(point) ? point : [0, 0]
+  const [viewWidth = 0, viewHeight = 0] = size?.viewSize ?? [0, 0]
+  const fallbackWidth = dom?.offsetWidth ?? 0
+  const fallbackHeight = dom?.offsetHeight ?? 0
+  const [contentWidth = fallbackWidth, contentHeight = fallbackHeight] = size?.contentSize ?? [fallbackWidth, fallbackHeight]
+  const gap = 12
+
+  let x = mouseX + gap
+  let y = mouseY + gap
+
+  if (x + contentWidth > viewWidth - gap) {
+    x = mouseX - contentWidth - gap
+  }
+  if (x < gap) {
+    x = Math.max(gap, viewWidth - contentWidth - gap)
+  }
+
+  if (y + contentHeight > viewHeight - gap) {
+    y = mouseY - contentHeight - gap
+  }
+  if (y < gap) {
+    y = gap
+  }
+
+  return [x, y]
 }
 
 const formatLatency = (value, unit) => {
@@ -288,23 +340,30 @@ export const useHomeDashboard = () => {
     const numeric = toNullableNumber(item)
     return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
   }))
-  const traceBoxplotData = computed(() => traceLabels.value.map((_, index) => {
+  const traceBoxplotTooltipData = computed(() => traceLabels.value.map((_, index) => {
     const min = traceMinDisplay.value[index]
     const p25 = traceP25Display.value[index]
     const p50 = traceP50Display.value[index]
     const p75 = traceP75Display.value[index]
     const max = traceMaxDisplay.value[index]
     if (min === null || p25 === null || p50 === null || p75 === null || max === null) {
+      return null
+    }
+
+    return [min, p25, p50, p75, max]
+  }))
+  const traceBoxplotData = computed(() => traceLabels.value.map((_, index) => {
+    const raw = traceBoxplotTooltipData.value[index]
+    if (!Array.isArray(raw) || (traceSampleCount.value[index] ?? 0) <= 0) {
       return {
-        value: [0, 0, 0, 0, 0],
+        value: Array(5).fill(TRACE_LOG_AXIS_MIN),
         itemStyle: {
           opacity: 0,
           borderWidth: 0
         }
       }
     }
-
-    return [min, p25, p50, p75, max]
+    return raw.map((item) => normalizeTraceForLogAxis(item))
   }))
 
   const collectingStatuses = Object.freeze(new Set(['RUNNING', 'COLLECTING']))
@@ -701,6 +760,10 @@ export const useHomeDashboard = () => {
   const traceDistributionOption = computed(() => ({
     tooltip: {
       trigger: 'axis',
+      confine: true,
+      appendToBody: false,
+      position: getConfinedTooltipPosition,
+      extraCssText: 'max-width: 320px; white-space: normal; word-break: break-word; overflow-wrap: anywhere;',
       formatter: (params) => {
         const lines = []
         const axisLabel = params?.[0]?.axisValueLabel ?? ''
@@ -710,8 +773,7 @@ export const useHomeDashboard = () => {
 
         params?.forEach((item) => {
           if (item.seriesType === 'boxplot') {
-            const source = traceBoxplotData.value[item.dataIndex]
-            const box = Array.isArray(source) ? source : source?.value
+            const box = traceBoxplotTooltipData.value[item.dataIndex]
             let [min, q1, median, q3, max] = Array.isArray(box) ? box : []
             if ((traceSampleCount.value[item.dataIndex] ?? 0) <= 0) {
               return
@@ -749,9 +811,13 @@ export const useHomeDashboard = () => {
     },
     yAxis: [
       {
-        type: 'value',
+        type: 'log',
+        logBase: 10,
         name: traceDisplayUnit.value === 'ms' ? '毫秒' : '秒',
-        min: 0,
+        min: TRACE_LOG_AXIS_MIN,
+        axisLabel: {
+          formatter: (value) => formatTraceLogTick(value)
+        },
         splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
       },
       {
