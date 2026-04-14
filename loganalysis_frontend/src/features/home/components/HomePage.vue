@@ -45,18 +45,26 @@
         <div class="panel-controls">
           <el-select
             v-model="selectedProjectId"
+            class="project-select"
             placeholder="全部项目"
             clearable
             @change="handleProjectChange"
           >
             <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
           </el-select>
-          <el-select
+          <el-radio-group
             v-model="selectedTrendRange"
+            class="trend-range-toggle"
             @change="handleTrendRangeChange"
           >
-            <el-option v-for="item in trendRangeOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
+            <el-radio-button
+              v-for="item in trendRangeOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </el-radio-button>
+          </el-radio-group>
         </div>
       </header>
 
@@ -64,7 +72,7 @@
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>平均日志吞吐与带宽</h3>
-            <span class="level-hint">按所选范围展示（24小时为30分钟粒度）</span>
+            <span class="level-hint">按所选范围展示</span>
           </div>
           <div class="chart-container" v-loading="trafficLoading">
             <v-chart :option="trafficOption" autoresize />
@@ -74,7 +82,7 @@
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>异常率趋势</h3>
-            <span class="level-hint">WARN/ERROR/FATAL 占比（24小时为30分钟粒度）</span>
+            <span class="level-hint">WARN/ERROR/FATAL 占比</span>
           </div>
           <div class="chart-container" v-loading="anomalyLoading">
             <v-chart :option="anomalyOption" autoresize />
@@ -83,24 +91,50 @@
 
         <article class="chart-panel">
           <div class="chart-panel-top">
-            <h3>日志源健康度 Top 8</h3>
-            <span class="level-hint">综合异常率、时效、日志量</span>
+            <h3>{{ alertPanelMode === ALERT_PANEL_TREND ? '告警趋势' : '告警级别分布' }}</h3>
+            <div class="chart-top-controls">
+              <span class="level-hint">{{ alertPanelHint }}</span>
+              <el-radio-group v-model="alertPanelMode" class="chart-toggle" size="small">
+                <el-radio-button :value="ALERT_PANEL_TREND">趋势</el-radio-button>
+                <el-radio-button :value="ALERT_PANEL_LEVEL">级别</el-radio-button>
+              </el-radio-group>
+            </div>
+          </div>
+          <div class="chart-container" v-loading="alertPanelLoading">
+            <v-chart :option="alertPanelOption" :update-options="chartUpdateOptions" autoresize />
+          </div>
+        </article>
+
+        <article class="chart-panel">
+          <div class="chart-panel-top">
+            <h3>{{ sourcePanelMode === SOURCE_PANEL_HEALTH ? '日志源健康度 Top 8' : '日志源异常贡献 Top 8' }}</h3>
+            <div class="chart-top-controls">
+              <span class="level-hint">{{ sourcePanelHint }}</span>
+              <el-radio-group v-model="sourcePanelMode" class="chart-toggle" size="small">
+                <el-radio-button :value="SOURCE_PANEL_HEALTH">健康度</el-radio-button>
+                <el-radio-button :value="SOURCE_PANEL_ANOMALY">异常贡献</el-radio-button>
+              </el-radio-group>
+            </div>
           </div>
           <div class="chart-container" v-loading="healthLoading">
-            <v-chart :option="sourceHealthOption" autoresize />
+            <v-chart :option="sourcePanelOption" :update-options="chartUpdateOptions" autoresize />
+          </div>
+        </article>
+
+        <article class="chart-panel">
+          <div class="chart-panel-top">
+            <h3>日志源时效-质量散点图</h3>
+            <span class="level-hint">X轴时效延迟（秒），Y轴质量分，点大小为日志量</span>
+          </div>
+          <div class="chart-container chart-container-compact" v-loading="healthLoading">
+            <v-chart :option="sourceQualityScatterOption" autoresize />
           </div>
         </article>
 
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>链路追踪分布</h3>
-            <span class="level-hint">按所选范围分位（24小时为30分钟粒度）</span>
-          </div>
-          <div class="trace-intro-list">
-            <span class="trace-intro-item"><strong>须线</strong>：最小值 ~ 最大值</span>
-            <span class="trace-intro-item"><strong>箱体</strong>：展示链路耗时的核心分布区间（Q1~Q3）</span>
-            <span class="trace-intro-item"><strong>中位数</strong>：箱体中线表示 50% 分位耗时</span>
-            <span class="trace-intro-item"><strong>样本数</strong>：当天参与统计的 trace 条数</span>
+            <span class="level-hint">按所选范围分位</span>
           </div>
           <div class="chart-container" v-loading="traceLoading">
             <v-chart :option="traceDistributionOption" autoresize />
@@ -112,7 +146,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { ArrowRight, Bell, Collection, Document, Loading } from '@element-plus/icons-vue'
 import { useHomeDashboard } from '@/composables/useHomeDashboard'
 
@@ -128,13 +162,43 @@ const {
   trafficOption,
   anomalyLoading,
   anomalyOption,
+  alertTrendLoading,
+  alertTrendOption,
+  alertLevelLoading,
+  alertLevelDistributionOption,
   healthLoading,
   sourceHealthOption,
+  sourceAnomalyTopNOption,
+  sourceQualityScatterOption,
   traceLoading,
   traceDistributionOption,
   handleTrendRangeChange,
   handleProjectChange
 } = useHomeDashboard()
+
+const ALERT_PANEL_TREND = 'trend'
+const ALERT_PANEL_LEVEL = 'level'
+const SOURCE_PANEL_HEALTH = 'health'
+const SOURCE_PANEL_ANOMALY = 'anomaly'
+
+const alertPanelMode = shallowRef(ALERT_PANEL_TREND)
+const sourcePanelMode = shallowRef(SOURCE_PANEL_HEALTH)
+const chartUpdateOptions = Object.freeze({ notMerge: true })
+
+const alertPanelOption = computed(() => (
+  alertPanelMode.value === ALERT_PANEL_TREND ? alertTrendOption.value : alertLevelDistributionOption.value
+))
+const alertPanelLoading = computed(() => alertTrendLoading.value || alertLevelLoading.value)
+const alertPanelHint = computed(() => (
+  alertPanelMode.value === ALERT_PANEL_TREND ? '按所选范围（日粒度）' : '按告警级别统计'
+))
+
+const sourcePanelOption = computed(() => (
+  sourcePanelMode.value === SOURCE_PANEL_HEALTH ? sourceHealthOption.value : sourceAnomalyTopNOption.value
+))
+const sourcePanelHint = computed(() => (
+  sourcePanelMode.value === SOURCE_PANEL_HEALTH ? '综合异常率、时效、日志量' : '按异常率降序（%）'
+))
 
 const metricCards = computed(() => [
   {

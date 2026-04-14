@@ -5,7 +5,21 @@ import { alertStatisticsApi } from '@/api/alertApi'
 
 const SOURCE_COLORS = Object.freeze(['#1f8a65', '#c96442', '#3f6fb0', '#b87a2e', '#6f58a8', '#2f7d96'])
 const MAX_HEALTH_SOURCES = 8
+const MAX_ANOMALY_TOPN_SOURCES = 8
 const ABNORMAL_LEVELS = Object.freeze(['WARN', 'WARNING', 'ERROR', 'FATAL'])
+const ALERT_LEVEL_ORDER = Object.freeze(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'])
+const ALERT_LEVEL_LABELS = Object.freeze({
+  CRITICAL: 'CRITICAL',
+  HIGH: 'HIGH',
+  MEDIUM: 'MEDIUM',
+  LOW: 'LOW'
+})
+const ALERT_LEVEL_COLORS = Object.freeze({
+  CRITICAL: '#b53333',
+  HIGH: '#c96442',
+  MEDIUM: '#b87a2e',
+  LOW: '#3f6fb0'
+})
 
 const createMiniAreaGradient = () => {
   const graphic = globalThis.echarts?.graphic
@@ -207,6 +221,8 @@ export const useHomeDashboard = () => {
 
   const trafficLoading = shallowRef(false)
   const anomalyLoading = shallowRef(false)
+  const alertTrendLoading = shallowRef(false)
+  const alertLevelLoading = shallowRef(false)
   const healthLoading = shallowRef(false)
   const traceLoading = shallowRef(false)
 
@@ -217,8 +233,13 @@ export const useHomeDashboard = () => {
   const anomalyLabels = shallowRef([])
   const anomalyCounts = shallowRef([])
   const anomalyRates = shallowRef([])
+  const alertTrendLabels = shallowRef([])
+  const alertTrendCounts = shallowRef([])
+  const alertLevelRows = shallowRef([])
 
   const healthRows = shallowRef([])
+  const sourceAnomalyTopNRows = shallowRef([])
+  const sourceQualityScatterRows = shallowRef([])
 
   const traceLabels = shallowRef([])
   const traceMin = shallowRef([])
@@ -446,6 +467,90 @@ export const useHomeDashboard = () => {
     ]
   }))
 
+  const alertTrendOption = computed(() => ({
+    tooltip: { trigger: 'axis' },
+    grid: { left: '6%', right: '4%', top: '12%', bottom: '6%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.24)' } },
+      data: alertTrendLabels.value
+    },
+    yAxis: {
+      type: 'value',
+      name: '告警数',
+      nameLocation: 'middle',
+      nameGap: 44,
+      minInterval: 1,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    series: [
+      {
+        name: '告警新增',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 2.4, color: '#b53333' },
+        itemStyle: { color: '#b53333' },
+        areaStyle: { color: 'rgba(181, 51, 51, 0.12)' },
+        data: alertTrendCounts.value
+      }
+    ]
+  }))
+
+  const alertLevelDistributionOption = computed(() => {
+    const nonZeroRows = alertLevelRows.value.filter((item) => Number(item.count ?? 0) > 0)
+
+    return {
+      tooltip: {
+        trigger: 'item',
+        formatter: (params) => {
+          const percent = Number(params.percent ?? 0).toFixed(1)
+          return `${params.marker}${params.name}: ${Number(params.value ?? 0).toLocaleString('zh-CN')} (${percent}%)`
+        }
+      },
+      legend: {
+        show: nonZeroRows.length > 0,
+        orient: 'vertical',
+        right: '4%',
+        top: 'middle',
+        textStyle: { color: '#5d6d89' }
+      },
+      series: [
+        {
+          name: '级别分布',
+          type: 'pie',
+          radius: ['48%', '72%'],
+          center: ['38%', '50%'],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            borderRadius: 4
+          },
+          label: {
+            show: true,
+            formatter: '{b}: {d}%',
+            color: '#5d6d89',
+            fontSize: 12
+          },
+          labelLine: {
+            length: 10,
+            length2: 8
+          },
+          data: nonZeroRows.map((item) => ({
+            name: item.label,
+            value: item.count,
+            itemStyle: {
+              color: item.color
+            }
+          }))
+        }
+      ]
+    }
+  })
+
   const sourceHealthOption = computed(() => ({
     tooltip: {
       trigger: 'axis',
@@ -464,7 +569,7 @@ export const useHomeDashboard = () => {
         ].join('<br/>')
       }
     },
-    grid: { left: '4%', right: '4%', top: '10%', bottom: '5%', containLabel: true },
+    grid: { left: '6%', right: '12%', top: '10%', bottom: '5%', containLabel: true },
     xAxis: {
       type: 'value',
       min: 0,
@@ -486,6 +591,107 @@ export const useHomeDashboard = () => {
           itemStyle: {
             color: item.score >= 80 ? '#1f8a65' : item.score >= 60 ? '#b87a2e' : '#b53333',
             borderRadius: [0, 6, 6, 0]
+          }
+        }))
+      }
+    ]
+  }))
+
+  const sourceAnomalyTopNOption = computed(() => ({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const point = params?.[0]
+        if (!point) return ''
+        const row = sourceAnomalyTopNRows.value[point.dataIndex]
+        if (!row) return ''
+        return [
+          `<strong>${row.name}</strong>`,
+          `异常率: ${(row.abnormalRate * 100).toFixed(2)}%`,
+          `异常条数: ${row.abnormalTotal.toLocaleString('zh-CN')}`,
+          `总日志: ${row.total.toLocaleString('zh-CN')}`
+        ].join('<br/>')
+      }
+    },
+    grid: { left: '6%', right: '12%', top: '10%', bottom: '5%', containLabel: true },
+    xAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    yAxis: {
+      type: 'category',
+      inverse: true,
+      axisTick: { show: false },
+      data: sourceAnomalyTopNRows.value.map((item) => item.name)
+    },
+    series: [
+      {
+        name: '异常率',
+        type: 'bar',
+        barWidth: 14,
+        label: {
+          show: true,
+          position: 'right',
+          color: '#5d6d89',
+          formatter: '{c}%'
+        },
+        data: sourceAnomalyTopNRows.value.map((item) => ({
+          value: Number((item.abnormalRate * 100).toFixed(2)),
+          itemStyle: {
+            color: '#c96442',
+            borderRadius: [0, 6, 6, 0]
+          }
+        }))
+      }
+    ]
+  }))
+
+  const sourceQualityScatterOption = computed(() => ({
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        const row = sourceQualityScatterRows.value[params.dataIndex]
+        if (!row) return ''
+        return [
+          `<strong>${row.name}</strong>`,
+          `时效延迟: ${row.freshnessSeconds} 秒`,
+          `质量分: ${row.qualityScore.toFixed(1)}`,
+          `异常率: ${(row.abnormalRate * 100).toFixed(2)}%`,
+          `日志总量: ${row.total.toLocaleString('zh-CN')}`
+        ].join('<br/>')
+      }
+    },
+    grid: { left: '6%', right: '6%', top: '12%', bottom: '14%', containLabel: true },
+    xAxis: {
+      type: 'value',
+      name: '时效延迟(秒)',
+      nameLocation: 'middle',
+      nameGap: 28,
+      min: 0,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    yAxis: {
+      type: 'value',
+      name: '质量分',
+      nameLocation: 'middle',
+      nameGap: 44,
+      min: 0,
+      max: 100,
+      splitLine: { lineStyle: { color: 'rgba(54, 80, 120, 0.10)' } }
+    },
+    series: [
+      {
+        type: 'scatter',
+        data: sourceQualityScatterRows.value.map((item) => ({
+          value: [item.freshnessSeconds, Number(item.qualityScore.toFixed(1)), item.total],
+          name: item.name,
+          symbolSize: clamp(Math.sqrt(item.total + 1) * 1.8, 8, 26),
+          itemStyle: {
+            color: item.qualityScore >= 80 ? '#1f8a65' : item.qualityScore >= 60 ? '#b87a2e' : '#b53333',
+            opacity: 0.82
           }
         }))
       }
@@ -736,6 +942,8 @@ export const useHomeDashboard = () => {
         anomalyCounts.value = window.keys.map(() => 0)
         anomalyRates.value = window.keys.map(() => 0)
         healthRows.value = []
+        sourceAnomalyTopNRows.value = []
+        sourceQualityScatterRows.value = []
         return
       }
 
@@ -797,6 +1005,36 @@ export const useHomeDashboard = () => {
         })
         .sort((a, b) => b.score - a.score)
         .slice(0, MAX_HEALTH_SOURCES)
+
+      sourceAnomalyTopNRows.value = sourceMetrics
+        .map((source) => ({
+          name: source.name,
+          abnormalTotal: source.abnormalTotal,
+          total: source.total,
+          abnormalRate: source.total > 0 ? source.abnormalTotal / source.total : 0
+        }))
+        .sort((a, b) => {
+          if (b.abnormalRate !== a.abnormalRate) {
+            return b.abnormalRate - a.abnormalRate
+          }
+          return b.abnormalTotal - a.abnormalTotal
+        })
+        .slice(0, MAX_ANOMALY_TOPN_SOURCES)
+
+      sourceQualityScatterRows.value = sourceMetrics.map((source) => {
+        const abnormalRate = source.total > 0 ? source.abnormalTotal / source.total : 0
+        const freshnessSeconds = source.latestTime
+          ? Math.max(0, dayjs().diff(parseUtcDateTimeStringToLocal(source.latestTime), 'second'))
+          : 24 * 60 * 60
+        const qualityScore = clamp(100 - abnormalRate * 100, 0, 100)
+        return {
+          name: source.name,
+          freshnessSeconds,
+          qualityScore,
+          abnormalRate,
+          total: source.total
+        }
+      })
     } catch (error) {
       console.error('加载日志运营图表失败:', error)
       trafficLogs.value = []
@@ -804,10 +1042,64 @@ export const useHomeDashboard = () => {
       anomalyCounts.value = []
       anomalyRates.value = []
       healthRows.value = []
+      sourceAnomalyTopNRows.value = []
+      sourceQualityScatterRows.value = []
     } finally {
       trafficLoading.value = false
       anomalyLoading.value = false
       healthLoading.value = false
+    }
+  }
+
+  const loadAlertTrend = async () => {
+    alertTrendLoading.value = true
+
+    try {
+      const days = selectedTrendRange.value === RANGE_30D ? 30 : 7
+      const params = { days }
+      if (selectedProjectId.value) {
+        params.projectId = selectedProjectId.value
+      }
+
+      const res = await alertStatisticsApi.getTrend(params)
+      const rows = Array.isArray(res.data) ? res.data : []
+      alertTrendLabels.value = rows.map((item) => dayjs(item.date).format('MM-DD'))
+      alertTrendCounts.value = rows.map((item) => Number(item.count ?? 0))
+    } catch (error) {
+      console.error('加载告警趋势失败:', error)
+      alertTrendLabels.value = []
+      alertTrendCounts.value = []
+    } finally {
+      alertTrendLoading.value = false
+    }
+  }
+
+  const loadAlertLevelDistribution = async () => {
+    alertLevelLoading.value = true
+
+    try {
+      const params = selectedProjectId.value ? { projectId: selectedProjectId.value } : {}
+      const res = await alertStatisticsApi.getLevelDistribution(params)
+      const rows = Array.isArray(res.data) ? res.data : []
+      const map = new Map(
+        rows.map((item) => [String(item.level ?? '').toUpperCase(), Number(item.count ?? 0)])
+      )
+      alertLevelRows.value = ALERT_LEVEL_ORDER.map((level) => ({
+        level,
+        label: ALERT_LEVEL_LABELS[level],
+        count: map.get(level) ?? 0,
+        color: ALERT_LEVEL_COLORS[level]
+      }))
+    } catch (error) {
+      console.error('加载告警级别分布失败:', error)
+      alertLevelRows.value = ALERT_LEVEL_ORDER.map((level) => ({
+        level,
+        label: ALERT_LEVEL_LABELS[level],
+        count: 0,
+        color: ALERT_LEVEL_COLORS[level]
+      }))
+    } finally {
+      alertLevelLoading.value = false
     }
   }
 
@@ -881,7 +1173,13 @@ export const useHomeDashboard = () => {
 
   const refreshDashboard = async () => {
     await loadStats()
-    await Promise.all([loadMiniTrend(), loadLogOperationalCharts(), loadTraceDistribution()])
+    await Promise.all([
+      loadMiniTrend(),
+      loadLogOperationalCharts(),
+      loadAlertTrend(),
+      loadAlertLevelDistribution(),
+      loadTraceDistribution()
+    ])
   }
 
   const loadProjects = async () => {
@@ -899,7 +1197,7 @@ export const useHomeDashboard = () => {
   }
 
   const handleTrendRangeChange = () => {
-    void Promise.all([loadLogOperationalCharts(), loadTraceDistribution()])
+    void Promise.all([loadLogOperationalCharts(), loadAlertTrend(), loadAlertLevelDistribution(), loadTraceDistribution()])
   }
 
   onMounted(async () => {
@@ -918,8 +1216,14 @@ export const useHomeDashboard = () => {
     trafficOption,
     anomalyLoading,
     anomalyOption,
+    alertTrendLoading,
+    alertTrendOption,
+    alertLevelLoading,
+    alertLevelDistributionOption,
     healthLoading,
     sourceHealthOption,
+    sourceAnomalyTopNOption,
+    sourceQualityScatterOption,
     traceLoading,
     traceDistributionOption,
     handleTrendRangeChange,
