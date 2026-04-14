@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import router from '@/router'
+import { clearAccessToken, getAccessToken } from '@/features/auth/token'
 
 // 创建 axios 实例
 const service = axios.create({
@@ -33,7 +35,11 @@ const service = axios.create({
 // 请求拦截器
 service.interceptors.request.use(
   config => {
-    // 可以在这里添加 token 等认证信息
+    const token = getAccessToken()
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   error => {
@@ -57,12 +63,29 @@ service.interceptors.response.use(
   },
   error => {
     console.error('响应错误:', error)
-    ElMessage.error(error.message || '网络错误')
+    const status = error?.response?.status
+    if (status === 401) {
+      clearAccessToken()
+      const currentPath = router.currentRoute.value?.fullPath || '/'
+      if (currentPath !== '/login') {
+        router.replace({
+          path: '/login',
+          query: { redirect: currentPath }
+        })
+      }
+    }
+    const message = error?.response?.data?.message || error.message || '网络错误'
+    ElMessage.error(message)
     return Promise.reject(error)
   }
 )
 
 export default service
+
+export const authApi = {
+  login: (data) => service.post('/auth/login', data),
+  me: () => service.get('/auth/me')
+}
 
 // ==================== 日志采集 API ====================
 

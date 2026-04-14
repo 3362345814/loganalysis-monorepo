@@ -11,6 +11,8 @@ import App from './App.vue'
 import router from './router'
 import Skeleton from './components/Skeleton.vue'
 import Loading from './components/Loading.vue'
+import { authApi } from './api'
+import { clearAccessToken, getAccessToken } from './features/auth/token'
 
 const app = createApp(App)
 
@@ -28,4 +30,23 @@ app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
 
-app.mount('#app')
+const bootstrap = async () => {
+  if (getAccessToken()) {
+    try {
+      await authApi.me()
+    } catch (_) {
+      clearAccessToken()
+      const currentPath = router.currentRoute.value?.fullPath || '/'
+      if (currentPath !== '/login') {
+        await router.replace({
+          path: '/login',
+          query: { redirect: currentPath }
+        })
+      }
+    }
+  }
+
+  app.mount('#app')
+}
+
+bootstrap()

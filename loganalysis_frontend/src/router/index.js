@@ -1,6 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { getAccessToken } from '@/features/auth/token'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login/index.vue'),
+    meta: { title: '登录', public: true, hideShell: true, transition: 'route-fade' }
+  },
   {
     path: '/',
     name: 'Home',
@@ -67,6 +74,25 @@ router.beforeEach((to, from, next) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - 日志分析系统`
   }
+
+  if (to.meta.public) {
+    if (to.path === '/login' && getAccessToken()) {
+      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
+      next(redirect.startsWith('/') ? redirect : '/')
+      return
+    }
+    next()
+    return
+  }
+
+  if (!getAccessToken()) {
+    next({
+      path: '/login',
+      query: { redirect: to.fullPath }
+    })
+    return
+  }
+
   next()
 })
 

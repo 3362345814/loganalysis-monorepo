@@ -1,5 +1,5 @@
 <template>
-  <el-container class="app-shell">
+  <el-container v-if="showShell" class="app-shell">
     <el-aside :width="asideWidth" class="app-aside" :class="{ 'is-compact': isCompact }">
       <div class="logo">
         <div class="logo-mark">
@@ -51,6 +51,16 @@
       </el-main>
     </el-container>
   </el-container>
+
+  <router-view v-else v-slot="{ Component, route }">
+    <transition
+      :name="route.meta.transition || 'route-fade'"
+      mode="out-in"
+    >
+      <component v-if="Component" :is="Component" :key="route.path" />
+      <div v-else :key="`${route.path}-placeholder`"></div>
+    </transition>
+  </router-view>
 </template>
 
 <script setup>
@@ -138,6 +148,7 @@ const currentSection = computed(() => {
 })
 
 const currentTitle = computed(() => route.meta?.title ?? '首页')
+const showShell = computed(() => !route.meta?.hideShell)
 </script>
 
 <style scoped>

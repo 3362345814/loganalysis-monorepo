@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bufio"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -16,12 +19,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	profileFull    = "full"
-	profileMinimal = "minimal"
-	profileDB      = "db"
+	profileFull = "full"
 )
 
 var semverMajorRe = regexp.MustCompile(`^v?(\d+)(?:\.|$)`)
@@ -33,26 +36,26 @@ type BuildInfo struct {
 }
 
 type Paths struct {
-	Root         string
-	RuntimeDir   string
-	ConfigPath   string
-	StatePath    string
+	Root          string
+	RuntimeDir    string
+	ConfigPath    string
+	StatePath     string
 	ActiveCompose string
 	BackupCompose string
 }
 
 type PortsConfig struct {
-	Frontend            int `json:"frontend"`
-	Backend             int `json:"backend"`
-	Postgres            int `json:"postgres"`
-	Redis               int `json:"redis"`
-	RabbitMQ            int `json:"rabbitmq"`
-	RabbitMQManagement  int `json:"rabbitmq_management"`
-	Elasticsearch       int `json:"elasticsearch"`
+	Frontend               int `json:"frontend"`
+	Backend                int `json:"backend"`
+	Postgres               int `json:"postgres"`
+	Redis                  int `json:"redis"`
+	RabbitMQ               int `json:"rabbitmq"`
+	RabbitMQManagement     int `json:"rabbitmq_management"`
+	Elasticsearch          int `json:"elasticsearch"`
 	ElasticsearchTransport int `json:"elasticsearch_transport"`
-	Kibana              int `json:"kibana"`
-	MinioAPI            int `json:"minio_api"`
-	MinioConsole        int `json:"minio_console"`
+	Kibana                 int `json:"kibana"`
+	MinioAPI               int `json:"minio_api"`
+	MinioConsole           int `json:"minio_console"`
 }
 
 type Config struct {
@@ -65,23 +68,26 @@ type Config struct {
 	ReleaseRepo    string      `json:"release_repo"`
 	DataDir        string      `json:"data_dir"`
 	Ports          PortsConfig `json:"ports"`
+	Auth           AuthConfig  `json:"auth"`
 }
 
 type State struct {
-	CurrentProfile string `json:"current_profile"`
-	CurrentVersion string `json:"current_version"`
+	CurrentProfile  string `json:"current_profile"`
+	CurrentVersion  string `json:"current_version"`
 	PreviousVersion string `json:"previous_version"`
-	ComposeFile    string `json:"compose_file"`
-	UpdatedAt      string `json:"updated_at"`
+	ComposeFile     string `json:"compose_file"`
+	UpdatedAt       string `json:"updated_at"`
 }
 
 type runtimeApp struct {
-	build  BuildInfo
-	paths  Paths
-	cfg    Config
-	state  State
-	stdout io.Writer
-	stderr io.Writer
+	build                  BuildInfo
+	paths                  Paths
+	cfg                    Config
+	state                  State
+	stdout                 io.Writer
+	stderr                 io.Writer
+	migratedDefaultProfile bool
+	migratedStateProfile   bool
 }
 
 func Execute(args []string, build BuildInfo, stdout, stderr io.Writer) int {
@@ -115,6 +121,8 @@ func Execute(args []string, build BuildInfo, stdout, stderr io.Writer) int {
 		return app.cmdDoctor(subArgs)
 	case "config":
 		return app.cmdConfig(subArgs)
+	case "auth":
+		return app.cmdAuth(subArgs)
 	case "upgrade":
 		return app.cmdUpgrade(subArgs)
 	case "uninstall":
@@ -150,7 +158,7 @@ func newRuntime(build BuildInfo, stdout, stderr io.Writer) (*runtimeApp, error) 
 		return nil, fmt.Errorf("create runtime dir: %w", err)
 	}
 
-	cfg, err := loadConfig(paths)
+	cfg, migratedDefaultProfile, err := loadConfig(paths)
 	if err != nil {
 		return nil, err
 	}
@@ -158,19 +166,35 @@ func newRuntime(build BuildInfo, stdout, stderr io.Writer) (*runtimeApp, error) 
 	if err != nil {
 		return nil, err
 	}
+	migratedStateProfile := false
+	if state.CurrentProfile != "" && state.CurrentProfile != profileFull {
+		state.CurrentProfile = profileFull
+		migratedStateProfile = true
+	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
-	return &runtimeApp{
-		build:  build,
-		paths:  paths,
-		cfg:    cfg,
-		state:  state,
-		stdout: stdout,
-		stderr: stderr,
-	}, nil
+	app := &runtimeApp{
+		build:                  build,
+		paths:                  paths,
+		cfg:                    cfg,
+		state:                  state,
+		stdout:                 stdout,
+		stderr:                 stderr,
+		migratedDefaultProfile: migratedDefaultProfile,
+		migratedStateProfile:   migratedStateProfile,
+	}
+	if migratedStateProfile {
+		if err := app.saveState(); err != nil {
+			return nil, err
+		}
+	}
+	if migratedDefaultProfile || migratedStateProfile {
+		fmt.Fprintln(stdout, "migrated legacy profile setting to full")
+	}
+	return app, nil
 }
 
 func defaultConfig(paths Paths) Config {
@@ -181,18 +205,22 @@ func defaultConfig(paths Paths) Config {
 		ImageRegistry:  "ghcr.io/3362345814",
 		ReleaseRepo:    "3362345814/loganalysis-monorepo",
 		DataDir:        filepath.Join(paths.Root, "data"),
+		Auth: AuthConfig{
+			Enabled:     true,
+			JwtTtlHours: 24,
+		},
 		Ports: PortsConfig{
-			Frontend:           3000,
-			Backend:            8080,
-			Postgres:           5432,
-			Redis:              6379,
-			RabbitMQ:           5672,
-			RabbitMQManagement: 15672,
-			Elasticsearch:      9200,
+			Frontend:               3000,
+			Backend:                8080,
+			Postgres:               5432,
+			Redis:                  6379,
+			RabbitMQ:               5672,
+			RabbitMQManagement:     15672,
+			Elasticsearch:          9200,
 			ElasticsearchTransport: 9300,
-			Kibana:             5601,
-			MinioAPI:           9000,
-			MinioConsole:       9001,
+			Kibana:                 5601,
+			MinioAPI:               9000,
+			MinioConsole:           9001,
 		},
 	}
 }
@@ -203,6 +231,9 @@ func (c *Config) applyDefaults(def Config) {
 	}
 	if c.DefaultProfile == "" {
 		c.DefaultProfile = def.DefaultProfile
+	}
+	if c.DefaultProfile != profileFull {
+		c.DefaultProfile = profileFull
 	}
 	if c.DefaultVersion == "" {
 		c.DefaultVersion = def.DefaultVersion
@@ -249,32 +280,40 @@ func (c *Config) applyDefaults(def Config) {
 	if c.Ports.MinioConsole == 0 {
 		c.Ports.MinioConsole = def.Ports.MinioConsole
 	}
+	if !c.Auth.Enabled && c.Auth.AdminUsername == "" && c.Auth.AdminPasswordHash == "" && c.Auth.JwtSecret == "" {
+		c.Auth.Enabled = def.Auth.Enabled
+	}
+	if c.Auth.JwtTtlHours <= 0 {
+		c.Auth.JwtTtlHours = def.Auth.JwtTtlHours
+	}
 }
 
-func loadConfig(paths Paths) (Config, error) {
+func loadConfig(paths Paths) (Config, bool, error) {
 	def := defaultConfig(paths)
 
 	buf, err := os.ReadFile(paths.ConfigPath)
 	if errors.Is(err, os.ErrNotExist) {
 		if err := saveJSON(paths.ConfigPath, def); err != nil {
-			return Config{}, err
+			return Config{}, false, err
 		}
-		return def, nil
+		return def, false, nil
 	}
 	if err != nil {
-		return Config{}, fmt.Errorf("read config: %w", err)
+		return Config{}, false, fmt.Errorf("read config: %w", err)
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(buf, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config: %w", err)
+		return Config{}, false, fmt.Errorf("parse config: %w", err)
 	}
+	originalProfile := cfg.DefaultProfile
 
 	cfg.applyDefaults(def)
 	if err := saveJSON(paths.ConfigPath, cfg); err != nil {
-		return Config{}, err
+		return Config{}, false, err
 	}
-	return cfg, nil
+	migratedDefaultProfile := originalProfile != "" && originalProfile != profileFull
+	return cfg, migratedDefaultProfile, nil
 }
 
 func loadState(path string) (State, error) {
@@ -318,7 +357,7 @@ func (a *runtimeApp) printHelp() {
 	fmt.Fprintln(a.stdout, "loganalysis - one-click stack manager")
 	fmt.Fprintln(a.stdout, "")
 	fmt.Fprintln(a.stdout, "Usage:")
-	fmt.Fprintln(a.stdout, "  loganalysis up [--profile db|minimal|full] [--version vX.Y.Z] [--auto-port]")
+	fmt.Fprintln(a.stdout, "  loganalysis up [--version vX.Y.Z] [--auto-port] [--no-auto-port]")
 	fmt.Fprintln(a.stdout, "  loganalysis down [--remove-volumes]")
 	fmt.Fprintln(a.stdout, "  loganalysis status")
 	fmt.Fprintln(a.stdout, "  loganalysis logs [service] [-f] [--tail N]")
@@ -326,6 +365,9 @@ func (a *runtimeApp) printHelp() {
 	fmt.Fprintln(a.stdout, "  loganalysis config set <key> <value>")
 	fmt.Fprintln(a.stdout, "  loganalysis config get <key>")
 	fmt.Fprintln(a.stdout, "  loganalysis config list")
+	fmt.Fprintln(a.stdout, "  loganalysis auth set-admin --username <name>")
+	fmt.Fprintln(a.stdout, "  loganalysis auth passwd")
+	fmt.Fprintln(a.stdout, "  loganalysis auth show")
 	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major]")
 	fmt.Fprintln(a.stdout, "  loganalysis uninstall [--purge-data]")
 	fmt.Fprintln(a.stdout, "  loganalysis version")
@@ -338,26 +380,20 @@ func (a *runtimeApp) printVersion() {
 }
 
 func validateProfile(profile string) error {
-	switch profile {
-	case profileFull, profileMinimal, profileDB:
+	if profile == profileFull {
 		return nil
-	default:
-		return fmt.Errorf("invalid profile %q, expected one of: %s, %s, %s", profile, profileDB, profileMinimal, profileFull)
 	}
+	return fmt.Errorf("invalid profile %q, expected only: %s", profile, profileFull)
 }
 
 func (a *runtimeApp) cmdUp(args []string) int {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
-	profile := fs.String("profile", a.cfg.DefaultProfile, "stack profile: db|minimal|full")
 	version := fs.String("version", a.cfg.DefaultVersion, "image version tag")
-	autoPort := fs.Bool("auto-port", false, "auto-resolve host port conflicts")
+	autoPort := fs.Bool("auto-port", true, "auto-resolve host port conflicts")
+	noAutoPort := fs.Bool("no-auto-port", false, "disable auto-resolve host port conflicts")
 
 	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	if err := validateProfile(*profile); err != nil {
-		fmt.Fprintln(a.stderr, err)
 		return 2
 	}
 
@@ -365,11 +401,16 @@ func (a *runtimeApp) cmdUp(args []string) int {
 		fmt.Fprintf(a.stderr, "docker precheck failed: %v\n", err)
 		return 1
 	}
+	if err := a.ensureAuthConfigForUp(); err != nil {
+		fmt.Fprintln(a.stderr, err)
+		return 1
+	}
+	enableAutoPort := *autoPort && !*noAutoPort
 
 	portsToUse := a.cfg.Ports
 	var portChanges []string
-	if *autoPort {
-		resolved, changes, err := autoResolveProfilePorts(*profile, a.cfg.Ports, isPortAvailable)
+	if enableAutoPort {
+		resolved, changes, err := autoResolveProfilePorts(profileFull, a.cfg.Ports, isPortAvailable)
 		if err != nil {
 			fmt.Fprintf(a.stderr, "auto-port failed: %v\n", err)
 			return 1
@@ -384,12 +425,12 @@ func (a *runtimeApp) cmdUp(args []string) int {
 		}
 	}
 
-	if err := a.applyStack(*profile, *version, portsToUse); err != nil {
+	if err := a.applyStack(profileFull, *version, portsToUse); err != nil {
 		fmt.Fprintf(a.stderr, "failed to start stack: %v\n", err)
 		return 1
 	}
 
-	if *autoPort && len(portChanges) > 0 {
+	if enableAutoPort && len(portChanges) > 0 {
 		a.cfg.Ports = portsToUse
 		if err := a.saveConfig(); err != nil {
 			fmt.Fprintf(a.stderr, "warning: failed to persist remapped ports: %v\n", err)
@@ -397,7 +438,7 @@ func (a *runtimeApp) cmdUp(args []string) int {
 	}
 
 	a.state.PreviousVersion = a.state.CurrentVersion
-	a.state.CurrentProfile = *profile
+	a.state.CurrentProfile = profileFull
 	a.state.CurrentVersion = *version
 	a.state.ComposeFile = a.paths.ActiveCompose
 	a.state.UpdatedAt = time.Now().Format(time.RFC3339)
@@ -405,7 +446,7 @@ func (a *runtimeApp) cmdUp(args []string) int {
 		fmt.Fprintf(a.stderr, "warning: failed to save state: %v\n", err)
 	}
 
-	fmt.Fprintf(a.stdout, "stack started with profile=%s version=%s\n", *profile, *version)
+	fmt.Fprintf(a.stdout, "stack started with profile=%s version=%s\n", profileFull, *version)
 	return 0
 }
 
@@ -628,38 +669,22 @@ func autoResolveProfilePorts(profile string, ports PortsConfig, available func(i
 }
 
 func profilePortSlots(profile string, ports *PortsConfig) ([]portSlot, error) {
-	switch profile {
-	case profileDB:
-		return []portSlot{
-			{name: "postgres", value: &ports.Postgres},
-			{name: "redis", value: &ports.Redis},
-		}, nil
-	case profileMinimal:
-		return []portSlot{
-			{name: "frontend", value: &ports.Frontend},
-			{name: "backend", value: &ports.Backend},
-			{name: "postgres", value: &ports.Postgres},
-			{name: "redis", value: &ports.Redis},
-			{name: "rabbitmq", value: &ports.RabbitMQ},
-			{name: "rabbitmq_management", value: &ports.RabbitMQManagement},
-		}, nil
-	case profileFull:
-		return []portSlot{
-			{name: "frontend", value: &ports.Frontend},
-			{name: "backend", value: &ports.Backend},
-			{name: "postgres", value: &ports.Postgres},
-			{name: "redis", value: &ports.Redis},
-			{name: "rabbitmq", value: &ports.RabbitMQ},
-			{name: "rabbitmq_management", value: &ports.RabbitMQManagement},
-			{name: "elasticsearch", value: &ports.Elasticsearch},
-			{name: "elasticsearch_transport", value: &ports.ElasticsearchTransport},
-			{name: "kibana", value: &ports.Kibana},
-			{name: "minio_api", value: &ports.MinioAPI},
-			{name: "minio_console", value: &ports.MinioConsole},
-		}, nil
-	default:
+	if profile != profileFull {
 		return nil, fmt.Errorf("invalid profile: %s", profile)
 	}
+	return []portSlot{
+		{name: "frontend", value: &ports.Frontend},
+		{name: "backend", value: &ports.Backend},
+		{name: "postgres", value: &ports.Postgres},
+		{name: "redis", value: &ports.Redis},
+		{name: "rabbitmq", value: &ports.RabbitMQ},
+		{name: "rabbitmq_management", value: &ports.RabbitMQManagement},
+		{name: "elasticsearch", value: &ports.Elasticsearch},
+		{name: "elasticsearch_transport", value: &ports.ElasticsearchTransport},
+		{name: "kibana", value: &ports.Kibana},
+		{name: "minio_api", value: &ports.MinioAPI},
+		{name: "minio_console", value: &ports.MinioConsole},
+	}, nil
 }
 
 func nextAvailablePort(start int, occupied map[int]string, available func(int) bool) (int, error) {
@@ -693,17 +718,17 @@ func isPortAvailable(port int) bool {
 
 func (a *runtimeApp) checkPortAvailability() []portFailure {
 	ports := map[string]int{
-		"frontend":            a.cfg.Ports.Frontend,
-		"backend":             a.cfg.Ports.Backend,
-		"postgres":            a.cfg.Ports.Postgres,
-		"redis":               a.cfg.Ports.Redis,
-		"rabbitmq":            a.cfg.Ports.RabbitMQ,
-		"rabbitmq_management": a.cfg.Ports.RabbitMQManagement,
-		"elasticsearch":       a.cfg.Ports.Elasticsearch,
+		"frontend":                a.cfg.Ports.Frontend,
+		"backend":                 a.cfg.Ports.Backend,
+		"postgres":                a.cfg.Ports.Postgres,
+		"redis":                   a.cfg.Ports.Redis,
+		"rabbitmq":                a.cfg.Ports.RabbitMQ,
+		"rabbitmq_management":     a.cfg.Ports.RabbitMQManagement,
+		"elasticsearch":           a.cfg.Ports.Elasticsearch,
 		"elasticsearch_transport": a.cfg.Ports.ElasticsearchTransport,
-		"kibana":              a.cfg.Ports.Kibana,
-		"minio_api":           a.cfg.Ports.MinioAPI,
-		"minio_console":       a.cfg.Ports.MinioConsole,
+		"kibana":                  a.cfg.Ports.Kibana,
+		"minio_api":               a.cfg.Ports.MinioAPI,
+		"minio_console":           a.cfg.Ports.MinioConsole,
 	}
 	failures := make([]portFailure, 0)
 	for name, p := range ports {
@@ -716,6 +741,186 @@ func (a *runtimeApp) checkPortAvailability() []portFailure {
 		}
 	}
 	return failures
+}
+
+func (a *runtimeApp) cmdAuth(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(a.stderr, "usage: loganalysis auth <set-admin|passwd|show> ...")
+		return 2
+	}
+
+	sub := strings.ToLower(args[0])
+	subArgs := args[1:]
+
+	switch sub {
+	case "set-admin":
+		fs := flag.NewFlagSet("auth set-admin", flag.ContinueOnError)
+		fs.SetOutput(a.stderr)
+		username := fs.String("username", "", "admin username")
+		if err := fs.Parse(subArgs); err != nil {
+			return 2
+		}
+		if !isTTY() {
+			fmt.Fprintln(a.stderr, "auth set-admin requires an interactive TTY for password input")
+			return 1
+		}
+		name := strings.TrimSpace(*username)
+		if name == "" {
+			fmt.Fprintln(a.stderr, "usage: loganalysis auth set-admin --username <name>")
+			return 2
+		}
+
+		password, err := promptPasswordWithConfirm(a.stdout, "new admin password")
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to read password: %v\n", err)
+			return 1
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to hash password: %v\n", err)
+			return 1
+		}
+
+		a.cfg.Auth.Enabled = true
+		a.cfg.Auth.AdminUsername = name
+		a.cfg.Auth.AdminPasswordHash = string(hash)
+		if strings.TrimSpace(a.cfg.Auth.JwtSecret) == "" {
+			secret, err := generateJWTSecret()
+			if err != nil {
+				fmt.Fprintf(a.stderr, "failed to generate jwt secret: %v\n", err)
+				return 1
+			}
+			a.cfg.Auth.JwtSecret = secret
+		}
+		if a.cfg.Auth.JwtTtlHours <= 0 {
+			a.cfg.Auth.JwtTtlHours = 24
+		}
+		if err := a.saveConfig(); err != nil {
+			fmt.Fprintf(a.stderr, "save config failed: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(a.stdout, "admin credentials configured")
+		return 0
+
+	case "passwd":
+		if strings.TrimSpace(a.cfg.Auth.AdminUsername) == "" || strings.TrimSpace(a.cfg.Auth.AdminPasswordHash) == "" {
+			fmt.Fprintln(a.stderr, "admin credentials are not initialized, run `loganalysis auth set-admin --username <name>` first")
+			return 1
+		}
+		if !isTTY() {
+			fmt.Fprintln(a.stderr, "auth passwd requires an interactive TTY for password input")
+			return 1
+		}
+
+		current, err := promptPassword(a.stdout, "current password: ")
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to read current password: %v\n", err)
+			return 1
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(a.cfg.Auth.AdminPasswordHash), []byte(current)); err != nil {
+			fmt.Fprintln(a.stderr, "current password is incorrect")
+			return 1
+		}
+
+		nextPassword, err := promptPasswordWithConfirm(a.stdout, "new admin password")
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to read new password: %v\n", err)
+			return 1
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(nextPassword), bcrypt.DefaultCost)
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to hash password: %v\n", err)
+			return 1
+		}
+		a.cfg.Auth.AdminPasswordHash = string(hash)
+		if err := a.saveConfig(); err != nil {
+			fmt.Fprintf(a.stderr, "save config failed: %v\n", err)
+			return 1
+		}
+
+		restarted, err := a.restartBackendIfRunning()
+		if err != nil {
+			fmt.Fprintf(a.stderr, "password updated, but backend restart failed: %v\n", err)
+			fmt.Fprintln(a.stdout, "new password will take effect on next `loganalysis up`")
+			return 1
+		}
+		if restarted {
+			fmt.Fprintln(a.stdout, "password updated and backend restarted")
+			return 0
+		}
+		fmt.Fprintln(a.stdout, "password updated, backend is not running; changes take effect on next `loganalysis up`")
+		return 0
+
+	case "show":
+		fmt.Fprintf(a.stdout, "enabled: %t\n", a.cfg.Auth.Enabled)
+		fmt.Fprintf(a.stdout, "admin_username: %s\n", maskSensitive(a.cfg.Auth.AdminUsername))
+		fmt.Fprintf(a.stdout, "admin_password_hash: %s\n", maskSensitive(a.cfg.Auth.AdminPasswordHash))
+		fmt.Fprintf(a.stdout, "jwt_secret: %s\n", maskSensitive(a.cfg.Auth.JwtSecret))
+		fmt.Fprintf(a.stdout, "jwt_ttl_hours: %d\n", a.cfg.Auth.JwtTtlHours)
+		return 0
+
+	default:
+		fmt.Fprintf(a.stderr, "unknown auth subcommand: %s\n", sub)
+		return 2
+	}
+}
+
+func (a *runtimeApp) ensureAuthConfigForUp() error {
+	if !a.cfg.Auth.Enabled {
+		return nil
+	}
+
+	changed := false
+	if strings.TrimSpace(a.cfg.Auth.AdminUsername) == "" || strings.TrimSpace(a.cfg.Auth.AdminPasswordHash) == "" {
+		if !isTTY() {
+			return errors.New("auth is enabled but admin credentials are missing; run `loganalysis auth set-admin --username <name>` first")
+		}
+		fmt.Fprintln(a.stdout, "auth is enabled and admin credentials are not initialized, entering setup")
+
+		if strings.TrimSpace(a.cfg.Auth.AdminUsername) == "" {
+			username, err := promptLine(a.stdout, "admin username: ")
+			if err != nil {
+				return fmt.Errorf("read admin username: %w", err)
+			}
+			if username == "" {
+				return errors.New("admin username cannot be empty")
+			}
+			a.cfg.Auth.AdminUsername = username
+			changed = true
+		}
+
+		password, err := promptPasswordWithConfirm(a.stdout, "admin password")
+		if err != nil {
+			return fmt.Errorf("read admin password: %w", err)
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash admin password: %w", err)
+		}
+		a.cfg.Auth.AdminPasswordHash = string(hash)
+		changed = true
+	}
+
+	if strings.TrimSpace(a.cfg.Auth.JwtSecret) == "" {
+		secret, err := generateJWTSecret()
+		if err != nil {
+			return fmt.Errorf("generate jwt secret: %w", err)
+		}
+		a.cfg.Auth.JwtSecret = secret
+		changed = true
+	}
+	if a.cfg.Auth.JwtTtlHours <= 0 {
+		a.cfg.Auth.JwtTtlHours = 24
+		changed = true
+	}
+
+	if changed {
+		if err := a.saveConfig(); err != nil {
+			return fmt.Errorf("save auth config: %w", err)
+		}
+		fmt.Fprintln(a.stdout, "auth config initialized")
+	}
+	return nil
 }
 
 func (a *runtimeApp) cmdConfig(args []string) int {
@@ -1135,6 +1340,7 @@ func (a *runtimeApp) applyStack(profile, version string, ports PortsConfig) erro
 		BackendImage:  a.backendImage(version),
 		FrontendImage: a.frontendImage(version),
 		Ports:         ports,
+		Auth:          composeSafeAuth(a.cfg.Auth),
 	})
 	if err != nil {
 		return err
@@ -1295,6 +1501,102 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Sync()
+}
+
+func composeSafeAuth(cfg AuthConfig) AuthConfig {
+	safe := cfg
+	safe.AdminUsername = escapeComposeValue(safe.AdminUsername)
+	safe.AdminPasswordHash = escapeComposeValue(safe.AdminPasswordHash)
+	safe.JwtSecret = escapeComposeValue(safe.JwtSecret)
+	return safe
+}
+
+func escapeComposeValue(value string) string {
+	return strings.ReplaceAll(value, "$", "$$")
+}
+
+func isTTY() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func promptLine(out io.Writer, prompt string) (string, error) {
+	fmt.Fprint(out, prompt)
+	reader := bufio.NewReader(os.Stdin)
+	text, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	return strings.TrimSpace(text), nil
+}
+
+func promptPassword(out io.Writer, prompt string) (string, error) {
+	password, err := promptLine(out, prompt)
+	if err != nil {
+		return "", err
+	}
+	if password == "" {
+		return "", errors.New("password cannot be empty")
+	}
+	return password, nil
+}
+
+func promptPasswordWithConfirm(out io.Writer, label string) (string, error) {
+	first, err := promptPassword(out, label+": ")
+	if err != nil {
+		return "", err
+	}
+	second, err := promptPassword(out, "confirm "+label+": ")
+	if err != nil {
+		return "", err
+	}
+	if first != second {
+		return "", errors.New("passwords do not match")
+	}
+	return first, nil
+}
+
+func generateJWTSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func maskSensitive(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return "(unset)"
+	}
+	runes := []rune(raw)
+	if len(runes) <= 8 {
+		return strings.Repeat("*", len(runes))
+	}
+	return string(runes[:4]) + strings.Repeat("*", len(runes)-8) + string(runes[len(runes)-4:])
+}
+
+func (a *runtimeApp) restartBackendIfRunning() (bool, error) {
+	containerName := fmt.Sprintf("%s-backend", a.cfg.ProjectName)
+	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, nil
+	}
+	if strings.TrimSpace(string(out)) != "true" {
+		return false, nil
+	}
+
+	composeFile := a.resolveComposeFile()
+	if composeFile == "" {
+		return false, errors.New("backend is running but compose file is missing")
+	}
+	if err := a.runCompose(composeFile, "restart", "backend"); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func checkRegistryConnectivity(addr string, timeout time.Duration) error {

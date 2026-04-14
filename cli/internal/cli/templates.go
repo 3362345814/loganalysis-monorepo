@@ -15,18 +15,12 @@ type templateData struct {
 	BackendImage  string
 	FrontendImage string
 	Ports         PortsConfig
+	Auth          AuthConfig
 }
 
 func renderCompose(profile string, data templateData) ([]byte, error) {
-	var file string
-	switch profile {
-	case profileFull:
-		file = "templates/compose-full.yaml.tmpl"
-	case profileMinimal:
-		file = "templates/compose-minimal.yaml.tmpl"
-	case profileDB:
-		file = "templates/compose-db.yaml.tmpl"
-	default:
+	file := "templates/compose-full.yaml.tmpl"
+	if profile != profileFull {
 		return nil, fmt.Errorf("unsupported profile: %s", profile)
 	}
 

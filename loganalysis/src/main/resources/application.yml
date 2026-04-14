@@ -165,3 +165,10 @@ storage:
     compress-archive: true           # 启用压缩
     archive-schedule-hours: 24        # 每24小时执行一次归档
     delete-after-archive: true       # 归档后删除原数据
+
+auth:
+  enabled: ${AUTH_ENABLED:false}
+  admin-username: ${AUTH_ADMIN_USERNAME:}
+  admin-password-hash: ${AUTH_ADMIN_PASSWORD_HASH:}
+  jwt-secret: ${AUTH_JWT_SECRET:}
+  jwt-ttl-hours: ${AUTH_JWT_TTL_HOURS:24}

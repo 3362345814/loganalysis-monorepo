@@ -32,6 +32,11 @@ services:
       MINIO_SECRET_KEY: minioadmin
       ELASTICSEARCH_HOST: elasticsearch
       ELASTICSEARCH_PORT: 9200
+      AUTH_ENABLED: {{ .Auth.Enabled }}
+      AUTH_ADMIN_USERNAME: "{{ .Auth.AdminUsername }}"
+      AUTH_ADMIN_PASSWORD_HASH: "{{ .Auth.AdminPasswordHash }}"
+      AUTH_JWT_SECRET: "{{ .Auth.JwtSecret }}"
+      AUTH_JWT_TTL_HOURS: "{{ .Auth.JwtTtlHours }}"
     depends_on:
       postgres:
         condition: service_healthy

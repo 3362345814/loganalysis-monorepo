@@ -74,11 +74,9 @@
 - `rabbitmq`：异步消息
 - `elasticsearch`、`kibana`、`minio`：完整检索与对象存储能力（仅 `full`）
 
-### 三种 profile
+### 部署策略
 
-- `db`：`postgres + redis`（仅依赖层）
-- `minimal`：`frontend + backend + postgres + redis + rabbitmq`（核心可用）
-- `full`：`minimal + elasticsearch + kibana + minio`（完整能力）
+- 当前 CLI 仅保留 `full` 一种启动策略：`frontend + backend + postgres + redis + rabbitmq + elasticsearch + kibana + minio`
 
 ### 默认端口
 
@@ -158,7 +156,7 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --profile minimal --version v0.3.2 --auto-port
+loganalysis up --version v0.3.2
 loganalysis status
 ```
 
@@ -173,12 +171,13 @@ loganalysis status
 
 ### 1) `up`
 
-用途：按 profile 渲染并启动 Docker Compose 栈。
+用途：按 `full` 策略渲染并启动 Docker Compose 栈。
 
 关键参数：
 
 - `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`，初始为 `latest`）
-- `--auto-port`：自动检测并避让端口冲突，且会把新端口写回配置文件
+- `--auto-port`：兼容参数，行为同默认值（自动检测并避让端口冲突）
+- `--no-auto-port`：关闭自动端口避让
 
 示例：
 
@@ -186,11 +185,11 @@ loganalysis status
 # 默认最新版本
 loganalysis up 
 
-# 自动避让端口（推荐）
-loganalysis up --auto-port
+# 指定版本（默认也会自动避让端口）
+loganalysis up --version v0.3.2
 
-# 手动指定版本 + 自动避让端口
-loganalysis up -version v0.3.2 --auto-port
+# 显式关闭自动避让
+loganalysis up --no-auto-port
 ```
 
 ### 2) `down`
@@ -281,12 +280,6 @@ loganalysis doctor
 # 查看配置文件路径
 loganalysis config path
 
-# 查看当前默认 profile
-loganalysis config get default_profile
-
-# 修改默认 profile
-loganalysis config set default_profile minimal
-
 # 修改镜像仓库前缀
 loganalysis config set image_registry ghcr.io/3362345814
 
@@ -294,7 +287,25 @@ loganalysis config set image_registry ghcr.io/3362345814
 loganalysis config set ports.frontend 13000
 ```
 
-### 7) `upgrade`
+### 7) `auth`
+
+用途：配置管理员账号（单管理员，无注册）。
+
+子命令：
+
+- `loganalysis auth set-admin --username <name>`：交互设置管理员密码并保存 BCrypt hash
+- `loganalysis auth passwd`：交互改密；若 backend 正在运行会自动重启 backend 生效
+- `loganalysis auth show`：脱敏展示当前鉴权配置
+
+示例：
+
+```bash
+loganalysis auth set-admin --username admin
+loganalysis auth show
+loganalysis auth passwd
+```
+
+### 8) `upgrade`
 
 用途：升级运行栈（必要时回滚），并尝试自更新 CLI 二进制。
 
@@ -321,7 +332,7 @@ loganalysis upgrade --to v2.0.0 --allow-major
 - 默认会阻止主版本变更，避免误升级。
 - 升级失败会尝试回滚到旧版本。
 
-### 8) `uninstall`
+### 9) `uninstall`
 
 用途：卸载运行态文件，可选彻底清理数据。
 
@@ -401,20 +412,13 @@ loganalysis config set ports.redis 16379
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --profile minimal --version v0.3.2 --auto-port
+loganalysis up --version v0.3.2
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
 ```
 
-### 场景 2：只需数据库依赖，给本地开发使用
-
-```bash
-loganalysis up --profile db --version v0.3.2
-loganalysis logs postgres --tail 100
-```
-
-### 场景 3：排查后端启动失败
+### 场景 2：排查后端启动失败
 
 ```bash
 loganalysis doctor
@@ -422,7 +426,7 @@ loganalysis logs backend --tail 300
 loganalysis logs backend -f
 ```
 
-### 场景 4：升级并验证
+### 场景 3：升级并验证
 
 ```bash
 loganalysis upgrade --to v0.3.2
@@ -517,7 +521,8 @@ npm run dev
 
 ### 3) 端口冲突（3000/8080 等）
 
-- 启动时加 `--auto-port` 自动避让
+- 默认自动端口避让（`--auto-port` 为兼容参数）
+- 需要关闭时使用 `--no-auto-port`
 - 或手工改端口：
 
 ```bash

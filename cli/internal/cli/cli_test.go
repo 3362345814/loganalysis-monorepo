@@ -48,14 +48,19 @@ func TestConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestAutoResolveProfilePortsMinimal(t *testing.T) {
+func TestAutoResolveProfilePortsFull(t *testing.T) {
 	ports := PortsConfig{
-		Frontend:           3000,
-		Backend:            8080,
-		Postgres:           5432,
-		Redis:              5432,
-		RabbitMQ:           5672,
-		RabbitMQManagement: 15672,
+		Frontend:               3000,
+		Backend:                8080,
+		Postgres:               5432,
+		Redis:                  5432,
+		RabbitMQ:               5672,
+		RabbitMQManagement:     15672,
+		Elasticsearch:          9200,
+		ElasticsearchTransport: 9300,
+		Kibana:                 5601,
+		MinioAPI:               9000,
+		MinioConsole:           9001,
 	}
 	busy := map[int]bool{
 		3000: true,
@@ -63,12 +68,15 @@ func TestAutoResolveProfilePortsMinimal(t *testing.T) {
 		8080: true,
 		5432: true,
 		5672: true,
+		9200: true,
+		9300: true,
+		5601: true,
 	}
 	available := func(port int) bool {
 		return !busy[port]
 	}
 
-	resolved, changes, err := autoResolveProfilePorts(profileMinimal, ports, available)
+	resolved, changes, err := autoResolveProfilePorts(profileFull, ports, available)
 	if err != nil {
 		t.Fatalf("autoResolveProfilePorts failed: %v", err)
 	}
@@ -91,40 +99,17 @@ func TestAutoResolveProfilePortsMinimal(t *testing.T) {
 	if resolved.RabbitMQManagement != 15672 {
 		t.Fatalf("rabbitmq_management expected 15672, got %d", resolved.RabbitMQManagement)
 	}
-	if len(changes) != 5 {
-		t.Fatalf("expected 5 remap changes, got %d (%v)", len(changes), changes)
+	if resolved.Elasticsearch != 9201 {
+		t.Fatalf("elasticsearch expected 9201, got %d", resolved.Elasticsearch)
 	}
-}
-
-func TestAutoResolveProfilePortsDBOnlyTouchesDBPorts(t *testing.T) {
-	ports := PortsConfig{
-		Frontend: 3000,
-		Backend:  8080,
-		Postgres: 5432,
-		Redis:    6379,
+	if resolved.ElasticsearchTransport != 9301 {
+		t.Fatalf("elasticsearch_transport expected 9301, got %d", resolved.ElasticsearchTransport)
 	}
-	busy := map[int]bool{
-		3000: true,
-		8080: true,
-		5432: true,
+	if resolved.Kibana != 5602 {
+		t.Fatalf("kibana expected 5602, got %d", resolved.Kibana)
 	}
-	available := func(port int) bool {
-		return !busy[port]
-	}
-
-	resolved, _, err := autoResolveProfilePorts(profileDB, ports, available)
-	if err != nil {
-		t.Fatalf("autoResolveProfilePorts failed: %v", err)
-	}
-
-	if resolved.Frontend != 3000 || resolved.Backend != 8080 {
-		t.Fatalf("db profile should not mutate frontend/backend ports: %+v", resolved)
-	}
-	if resolved.Postgres != 5433 {
-		t.Fatalf("postgres expected 5433, got %d", resolved.Postgres)
-	}
-	if resolved.Redis != 6379 {
-		t.Fatalf("redis expected 6379, got %d", resolved.Redis)
+	if len(changes) != 8 {
+		t.Fatalf("expected 8 remap changes, got %d (%v)", len(changes), changes)
 	}
 }
 

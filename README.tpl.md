@@ -74,11 +74,9 @@
 - `rabbitmq`：异步消息
 - `elasticsearch`、`kibana`、`minio`：完整检索与对象存储能力（仅 `full`）
 
-### 三种 profile
+### 部署策略
 
-- `db`：`postgres + redis`（仅依赖层）
-- `minimal`：`frontend + backend + postgres + redis + rabbitmq`（核心可用）
-- `full`：`minimal + elasticsearch + kibana + minio`（完整能力）
+- 当前 CLI 仅保留 `full` 一种启动策略：`frontend + backend + postgres + redis + rabbitmq + elasticsearch + kibana + minio`
 
 ### 默认端口
 
@@ -158,7 +156,8 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --profile minimal --version {{VERSION}} --auto-port
+loganalysis auth set-admin --username admin
+loganalysis up --version {{VERSION}}
 loganalysis status
 ```
 
@@ -173,12 +172,13 @@ loganalysis status
 
 ### 1) `up`
 
-用途：按 profile 渲染并启动 Docker Compose 栈。
+用途：按 `full` 策略渲染并启动 Docker Compose 栈。
 
 关键参数：
 
 - `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`，初始为 `latest`）
-- `--auto-port`：自动检测并避让端口冲突，且会把新端口写回配置文件
+- `--auto-port`：兼容参数，行为同默认值（自动检测并避让端口冲突）
+- `--no-auto-port`：关闭自动端口避让
 
 示例：
 
@@ -186,11 +186,11 @@ loganalysis status
 # 默认最新版本
 loganalysis up 
 
-# 自动避让端口（推荐）
-loganalysis up --auto-port
+# 指定版本（默认也会自动避让端口）
+loganalysis up --version {{VERSION}}
 
-# 手动指定版本 + 自动避让端口
-loganalysis up -version {{VERSION}} --auto-port
+# 显式关闭自动避让
+loganalysis up --no-auto-port
 ```
 
 ### 2) `down`
@@ -281,12 +281,6 @@ loganalysis doctor
 # 查看配置文件路径
 loganalysis config path
 
-# 查看当前默认 profile
-loganalysis config get default_profile
-
-# 修改默认 profile
-loganalysis config set default_profile minimal
-
 # 修改镜像仓库前缀
 loganalysis config set image_registry ghcr.io/3362345814
 
@@ -294,7 +288,30 @@ loganalysis config set image_registry ghcr.io/3362345814
 loganalysis config set ports.frontend 13000
 ```
 
-### 7) `upgrade`
+### 7) `auth`
+
+用途：配置管理员账号（单管理员，无注册）。
+
+子命令：
+
+- `loganalysis auth set-admin --username <name>`：交互设置管理员密码并保存 BCrypt hash
+- `loganalysis auth passwd`：交互改密；若 backend 正在运行会自动重启 backend 生效
+- `loganalysis auth show`：脱敏展示当前鉴权配置
+
+示例：
+
+```bash
+loganalysis auth set-admin --username admin
+loganalysis auth show
+loganalysis auth passwd
+```
+
+说明：
+
+- `up` 时若鉴权启用但管理员凭据缺失：TTY 会进入交互初始化；非 TTY 会提示先执行 `auth set-admin`
+- `auth passwd` 仅写入密码 hash，不会保存明文密码
+
+### 8) `upgrade`
 
 用途：升级运行栈（必要时回滚），并尝试自更新 CLI 二进制。
 
@@ -321,7 +338,7 @@ loganalysis upgrade --to v2.0.0 --allow-major
 - 默认会阻止主版本变更，避免误升级。
 - 升级失败会尝试回滚到旧版本。
 
-### 8) `uninstall`
+### 9) `uninstall`
 
 用途：卸载运行态文件，可选彻底清理数据。
 
@@ -339,7 +356,7 @@ loganalysis uninstall
 loganalysis uninstall --purge-data
 ```
 
-### 9) `version`
+### 10) `version`
 
 用途：输出 CLI 版本、commit、构建时间。
 
@@ -349,7 +366,7 @@ loganalysis uninstall --purge-data
 loganalysis version
 ```
 
-### 10) `help`
+### 11) `help`
 
 用途：查看命令帮助。
 
@@ -396,25 +413,35 @@ loganalysis config set ports.postgres 15432
 loganalysis config set ports.redis 16379
 ```
 
+## 非 CLI 部署的鉴权注入（可选）
+
+若你不通过 CLI 部署，也可以在运行环境直接注入以下变量：
+
+```bash
+AUTH_ENABLED=true
+AUTH_ADMIN_USERNAME=admin
+AUTH_ADMIN_PASSWORD_HASH=$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AUTH_JWT_SECRET=replace-with-random-secret
+AUTH_JWT_TTL_HOURS=24
+```
+
+说明：
+
+- `AUTH_ADMIN_PASSWORD_HASH` 必须是 BCrypt hash（不是明文）
+- 若 `AUTH_ENABLED=false`，后端不会要求登录
+
 ## 常见运维操作示例
 
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --profile minimal --version {{VERSION}} --auto-port
+loganalysis up --version {{VERSION}}
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
 ```
 
-### 场景 2：只需数据库依赖，给本地开发使用
-
-```bash
-loganalysis up --profile db --version {{VERSION}}
-loganalysis logs postgres --tail 100
-```
-
-### 场景 3：排查后端启动失败
+### 场景 2：排查后端启动失败
 
 ```bash
 loganalysis doctor
@@ -422,7 +449,7 @@ loganalysis logs backend --tail 300
 loganalysis logs backend -f
 ```
 
-### 场景 4：升级并验证
+### 场景 3：升级并验证
 
 ```bash
 loganalysis upgrade --to {{VERSION}}
@@ -517,7 +544,8 @@ npm run dev
 
 ### 3) 端口冲突（3000/8080 等）
 
-- 启动时加 `--auto-port` 自动避让
+- 默认自动端口避让（`--auto-port` 为兼容参数）
+- 需要关闭时使用 `--no-auto-port`
 - 或手工改端口：
 
 ```bash
@@ -525,17 +553,23 @@ loganalysis config set ports.frontend 13000
 loganalysis config set ports.backend 18080
 ```
 
-### 4) GitHub/GHCR 网络波动导致下载失败
+### 4) 登录接口返回“鉴权未启用”
+
+- 确认运行时环境变量已注入 `AUTH_ENABLED=true`
+- 若使用 IDE 启动，请优先在启动配置 `env` 中显式设置上述 `AUTH_*` 变量
+- 修改环境变量后需彻底重启后端进程
+
+### 5) GitHub/GHCR 网络波动导致下载失败
 
 - 先执行 `loganalysis doctor` 查看 `registry connectivity`
 - 重试安装/升级命令
 - 必要时切换网络或代理后重试
 
-### 5) Windows 下报 `irm 不是命令` 或 `网络错误`
+### 6) Windows 下报 `irm 不是命令` 或 `网络错误`
 
 - `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
 
-### 6) `mvn test` 失败并提示 Java 版本不匹配
+### 7) `mvn test` 失败并提示 Java 版本不匹配
 
 - 本项目已固定 JDK 版本为 `21`，若使用 `17/24` 等版本会被 Maven Enforcer 拦截
 - 先执行 `java -version` 和 `mvn -v`，确认当前 Maven 使用的 Java Home
