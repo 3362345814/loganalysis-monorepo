@@ -19,10 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -596,34 +592,4 @@ public class LogCollectionController {
         return Result.success(response);
     }
 
-    // ==================== 测试接口 ====================
-
-    /**
-     * 测试：向文件追加日志（用于测试采集功能）
-     *
-     * @param path    文件路径
-     * @param content 日志内容
-     * @return 结果
-     */
-    @PostMapping("/test/log")
-    public Result<Map<String, Object>> addTestLog(
-            @RequestParam("path") String path,
-            @RequestParam("content") String content) {
-        try {
-            Path filePath = Paths.get(path);
-            Files.createDirectories(filePath.getParent());
-            Files.writeString(filePath, content + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("path", path);
-            result.put("content", content);
-            result.put("success", true);
-            
-            log.info("测试日志已写入: {}", path);
-            return Result.success(result);
-        } catch (Exception e) {
-            log.error("写入测试日志失败: {}", path, e);
-            return Result.error("写入失败: " + e.getMessage());
-        }
-    }
 }

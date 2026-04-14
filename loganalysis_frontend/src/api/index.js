@@ -147,14 +147,6 @@ export const rawLogApi = {
   countByTraceId: (traceId) => service.get(`/collection/logs/trace/${traceId}/count`)
 }
 
-// 测试日志相关
-export const testLogApi = {
-  // 生成测试日志
-  generate: (path, content) => service.post('/collection/test/log', null, {
-    params: { path, content }
-  })
-}
-
 // ==================== 日志处理 API ====================
 
 // 日志解析测试
