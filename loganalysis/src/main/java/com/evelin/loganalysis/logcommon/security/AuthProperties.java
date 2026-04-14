@@ -15,12 +15,22 @@ public class AuthProperties {
 
     private String adminPasswordHash;
 
+    private String adminPassword;
+
     private String jwtSecret;
 
     private int jwtTtlHours = 24;
 
     public boolean hasAdminCredentials() {
-        return hasText(adminUsername) && hasText(adminPasswordHash);
+        return hasText(adminUsername) && (hasAdminPasswordHash() || hasAdminPassword());
+    }
+
+    public boolean hasAdminPasswordHash() {
+        return hasText(adminPasswordHash);
+    }
+
+    public boolean hasAdminPassword() {
+        return hasText(adminPassword);
     }
 
     public boolean hasJwtSecret() {

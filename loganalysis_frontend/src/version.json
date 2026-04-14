@@ -1,12 +1,13 @@
 {
-  "version": "v0.4.2",
+  "version": "v0.4.3",
   "releaseDate": "2026-04-14",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041405",
+    "buildNumber": "2026041406",
     "environment": "production"
   }, 
   "updateInfo": [
-    "修复CLI问题"
+    "修复CLI问题",
+    "修复了登录问题"
   ]
 }

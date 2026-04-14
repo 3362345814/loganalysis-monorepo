@@ -832,7 +832,15 @@ func (a *runtimeApp) cmdAuth(args []string) int {
 			fmt.Fprintf(a.stderr, "failed to hash password: %v\n", err)
 			return 1
 		}
+
+		secret, err := generateJWTSecret()
+		if err != nil {
+			fmt.Fprintf(a.stderr, "failed to rotate jwt secret: %v\n", err)
+			return 1
+		}
+
 		a.cfg.Auth.AdminPasswordHash = string(hash)
+		a.cfg.Auth.JwtSecret = secret
 		if err := a.saveConfig(); err != nil {
 			fmt.Fprintf(a.stderr, "save config failed: %v\n", err)
 			return 1
@@ -840,15 +848,15 @@ func (a *runtimeApp) cmdAuth(args []string) int {
 
 		restarted, err := a.restartBackendIfRunning()
 		if err != nil {
-			fmt.Fprintf(a.stderr, "password updated, but backend restart failed: %v\n", err)
+			fmt.Fprintf(a.stderr, "password updated, but backend recreate failed: %v\n", err)
 			fmt.Fprintln(a.stdout, "new password will take effect on next `loganalysis up`")
 			return 1
 		}
 		if restarted {
-			fmt.Fprintln(a.stdout, "password updated and backend restarted")
+			fmt.Fprintln(a.stdout, "password updated, backend recreated, and existing tokens revoked")
 			return 0
 		}
-		fmt.Fprintln(a.stdout, "password updated, backend is not running; changes take effect on next `loganalysis up`")
+		fmt.Fprintln(a.stdout, "password updated and tokens rotated; backend is not running, changes take effect on next `loganalysis up`")
 		return 0
 
 	case "show":
@@ -1000,6 +1008,27 @@ func (a *runtimeApp) setConfigKey(key, value string) error {
 		a.cfg.ReleaseRepo = strings.Trim(value, " ")
 	case "data_dir":
 		a.cfg.DataDir = value
+	case "auth.enabled":
+		enabled, err := parseBoolValue(value)
+		if err != nil {
+			return fmt.Errorf("invalid auth.enabled: %w", err)
+		}
+		a.cfg.Auth.Enabled = enabled
+	case "auth.admin_username":
+		a.cfg.Auth.AdminUsername = strings.TrimSpace(value)
+	case "auth.admin_password_hash":
+		a.cfg.Auth.AdminPasswordHash = strings.TrimSpace(value)
+	case "auth.jwt_secret":
+		a.cfg.Auth.JwtSecret = strings.TrimSpace(value)
+	case "auth.jwt_ttl_hours":
+		ttl, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("invalid auth.jwt_ttl_hours %q: %w", value, err)
+		}
+		if ttl <= 0 {
+			return fmt.Errorf("auth.jwt_ttl_hours must be > 0")
+		}
+		a.cfg.Auth.JwtTtlHours = ttl
 	case "ports.frontend":
 		return setPort(&a.cfg.Ports.Frontend, value)
 	case "ports.backend":
@@ -1046,6 +1075,16 @@ func (a *runtimeApp) getConfigKey(key string) (string, error) {
 		return a.cfg.ReleaseRepo, nil
 	case "data_dir":
 		return a.cfg.DataDir, nil
+	case "auth.enabled":
+		return strconv.FormatBool(a.cfg.Auth.Enabled), nil
+	case "auth.admin_username":
+		return a.cfg.Auth.AdminUsername, nil
+	case "auth.admin_password_hash":
+		return a.cfg.Auth.AdminPasswordHash, nil
+	case "auth.jwt_secret":
+		return a.cfg.Auth.JwtSecret, nil
+	case "auth.jwt_ttl_hours":
+		return strconv.Itoa(a.cfg.Auth.JwtTtlHours), nil
 	case "ports.frontend":
 		return strconv.Itoa(a.cfg.Ports.Frontend), nil
 	case "ports.backend":
@@ -1083,6 +1122,18 @@ func setPort(dst *int, value string) error {
 	}
 	*dst = p
 	return nil
+}
+
+func parseBoolValue(raw string) (bool, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return false, fmt.Errorf("value cannot be empty")
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, err
+	}
+	return parsed, nil
 }
 
 func (a *runtimeApp) cmdUpgrade(args []string) int {
@@ -1363,6 +1414,20 @@ func (a *runtimeApp) applyStack(profile, version string, ports PortsConfig) erro
 		return err
 	}
 
+	if err := a.renderComposeFile(a.paths.ActiveCompose, profile, version, ports); err != nil {
+		return err
+	}
+
+	if err := a.runCompose(a.paths.ActiveCompose, "pull"); err != nil {
+		return fmt.Errorf("compose pull: %w", err)
+	}
+	if err := a.runCompose(a.paths.ActiveCompose, "up", "-d"); err != nil {
+		return fmt.Errorf("compose up: %w", err)
+	}
+	return nil
+}
+
+func (a *runtimeApp) renderComposeFile(path, profile, version string, ports PortsConfig) error {
 	content, err := renderCompose(profile, templateData{
 		ProjectName:   a.cfg.ProjectName,
 		BackendImage:  a.backendImage(version),
@@ -1374,20 +1439,32 @@ func (a *runtimeApp) applyStack(profile, version string, ports PortsConfig) erro
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(a.paths.ActiveCompose), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("prepare compose path: %w", err)
 	}
-	if err := os.WriteFile(a.paths.ActiveCompose, content, 0o644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return fmt.Errorf("write compose file: %w", err)
 	}
-
-	if err := a.runCompose(a.paths.ActiveCompose, "pull"); err != nil {
-		return fmt.Errorf("compose pull: %w", err)
-	}
-	if err := a.runCompose(a.paths.ActiveCompose, "up", "-d"); err != nil {
-		return fmt.Errorf("compose up: %w", err)
-	}
 	return nil
+}
+
+func (a *runtimeApp) activeProfileAndVersion() (string, string) {
+	profile := strings.TrimSpace(a.state.CurrentProfile)
+	if profile == "" {
+		profile = strings.TrimSpace(a.cfg.DefaultProfile)
+	}
+	if err := validateProfile(profile); err != nil {
+		profile = profileFull
+	}
+
+	version := strings.TrimSpace(a.state.CurrentVersion)
+	if version == "" {
+		version = strings.TrimSpace(a.cfg.DefaultVersion)
+	}
+	if version == "" {
+		version = "latest"
+	}
+	return profile, version
 }
 
 func (a *runtimeApp) backendImage(version string) string {
@@ -1644,7 +1721,15 @@ func (a *runtimeApp) restartBackendIfRunning() (bool, error) {
 	if strings.TrimSpace(string(state)) != "true" {
 		return false, nil
 	}
-	if err := a.runCompose(composeFile, "restart", "backend"); err != nil {
+
+	profile, version := a.activeProfileAndVersion()
+	if err := a.renderComposeFile(composeFile, profile, version, a.cfg.Ports); err != nil {
+		return false, fmt.Errorf("refresh compose auth env: %w", err)
+	}
+
+	// Password hash and JWT secret live in container env vars, so backend
+	// must be recreated (restart alone does not apply updated env).
+	if err := a.runCompose(composeFile, "up", "-d", "--no-deps", "--force-recreate", "backend"); err != nil {
 		return false, err
 	}
 	return true, nil

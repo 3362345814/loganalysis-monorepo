@@ -41,6 +41,7 @@ go build ./cmd/loganalysis
 
 `up` requires admin credentials when auth is enabled (enabled by default).
 
+- Disable auth for local/dev usage: `loganalysis config set auth.enabled false`
 - First run in TTY: `up` enters interactive setup if missing credentials.
 - Non-TTY environments: run `loganalysis auth set-admin --username <name>` first.
 - `loganalysis auth passwd` updates password hash and restarts backend automatically when backend is running.

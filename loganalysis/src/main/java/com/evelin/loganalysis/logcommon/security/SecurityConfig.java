@@ -36,7 +36,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(authenticationEntryPoint))
                 .authorizeHttpRequests(authorize -> {
-                    authorize.requestMatchers("/api/v1/auth/login", "/actuator/health", "/actuator/health/**").permitAll();
+                    authorize.requestMatchers("/api/v1/auth/login", "/api/v1/auth/status", "/actuator/health", "/actuator/health/**").permitAll();
                     if (authProperties.isEnabled()) {
                         authorize.requestMatchers("/api/**").authenticated();
                     } else {

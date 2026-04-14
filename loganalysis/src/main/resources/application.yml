@@ -170,5 +170,6 @@ auth:
   enabled: ${AUTH_ENABLED:false}
   admin-username: ${AUTH_ADMIN_USERNAME:}
   admin-password-hash: ${AUTH_ADMIN_PASSWORD_HASH:}
+  admin-password: ${AUTH_ADMIN_PASSWORD:}
   jwt-secret: ${AUTH_JWT_SECRET:}
   jwt-ttl-hours: ${AUTH_JWT_TTL_HOURS:24}

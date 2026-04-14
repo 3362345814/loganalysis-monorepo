@@ -119,3 +119,20 @@ func TestAutoResolveProfilePortsInvalidProfile(t *testing.T) {
 		t.Fatal("expected error for invalid profile")
 	}
 }
+
+func TestSetConfigKeyAuthEnabled(t *testing.T) {
+	app := &runtimeApp{}
+	if err := app.setConfigKey("auth.enabled", "false"); err != nil {
+		t.Fatalf("set auth.enabled failed: %v", err)
+	}
+	if app.cfg.Auth.Enabled {
+		t.Fatal("expected auth.enabled=false")
+	}
+}
+
+func TestSetConfigKeyAuthEnabledInvalid(t *testing.T) {
+	app := &runtimeApp{}
+	if err := app.setConfigKey("auth.enabled", "not-bool"); err == nil {
+		t.Fatal("expected invalid bool error")
+	}
+}

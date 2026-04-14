@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,19 +37,26 @@ public class AuthController {
         this.jwtTokenService = jwtTokenService;
     }
 
+    @GetMapping("/status")
+    public Result<Map<String, Object>> status() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("enabled", authProperties.isEnabled());
+        return Result.success(payload);
+    }
+
     @PostMapping("/login")
     public ResponseEntity<Result<Map<String, Object>>> login(@Valid @RequestBody LoginRequest request) {
         if (!authProperties.isEnabled()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Result.failed(400, "鉴权未启用"));
         }
-        if (!authProperties.hasAdminCredentials() || !authProperties.hasJwtSecret()) {
+        if (!authProperties.hasAdminCredentials()) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Result.failed(500, "鉴权配置不完整，请先在 CLI 中配置管理员账户"));
+                    .body(Result.failed(500, "鉴权配置不完整，请先配置管理员账户（hash 或明文密码）"));
         }
 
         if (!request.getUsername().equals(authProperties.getAdminUsername())
-                || !passwordEncoder.matches(request.getPassword(), authProperties.getAdminPasswordHash())) {
+                || !verifyPassword(request.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Result.failed(401, "用户名或密码错误"));
         }
@@ -74,6 +83,18 @@ public class AuthController {
         payload.put("username", authentication.getName());
         payload.put("role", "admin");
         return Result.success(payload);
+    }
+
+    private boolean verifyPassword(String rawPassword) {
+        if (authProperties.hasAdminPasswordHash()) {
+            return passwordEncoder.matches(rawPassword, authProperties.getAdminPasswordHash());
+        }
+        if (authProperties.hasAdminPassword()) {
+            byte[] left = rawPassword.getBytes(StandardCharsets.UTF_8);
+            byte[] right = authProperties.getAdminPassword().getBytes(StandardCharsets.UTF_8);
+            return MessageDigest.isEqual(left, right);
+        }
+        return false;
     }
 
     @Data

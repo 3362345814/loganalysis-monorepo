@@ -161,6 +161,13 @@ loganalysis up --version {{VERSION}}
 loganalysis status
 ```
 
+如你希望本地环境不开启鉴权，可先关闭后再启动：
+
+```bash
+loganalysis config set auth.enabled false
+loganalysis up --version {{VERSION}}
+```
+
 默认访问地址：
 
 - 前端：<http://localhost:3000>
@@ -286,6 +293,9 @@ loganalysis config set image_registry ghcr.io/3362345814
 
 # 修改前端端口
 loganalysis config set ports.frontend 13000
+
+# 关闭鉴权（本地开发常用）
+loganalysis config set auth.enabled false
 ```
 
 ### 7) `auth`
@@ -295,7 +305,7 @@ loganalysis config set ports.frontend 13000
 子命令：
 
 - `loganalysis auth set-admin --username <name>`：交互设置管理员密码并保存 BCrypt hash
-- `loganalysis auth passwd`：交互改密；若 backend 正在运行会自动重启 backend 生效
+- `loganalysis auth passwd`：交互改密；若 backend 正在运行会自动重建 backend 立即生效
 - `loganalysis auth show`：脱敏展示当前鉴权配置
 
 示例：
@@ -310,6 +320,8 @@ loganalysis auth passwd
 
 - `up` 时若鉴权启用但管理员凭据缺失：TTY 会进入交互初始化；非 TTY 会提示先执行 `auth set-admin`
 - `auth passwd` 仅写入密码 hash，不会保存明文密码
+- `auth passwd` 会轮换 JWT secret，已登录 token 会失效
+- 若已执行 `loganalysis config set auth.enabled false`，则无需再配置管理员账号
 
 ### 8) `upgrade`
 
@@ -394,6 +406,11 @@ loganalysis -h
 - `frontend_image`：前端完整镜像名（设置后优先于 `image_registry`）
 - `release_repo`：升级与自更新使用的 GitHub 仓库（形如 `owner/repo`）
 - `data_dir`：运行数据目录
+- `auth.enabled`：是否启用鉴权（`true/false`）
+- `auth.admin_username`：管理员用户名
+- `auth.admin_password_hash`：管理员密码 BCrypt hash
+- `auth.jwt_secret`：JWT 签名密钥（可留空，后端会自动生成临时密钥）
+- `auth.jwt_ttl_hours`：JWT 过期时间（小时）
 
 ### 端口项
 
@@ -426,14 +443,21 @@ loganalysis config set ports.redis 16379
 AUTH_ENABLED=true
 AUTH_ADMIN_USERNAME=admin
 AUTH_ADMIN_PASSWORD_HASH=$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-AUTH_JWT_SECRET=replace-with-random-secret
+# 或者直接使用明文（开发环境更方便）
+# AUTH_ADMIN_PASSWORD=admin
+# AUTH_JWT_SECRET 可选；留空时后端会在启动时自动生成进程内临时密钥
+# AUTH_JWT_SECRET=replace-with-random-secret
 AUTH_JWT_TTL_HOURS=24
 ```
 
 说明：
 
 - `AUTH_ADMIN_PASSWORD_HASH` 必须是 BCrypt hash（不是明文）
+- 也支持 `AUTH_ADMIN_PASSWORD` 明文（推荐仅开发环境使用）
+- 若同时配置 `AUTH_ADMIN_PASSWORD_HASH` 与 `AUTH_ADMIN_PASSWORD`，优先使用 hash
 - 若 `AUTH_ENABLED=false`，后端不会要求登录
+- 未设置 `AUTH_JWT_SECRET` 时，后端会自动生成临时密钥；后端重启后旧 token 会失效
+- 生产环境建议显式设置固定 `AUTH_JWT_SECRET`
 
 ## 常见运维操作示例
 
@@ -564,17 +588,23 @@ loganalysis config set ports.backend 18080
 - 若使用 IDE 启动，请优先在启动配置 `env` 中显式设置上述 `AUTH_*` 变量
 - 修改环境变量后需彻底重启后端进程
 
-### 5) GitHub/GHCR 网络波动导致下载失败
+### 5) 配置 `AUTH_ENABLED=false` 但前端仍显示登录页
+
+- 确认后端已更新到包含 `/api/v1/auth/status` 的版本
+- 确认前端已更新到支持鉴权状态探测的版本
+- 修改后端配置后重启后端，并强制刷新浏览器（清缓存）
+
+### 6) GitHub/GHCR 网络波动导致下载失败
 
 - 先执行 `loganalysis doctor` 查看 `registry connectivity`
 - 重试安装/升级命令
 - 必要时切换网络或代理后重试
 
-### 6) Windows 下报 `irm 不是命令` 或 `网络错误`
+### 7) Windows 下报 `irm 不是命令` 或 `网络错误`
 
 - `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
 
-### 7) `mvn test` 失败并提示 Java 版本不匹配
+### 8) `mvn test` 失败并提示 Java 版本不匹配
 
 - 本项目已固定 JDK 版本为 `21`，若使用 `17/24` 等版本会被 Maven Enforcer 拦截
 - 先执行 `java -version` 和 `mvn -v`，确认当前 Maven 使用的 Java Home

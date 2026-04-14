@@ -41,6 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return "/api/v1/auth/login".equals(uri)
+                || "/api/v1/auth/status".equals(uri)
                 || "/actuator/health".equals(uri)
                 || uri.startsWith("/actuator/health/");
     }
@@ -63,6 +64,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             Claims claims = jwtTokenService.parseClaims(token);
+            if (!jwtTokenService.isCurrentRuntimeToken(claims)) {
+                unauthorized(response, "会话已失效，请重新登录");
+                return;
+            }
+
             String username = claims.getSubject();
             if (username == null || username.isBlank()) {
                 unauthorized(response, "无效令牌");

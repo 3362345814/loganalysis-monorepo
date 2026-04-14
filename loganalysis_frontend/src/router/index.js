@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getAccessToken } from '@/features/auth/token'
+import { resolveAuthEnabled } from '@/features/auth/mode'
+import { clearAccessToken, getAccessToken } from '@/features/auth/token'
 
 const routes = [
   {
@@ -70,30 +71,32 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - 日志分析系统`
   }
 
-  if (to.meta.public) {
-    if (to.path === '/login' && getAccessToken()) {
-      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : '/'
-      next(redirect.startsWith('/') ? redirect : '/')
-      return
+  const authEnabled = await resolveAuthEnabled()
+  if (!authEnabled) {
+    clearAccessToken()
+    if (to.path === '/login') {
+      return { path: '/' }
     }
-    next()
-    return
+    return true
+  }
+
+  if (to.meta.public) {
+    return true
   }
 
   if (!getAccessToken()) {
-    next({
+    return {
       path: '/login',
       query: { redirect: to.fullPath }
-    })
-    return
+    }
   }
 
-  next()
+  return true
 })
 
 export default router

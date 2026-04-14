@@ -23,7 +23,11 @@ const rules = Object.freeze({
 
 const redirectPath = computed(() => {
   const redirect = route.query.redirect
-  if (typeof redirect === 'string' && redirect.startsWith('/')) {
+  if (
+    typeof redirect === 'string' &&
+    redirect.startsWith('/') &&
+    !redirect.startsWith('/login')
+  ) {
     return redirect
   }
   return '/'
@@ -52,9 +56,8 @@ const handleSubmit = async () => {
     setAccessToken(token)
     await router.replace(redirectPath.value)
     ElMessage.success('登录成功')
-  } catch (error) {
-    const message = error?.response?.data?.message || error?.message || '登录失败'
-    ElMessage.error(message)
+  } catch (_) {
+    // 错误提示已由 axios 全局拦截器统一处理，避免重复弹框
   } finally {
     loading.value = false
   }

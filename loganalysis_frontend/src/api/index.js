@@ -66,11 +66,13 @@ service.interceptors.response.use(
     const status = error?.response?.status
     if (status === 401) {
       clearAccessToken()
-      const currentPath = router.currentRoute.value?.fullPath || '/'
+      const currentRoute = router.currentRoute.value
+      const currentPath = currentRoute?.path || '/'
+      const currentFullPath = currentRoute?.fullPath || '/'
       if (currentPath !== '/login') {
         router.replace({
           path: '/login',
-          query: { redirect: currentPath }
+          query: { redirect: currentFullPath }
         })
       }
     }
