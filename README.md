@@ -7,7 +7,7 @@
 - 前端控制台（Vue 3 + Element Plus）
 - 跨平台运维 CLI（Go，基于 Docker Compose 一键部署）
 
-当前文档对应版本：`v0.3.2`（发布于 `2026-04-14`）
+当前文档对应版本：`v0.4.0`（发布于 `2026-04-14`）
 
 ## 系统功能全景
 
@@ -111,13 +111,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.2/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.0/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.3.2/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.0/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -138,7 +138,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.2/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.0/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -146,7 +146,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.3.2/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.0/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -156,7 +156,8 @@ chmod +x /tmp/loganalysis
 
 ```bash
 loganalysis doctor
-loganalysis up --version v0.3.2
+loganalysis auth set-admin --username admin
+loganalysis up --version v0.4.0
 loganalysis status
 ```
 
@@ -186,7 +187,7 @@ loganalysis status
 loganalysis up 
 
 # 指定版本（默认也会自动避让端口）
-loganalysis up --version v0.3.2
+loganalysis up --version v0.4.0
 
 # 显式关闭自动避让
 loganalysis up --no-auto-port
@@ -305,6 +306,11 @@ loganalysis auth show
 loganalysis auth passwd
 ```
 
+说明：
+
+- `up` 时若鉴权启用但管理员凭据缺失：TTY 会进入交互初始化；非 TTY 会提示先执行 `auth set-admin`
+- `auth passwd` 仅写入密码 hash，不会保存明文密码
+
 ### 8) `upgrade`
 
 用途：升级运行栈（必要时回滚），并尝试自更新 CLI 二进制。
@@ -321,7 +327,7 @@ loganalysis auth passwd
 loganalysis upgrade --to latest
 
 # 升级到指定版本
-loganalysis upgrade --to v0.3.2
+loganalysis upgrade --to v0.4.0
 
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
@@ -350,7 +356,7 @@ loganalysis uninstall
 loganalysis uninstall --purge-data
 ```
 
-### 9) `version`
+### 10) `version`
 
 用途：输出 CLI 版本、commit、构建时间。
 
@@ -360,7 +366,7 @@ loganalysis uninstall --purge-data
 loganalysis version
 ```
 
-### 10) `help`
+### 11) `help`
 
 用途：查看命令帮助。
 
@@ -407,12 +413,29 @@ loganalysis config set ports.postgres 15432
 loganalysis config set ports.redis 16379
 ```
 
+## 非 CLI 部署的鉴权注入（可选）
+
+若你不通过 CLI 部署，也可以在运行环境直接注入以下变量：
+
+```bash
+AUTH_ENABLED=true
+AUTH_ADMIN_USERNAME=admin
+AUTH_ADMIN_PASSWORD_HASH=$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AUTH_JWT_SECRET=replace-with-random-secret
+AUTH_JWT_TTL_HOURS=24
+```
+
+说明：
+
+- `AUTH_ADMIN_PASSWORD_HASH` 必须是 BCrypt hash（不是明文）
+- 若 `AUTH_ENABLED=false`，后端不会要求登录
+
 ## 常见运维操作示例
 
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --version v0.3.2
+loganalysis up --version v0.4.0
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
@@ -429,7 +452,7 @@ loganalysis logs backend -f
 ### 场景 3：升级并验证
 
 ```bash
-loganalysis upgrade --to v0.3.2
+loganalysis upgrade --to v0.4.0
 loganalysis status
 loganalysis version
 ```
@@ -530,17 +553,23 @@ loganalysis config set ports.frontend 13000
 loganalysis config set ports.backend 18080
 ```
 
-### 4) GitHub/GHCR 网络波动导致下载失败
+### 4) 登录接口返回“鉴权未启用”
+
+- 确认运行时环境变量已注入 `AUTH_ENABLED=true`
+- 若使用 IDE 启动，请优先在启动配置 `env` 中显式设置上述 `AUTH_*` 变量
+- 修改环境变量后需彻底重启后端进程
+
+### 5) GitHub/GHCR 网络波动导致下载失败
 
 - 先执行 `loganalysis doctor` 查看 `registry connectivity`
 - 重试安装/升级命令
 - 必要时切换网络或代理后重试
 
-### 5) Windows 下报 `irm 不是命令` 或 `网络错误`
+### 6) Windows 下报 `irm 不是命令` 或 `网络错误`
 
 - `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
 
-### 6) `mvn test` 失败并提示 Java 版本不匹配
+### 7) `mvn test` 失败并提示 Java 版本不匹配
 
 - 本项目已固定 JDK 版本为 `21`，若使用 `17/24` 等版本会被 Maven Enforcer 拦截
 - 先执行 `java -version` 和 `mvn -v`，确认当前 Maven 使用的 Java Home
