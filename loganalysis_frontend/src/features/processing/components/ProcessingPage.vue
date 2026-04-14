@@ -97,7 +97,7 @@
 
           <!-- 聚合组列表 -->
           <el-table :data="aggGroups" v-loading="aggLoading">
-            <el-table-column prop="groupId" label="聚合组ID" width="180" />
+            <el-table-column prop="groupId" label="聚合组ID" width="200" />
             <el-table-column prop="representativeLog" label="代表性日志" min-width="180" show-overflow-tooltip />
             <el-table-column prop="eventCount" label="事件数" width="100" />
             <el-table-column prop="severity" label="严重程度" width="120">

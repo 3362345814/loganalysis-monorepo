@@ -89,7 +89,7 @@
     <!-- 分析结果列表 -->
     <el-card class="table-card">
       <el-table :data="paginatedList" v-loading="loading">
-        <el-table-column prop="aggregationId" label="聚合组ID" width="180">
+        <el-table-column prop="aggregationId" label="聚合组ID" width="200">
           <template #default="{ row }">
             <el-button type="primary" link @click="jumpToAggregation(row)">
               {{ row.aggregationId }}

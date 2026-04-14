@@ -33,6 +33,12 @@ public class AggregationGroupService {
 
     private final AggregationGroupRepository aggregationGroupRepository;
     private final LogSourceRepository logSourceRepository;
+    private static final Map<String, Integer> SEVERITY_PRIORITY = Map.of(
+            "INFO", 1,
+            "WARNING", 2,
+            "ERROR", 3,
+            "CRITICAL", 4
+    );
 
     /**
      * 创建或更新聚合组
@@ -45,10 +51,37 @@ public class AggregationGroupService {
         if (existingGroup.isPresent()) {
             // 更新现有聚合组
             AggregationGroupEntity group = existingGroup.get();
-            group.setEventCount(aggregationResult.getEventCount());
-            group.setLastEventTime(aggregationResult.getAggregatedAt());
-            group.setSeverity(aggregationResult.getSeverity());
-            group.setSimilarityScore(aggregationResult.getSimilarityScore());
+            Integer incomingCount = aggregationResult.getEventCount();
+            if (incomingCount != null) {
+                Integer currentCount = group.getEventCount() != null ? group.getEventCount() : 0;
+                group.setEventCount(Math.max(currentCount, incomingCount));
+            }
+
+            LocalDateTime incomingTime = aggregationResult.getAggregatedAt();
+            if (incomingTime != null) {
+                LocalDateTime currentLast = group.getLastEventTime();
+                if (currentLast == null || incomingTime.isAfter(currentLast)) {
+                    group.setLastEventTime(incomingTime);
+                }
+
+                LocalDateTime currentFirst = group.getFirstEventTime();
+                if (currentFirst == null || incomingTime.isBefore(currentFirst)) {
+                    group.setFirstEventTime(incomingTime);
+                }
+            }
+
+            group.setSeverity(mergeSeverity(group.getSeverity(), aggregationResult.getSeverity()));
+
+            Double incomingScore = aggregationResult.getSimilarityScore();
+            if (incomingScore != null) {
+                Double currentScore = group.getSimilarityScore() != null ? group.getSimilarityScore() : 0.0;
+                group.setSimilarityScore(Math.max(currentScore, incomingScore));
+            }
+
+            if ((group.getRepresentativeLog() == null || group.getRepresentativeLog().isBlank())
+                    && aggregationResult.getRepresentativeLog() != null) {
+                group.setRepresentativeLog(aggregationResult.getRepresentativeLog());
+            }
 //            log.debug("更新聚合组: {}, 事件数: {}", group.getGroupId(), group.getEventCount());
             return aggregationGroupRepository.save(group);
         } else {
@@ -84,6 +117,16 @@ public class AggregationGroupService {
      */
     public Optional<AggregationGroupEntity> findByGroupId(String groupId) {
         return aggregationGroupRepository.findByGroupId(groupId);
+    }
+
+    /**
+     * 按 sourceId + 代表日志精确匹配最近聚合组
+     */
+    public Optional<AggregationGroupEntity> findLatestBySourceIdAndRepresentativeLog(String sourceId, String representativeLog) {
+        if (sourceId == null || sourceId.isBlank() || representativeLog == null || representativeLog.isBlank()) {
+            return Optional.empty();
+        }
+        return aggregationGroupRepository.findTopBySourceIdAndRepresentativeLogOrderByLastEventTimeDesc(sourceId, representativeLog);
     }
 
     /**
@@ -257,5 +300,18 @@ public class AggregationGroupService {
             group.setLastEventTime(LocalDateTime.now());
             aggregationGroupRepository.save(group);
         });
+    }
+
+    private String mergeSeverity(String currentSeverity, String incomingSeverity) {
+        if (incomingSeverity == null || incomingSeverity.isBlank()) {
+            return currentSeverity;
+        }
+        if (currentSeverity == null || currentSeverity.isBlank()) {
+            return incomingSeverity;
+        }
+
+        int currentPriority = SEVERITY_PRIORITY.getOrDefault(currentSeverity.toUpperCase(), 1);
+        int incomingPriority = SEVERITY_PRIORITY.getOrDefault(incomingSeverity.toUpperCase(), 1);
+        return incomingPriority >= currentPriority ? incomingSeverity : currentSeverity;
     }
 }

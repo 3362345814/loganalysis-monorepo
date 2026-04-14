@@ -52,6 +52,12 @@ public interface AggregationGroupRepository extends JpaRepository<AggregationGro
     Optional<AggregationGroupEntity> findByGroupId(String groupId);
 
     /**
+     * 按日志源 + 代表日志精确匹配，取最近一个分组
+     */
+    Optional<AggregationGroupEntity> findTopBySourceIdAndRepresentativeLogOrderByLastEventTimeDesc(
+            String sourceId, String representativeLog);
+
+    /**
      * 查询活跃的聚合组
      */
     @Query("SELECT a FROM AggregationGroupEntity a WHERE a.status = 'ACTIVE' ORDER BY a.lastEventTime DESC")
