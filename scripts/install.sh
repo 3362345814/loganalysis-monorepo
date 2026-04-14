@@ -39,9 +39,20 @@ detect_arch() {
 resolve_latest() {
   require_cmd sed
   require_cmd tr
-  tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | tr -d '\n' | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p')"
+
+  # Prefer github.com redirect so environments that block/intercept api.github.com
+  # can still resolve latest release tag.
+  latest_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" || true)"
+  tag="$(printf '%s' "$latest_url" | sed -n 's#^.*/tag/\([^/?#]*\).*$#\1#p')"
+  if [ -n "$tag" ]; then
+    echo "$tag"
+    return 0
+  fi
+
+  # Fallback to API method.
+  tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | tr -d '\n' | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' || true)"
   if [ -z "$tag" ]; then
-    echo "failed to resolve latest release tag" >&2
+    echo "failed to resolve latest release tag; set LOGANALYSIS_VERSION=vX.Y.Z to bypass auto detection" >&2
     exit 1
   fi
   echo "$tag"

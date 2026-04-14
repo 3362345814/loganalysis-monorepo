@@ -17,12 +17,41 @@ if ([string]::IsNullOrWhiteSpace($InstallDir)) {
   $InstallDir = Join-Path $HOME '.local\bin'
 }
 
-if ($Version -eq 'latest') {
-  $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-  if (-not $release.tag_name) {
-    throw 'failed to resolve latest release tag'
+function Resolve-LatestVersion([string]$repo) {
+  $tag = $null
+
+  # Prefer github.com redirect so environments that block/intercept
+  # api.github.com can still resolve latest release tag.
+  try {
+    $resp = Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest" -MaximumRedirection 5
+    $finalUrl = $resp.BaseResponse.ResponseUri.AbsoluteUri
+    if ($finalUrl -match '/tag/([^/?#]+)') {
+      $tag = $Matches[1]
+    }
   }
-  $Version = $release.tag_name
+  catch {
+  }
+
+  if (-not $tag) {
+    try {
+      $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest"
+      if ($release.tag_name) {
+        $tag = $release.tag_name
+      }
+    }
+    catch {
+    }
+  }
+
+  if (-not $tag) {
+    throw 'failed to resolve latest release tag; set LOGANALYSIS_VERSION=vX.Y.Z to bypass auto detection'
+  }
+
+  return $tag
+}
+
+if ($Version -eq 'latest') {
+  $Version = Resolve-LatestVersion $Repo
 }
 
 function Resolve-Arch([string]$raw) {

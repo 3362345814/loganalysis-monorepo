@@ -1436,24 +1436,39 @@ func detectComposeCommand() ([]string, error) {
 }
 
 func (a *runtimeApp) runCompose(composeFile string, args ...string) error {
-	prefix, err := detectComposeCommand()
+	cmd, err := a.composeCmd(composeFile, args...)
 	if err != nil {
 		return err
-	}
-	var cmd *exec.Cmd
-	if len(prefix) == 2 {
-		all := []string{prefix[1], "-f", composeFile, "-p", a.cfg.ProjectName}
-		all = append(all, args...)
-		cmd = exec.Command(prefix[0], all...)
-	} else {
-		all := []string{"-f", composeFile, "-p", a.cfg.ProjectName}
-		all = append(all, args...)
-		cmd = exec.Command(prefix[0], all...)
 	}
 	cmd.Stdout = a.stdout
 	cmd.Stderr = a.stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
+}
+
+func (a *runtimeApp) runComposeOutput(composeFile string, args ...string) ([]byte, error) {
+	cmd, err := a.composeCmd(composeFile, args...)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = a.stderr
+	return cmd.Output()
+}
+
+func (a *runtimeApp) composeCmd(composeFile string, args ...string) (*exec.Cmd, error) {
+	prefix, err := detectComposeCommand()
+	if err != nil {
+		return nil, err
+	}
+	if len(prefix) == 2 {
+		all := []string{prefix[1], "-f", composeFile, "-p", a.cfg.ProjectName}
+		all = append(all, args...)
+		return exec.Command(prefix[0], all...), nil
+	} else {
+		all := []string{"-f", composeFile, "-p", a.cfg.ProjectName}
+		all = append(all, args...)
+		return exec.Command(prefix[0], all...), nil
+	}
 }
 
 func (a *runtimeApp) runSimple(name string, args ...string) error {
@@ -1607,19 +1622,27 @@ func maskSensitive(raw string) string {
 }
 
 func (a *runtimeApp) restartBackendIfRunning() (bool, error) {
-	containerName := fmt.Sprintf("%s-backend", a.cfg.ProjectName)
-	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerName)
-	out, err := cmd.Output()
-	if err != nil {
-		return false, nil
-	}
-	if strings.TrimSpace(string(out)) != "true" {
+	composeFile := a.resolveComposeFile()
+	if composeFile == "" {
 		return false, nil
 	}
 
-	composeFile := a.resolveComposeFile()
-	if composeFile == "" {
-		return false, errors.New("backend is running but compose file is missing")
+	out, err := a.runComposeOutput(composeFile, "ps", "-q", "backend")
+	if err != nil {
+		return false, nil
+	}
+	containerID := strings.TrimSpace(string(out))
+	if containerID == "" {
+		return false, nil
+	}
+
+	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", containerID)
+	state, err := cmd.Output()
+	if err != nil {
+		return false, nil
+	}
+	if strings.TrimSpace(string(state)) != "true" {
+		return false, nil
 	}
 	if err := a.runCompose(composeFile, "restart", "backend"); err != nil {
 		return false, err
