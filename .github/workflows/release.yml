@@ -82,10 +82,40 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve Docker Hub namespace
+        id: dockerhub
+        shell: bash
+        run: |
+          login_username="$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr -d '[:space:]')"
+          if [ -z "$login_username" ]; then
+            echo "::error::DOCKERHUB_USERNAME is empty."
+            exit 1
+          fi
+
+          raw_namespace="${{ vars.DOCKERHUB_NAMESPACE }}"
+          if [ -z "$raw_namespace" ]; then
+            raw_namespace="$login_username"
+          fi
+          namespace="$(echo "$raw_namespace" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+
+          if [ -z "$namespace" ]; then
+            echo "::error::Docker Hub namespace resolved to empty. Set repository variable DOCKERHUB_NAMESPACE or fix DOCKERHUB_USERNAME."
+            exit 1
+          fi
+
+          if ! [[ "$namespace" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::Invalid Docker Hub namespace '$namespace'. Use lowercase letters, numbers, dot, underscore, dash only."
+            echo "::error::Do not use email as namespace. You can set repository variable DOCKERHUB_NAMESPACE explicitly."
+            exit 1
+          fi
+
+          echo "login_username=$login_username" >> "$GITHUB_OUTPUT"
+          echo "namespace=$namespace" >> "$GITHUB_OUTPUT"
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ steps.dockerhub.outputs.login_username }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push image (Docker Hub)
@@ -96,8 +126,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.vars.outputs.dockerhub_repo }}:${{ needs.resolve-release.outputs.release_tag }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.vars.outputs.dockerhub_repo }}:latest
+            docker.io/${{ steps.dockerhub.outputs.namespace }}/${{ steps.vars.outputs.dockerhub_repo }}:${{ needs.resolve-release.outputs.release_tag }}
+            docker.io/${{ steps.dockerhub.outputs.namespace }}/${{ steps.vars.outputs.dockerhub_repo }}:latest
 
   build-cli:
     runs-on: ubuntu-latest
