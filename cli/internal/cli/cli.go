@@ -202,7 +202,7 @@ func defaultConfig(paths Paths) Config {
 		ProjectName:    "loganalysis",
 		DefaultProfile: profileFull,
 		DefaultVersion: "latest",
-		ImageRegistry:  "ghcr.io/3362345814",
+		ImageRegistry:  "docker.io/3362345814",
 		ReleaseRepo:    "3362345814/loganalysis-monorepo",
 		DataDir:        filepath.Join(paths.Root, "data"),
 		Auth: AuthConfig{
@@ -240,6 +240,8 @@ func (c *Config) applyDefaults(def Config) {
 	}
 	if c.ImageRegistry == "" {
 		c.ImageRegistry = def.ImageRegistry
+	} else {
+		c.ImageRegistry = migrateImageRegistry(c.ImageRegistry)
 	}
 	if c.ReleaseRepo == "" {
 		c.ReleaseRepo = def.ReleaseRepo
@@ -572,11 +574,12 @@ func (a *runtimeApp) cmdDoctor(args []string) int {
 		results = append(results, result{"docker daemon", "PASS", "running"})
 	}
 
-	if err := checkRegistryConnectivity("ghcr.io:443", 5*time.Second); err != nil {
+	registryAddr := registryAddressForConnectivity(a.cfg.ImageRegistry)
+	if err := checkRegistryConnectivity(registryAddr, 5*time.Second); err != nil {
 		results = append(results, result{"registry connectivity", "FAIL", err.Error()})
 		fail = true
 	} else {
-		results = append(results, result{"registry connectivity", "PASS", "ghcr.io reachable"})
+		results = append(results, result{"registry connectivity", "PASS", registryAddr + " reachable"})
 	}
 
 	portFailures := a.checkPortAvailability()
@@ -1134,6 +1137,17 @@ func parseBoolValue(raw string) (bool, error) {
 		return false, err
 	}
 	return parsed, nil
+}
+
+func migrateImageRegistry(raw string) string {
+	registry := strings.TrimSpace(raw)
+	if registry == "" {
+		return registry
+	}
+	if strings.HasPrefix(registry, "ghcr.io/") {
+		return "docker.io/" + strings.TrimPrefix(registry, "ghcr.io/")
+	}
+	return registry
 }
 
 func (a *runtimeApp) cmdUpgrade(args []string) int {
@@ -1742,4 +1756,25 @@ func checkRegistryConnectivity(addr string, timeout time.Duration) error {
 	}
 	_ = conn.Close()
 	return nil
+}
+
+func registryAddressForConnectivity(imageRegistry string) string {
+	raw := strings.TrimSpace(imageRegistry)
+	if raw == "" {
+		return "docker.io:443"
+	}
+
+	raw = strings.TrimPrefix(raw, "https://")
+	raw = strings.TrimPrefix(raw, "http://")
+	if idx := strings.Index(raw, "/"); idx >= 0 {
+		raw = raw[:idx]
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "docker.io:443"
+	}
+	if strings.Contains(raw, ":") {
+		return raw
+	}
+	return raw + ":443"
 }

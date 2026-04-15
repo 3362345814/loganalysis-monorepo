@@ -136,3 +136,39 @@ func TestSetConfigKeyAuthEnabledInvalid(t *testing.T) {
 		t.Fatal("expected invalid bool error")
 	}
 }
+
+func TestRegistryAddressForConnectivity(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"ghcr.io/3362345814", "ghcr.io:443"},
+		{"docker.io/myuser", "docker.io:443"},
+		{"https://docker.io/myuser", "docker.io:443"},
+		{"registry.example.com:5000/team", "registry.example.com:5000"},
+		{"", "docker.io:443"},
+	}
+
+	for _, tt := range tests {
+		if got := registryAddressForConnectivity(tt.in); got != tt.want {
+			t.Fatalf("registryAddressForConnectivity(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestMigrateImageRegistry(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"ghcr.io/3362345814", "docker.io/3362345814"},
+		{"ghcr.io/team/sub", "docker.io/team/sub"},
+		{"docker.io/user", "docker.io/user"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := migrateImageRegistry(tt.in); got != tt.want {
+			t.Fatalf("migrateImageRegistry(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

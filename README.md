@@ -97,7 +97,7 @@
 ### 0) 前置条件
 
 - Docker Desktop / Docker Engine（需支持 `docker compose`）
-- 可访问 GitHub 与 GHCR
+- 可访问 GitHub 与 Docker Hub
 
 先检查：
 
@@ -260,7 +260,7 @@ loganalysis logs --tail 100
 - `docker` 命令是否存在
 - `docker compose` 是否可用
 - Docker daemon 是否运行
-- `ghcr.io:443` 连通性
+- 当前 `image_registry` 对应仓库连通性（例如 `docker.io:443`）
 - 配置端口是否被占用
 - Docker 磁盘统计是否可读取
 - 数据目录剩余磁盘空间（低于 5GB 会报 FAIL）
@@ -288,8 +288,8 @@ loganalysis doctor
 # 查看配置文件路径
 loganalysis config path
 
-# 修改镜像仓库前缀
-loganalysis config set image_registry ghcr.io/3362345814
+# 修改镜像仓库前缀（示例：Docker Hub）
+loganalysis config set image_registry docker.io/<dockerhub_user>
 
 # 修改前端端口
 loganalysis config set ports.frontend 13000
@@ -588,13 +588,7 @@ loganalysis config set ports.backend 18080
 - 若使用 IDE 启动，请优先在启动配置 `env` 中显式设置上述 `AUTH_*` 变量
 - 修改环境变量后需彻底重启后端进程
 
-### 5) 配置 `AUTH_ENABLED=false` 但前端仍显示登录页
-
-- 确认后端已更新到包含 `/api/v1/auth/status` 的版本
-- 确认前端已更新到支持鉴权状态探测的版本
-- 修改后端配置后重启后端，并强制刷新浏览器（清缓存）
-
-### 6) GitHub/GHCR 网络波动导致下载失败
+### 5) GitHub/镜像仓库网络波动导致下载失败
 
 - 先执行 `loganalysis doctor` 查看 `registry connectivity`
 - 重试安装/升级命令

@@ -50,7 +50,13 @@ go build ./cmd/loganalysis
 
 By default, the CLI pulls images from:
 
-- `ghcr.io/<owner>/loganalysis-backend:<tag>`
-- `ghcr.io/<owner>/loganalysis-frontend:<tag>`
+- `docker.io/<owner>/loganalysis-backend:<tag>`
+- `docker.io/<owner>/loganalysis-frontend:<tag>`
 
 You can override with `loganalysis config set image_registry <registry-prefix>` or explicit image values via `backend_image`/`frontend_image`.
+
+Example for Docker Hub:
+
+```bash
+loganalysis config set image_registry docker.io/<dockerhub_user>
+```

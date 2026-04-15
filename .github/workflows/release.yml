@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
   id-token: write
 
 jobs:
@@ -68,21 +67,28 @@ jobs:
           if [ "${{ matrix.component }}" = "backend" ]; then
             echo "context=loganalysis" >> "$GITHUB_OUTPUT"
             echo "dockerfile=Dockerfile" >> "$GITHUB_OUTPUT"
-            echo "image=ghcr.io/${{ github.repository_owner }}/loganalysis-backend" >> "$GITHUB_OUTPUT"
+            echo "dockerhub_repo=loganalysis-backend" >> "$GITHUB_OUTPUT"
           else
             echo "context=loganalysis_frontend" >> "$GITHUB_OUTPUT"
             echo "dockerfile=Dockerfile" >> "$GITHUB_OUTPUT"
-            echo "image=ghcr.io/${{ github.repository_owner }}/loganalysis-frontend" >> "$GITHUB_OUTPUT"
+            echo "dockerhub_repo=loganalysis-frontend" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Login to GHCR
+      - name: Validate Docker Hub credentials
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "::error::Missing DOCKERHUB_USERNAME or DOCKERHUB_TOKEN repository secrets."
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push image (Docker Hub)
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.vars.outputs.context }}
@@ -90,8 +96,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ steps.vars.outputs.image }}:${{ needs.resolve-release.outputs.release_tag }}
-            ${{ steps.vars.outputs.image }}:latest
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.vars.outputs.dockerhub_repo }}:${{ needs.resolve-release.outputs.release_tag }}
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.vars.outputs.dockerhub_repo }}:latest
 
   build-cli:
     runs-on: ubuntu-latest
