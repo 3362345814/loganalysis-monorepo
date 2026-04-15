@@ -161,7 +161,9 @@ func TestMigrateImageRegistry(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"ghcr.io/3362345814", "docker.io/3362345814"},
+		{"ghcr.io/3362345814", "docker.io/cityseason"},
+		{"docker.io/3362345814", "docker.io/cityseason"},
+		{"3362345814", "docker.io/cityseason"},
 		{"ghcr.io/team/sub", "docker.io/team/sub"},
 		{"docker.io/user", "docker.io/user"},
 		{"", ""},

@@ -126,7 +126,7 @@ services:
   # MinIO - 对象存储（冷数据归档）
   # ============================================
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: loganalysis-minio
     environment:
       MINIO_ROOT_USER: minioadmin

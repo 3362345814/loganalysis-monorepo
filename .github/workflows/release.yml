@@ -94,12 +94,21 @@ jobs:
 
           raw_namespace="${{ vars.DOCKERHUB_NAMESPACE }}"
           if [ -z "$raw_namespace" ]; then
+            raw_namespace="${{ secrets.DOCKERHUB_NAMESPACE }}"
+          fi
+          if [ -z "$raw_namespace" ]; then
             raw_namespace="$login_username"
           fi
           namespace="$(echo "$raw_namespace" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
 
           if [ -z "$namespace" ]; then
             echo "::error::Docker Hub namespace resolved to empty. Set repository variable DOCKERHUB_NAMESPACE or fix DOCKERHUB_USERNAME."
+            exit 1
+          fi
+
+          if [[ "$namespace" == *"@"* ]]; then
+            echo "::error::Docker Hub namespace '$namespace' looks like an email. Use Docker ID/organization name instead."
+            echo "::error::Set DOCKERHUB_NAMESPACE=cityseason (Variables) and DOCKERHUB_USERNAME=cityseason (Secrets)."
             exit 1
           fi
 

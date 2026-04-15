@@ -202,7 +202,7 @@ func defaultConfig(paths Paths) Config {
 		ProjectName:    "loganalysis",
 		DefaultProfile: profileFull,
 		DefaultVersion: "latest",
-		ImageRegistry:  "docker.io/3362345814",
+		ImageRegistry:  "docker.io/cityseason",
 		ReleaseRepo:    "3362345814/loganalysis-monorepo",
 		DataDir:        filepath.Join(paths.Root, "data"),
 		Auth: AuthConfig{
@@ -1002,7 +1002,7 @@ func (a *runtimeApp) setConfigKey(key, value string) error {
 	case "default_version":
 		a.cfg.DefaultVersion = value
 	case "image_registry":
-		a.cfg.ImageRegistry = strings.TrimRight(value, "/")
+		a.cfg.ImageRegistry = migrateImageRegistry(strings.TrimRight(value, "/"))
 	case "backend_image":
 		a.cfg.BackendImage = value
 	case "frontend_image":
@@ -1140,9 +1140,13 @@ func parseBoolValue(raw string) (bool, error) {
 }
 
 func migrateImageRegistry(raw string) string {
-	registry := strings.TrimSpace(raw)
+	registry := strings.TrimSpace(strings.TrimRight(raw, "/"))
 	if registry == "" {
 		return registry
+	}
+	switch registry {
+	case "3362345814", "docker.io/3362345814", "https://docker.io/3362345814", "ghcr.io/3362345814":
+		return "docker.io/cityseason"
 	}
 	if strings.HasPrefix(registry, "ghcr.io/") {
 		return "docker.io/" + strings.TrimPrefix(registry, "ghcr.io/")

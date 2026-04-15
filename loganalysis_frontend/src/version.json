@@ -1,12 +1,12 @@
 {
-  "version": "v0.4.5",
+  "version": "v0.4.6",
   "releaseDate": "2026-04-15",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041502",
+    "buildNumber": "2026041503",
     "environment": "production"
   }, 
   "updateInfo": [
-    "修正了docker命名空间错误的问题"
+    "修正了docker仓库名错误的问题"
   ]
 }
