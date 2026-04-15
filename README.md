@@ -7,7 +7,7 @@
 - 前端控制台（Vue 3 + Element Plus）
 - 跨平台运维 CLI（Go，基于 Docker Compose 一键部署）
 
-当前文档对应版本：`v0.4.3`（发布于 `2026-04-14`）
+当前文档对应版本：`v0.4.4`（发布于 `2026-04-15`）
 
 ## 系统功能全景
 
@@ -111,13 +111,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.3/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.4/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.3/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v0.4.4/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -138,7 +138,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.3/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.4/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -146,7 +146,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.3/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v0.4.4/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -157,7 +157,7 @@ chmod +x /tmp/loganalysis
 ```bash
 loganalysis doctor
 loganalysis auth set-admin --username admin
-loganalysis up --version v0.4.3
+loganalysis up --version v0.4.4
 loganalysis status
 ```
 
@@ -165,7 +165,7 @@ loganalysis status
 
 ```bash
 loganalysis config set auth.enabled false
-loganalysis up --version v0.4.3
+loganalysis up --version v0.4.4
 ```
 
 默认访问地址：
@@ -194,7 +194,7 @@ loganalysis up --version v0.4.3
 loganalysis up 
 
 # 指定版本（默认也会自动避让端口）
-loganalysis up --version v0.4.3
+loganalysis up --version v0.4.4
 
 # 显式关闭自动避让
 loganalysis up --no-auto-port
@@ -341,13 +341,13 @@ loganalysis auth passwd
 loganalysis upgrade --to latest
 
 # 升级到指定版本
-loganalysis upgrade --to v0.4.3
+loganalysis upgrade --to v0.4.4
 
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
 
 # 若你希望严格按固定端口升级（不自动避让）
-loganalysis upgrade --to v0.4.3 --no-auto-port
+loganalysis upgrade --to v0.4.4 --no-auto-port
 ```
 
 说明：
@@ -464,7 +464,7 @@ AUTH_JWT_TTL_HOURS=24
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --version v0.4.3
+loganalysis up --version v0.4.4
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
@@ -481,7 +481,7 @@ loganalysis logs backend -f
 ### 场景 3：升级并验证
 
 ```bash
-loganalysis upgrade --to v0.4.3
+loganalysis upgrade --to v0.4.4
 loganalysis status
 loganalysis version
 ```
@@ -588,7 +588,13 @@ loganalysis config set ports.backend 18080
 - 若使用 IDE 启动，请优先在启动配置 `env` 中显式设置上述 `AUTH_*` 变量
 - 修改环境变量后需彻底重启后端进程
 
-### 5) GitHub/镜像仓库网络波动导致下载失败
+### 5) 配置 `AUTH_ENABLED=false` 但前端仍显示登录页
+
+- 确认后端已更新到包含 `/api/v1/auth/status` 的版本
+- 确认前端已更新到支持鉴权状态探测的版本
+- 修改后端配置后重启后端，并强制刷新浏览器（清缓存）
+
+### 6) GitHub/镜像仓库网络波动导致下载失败
 
 - 先执行 `loganalysis doctor` 查看 `registry connectivity`
 - 重试安装/升级命令
