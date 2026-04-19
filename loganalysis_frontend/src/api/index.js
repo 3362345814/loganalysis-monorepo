@@ -142,7 +142,10 @@ export const logSourceApi = {
   testSshConnection: (config) => service.post('/collection/sources/test-ssh', config),
 
   // 测试日志路径是否存在
-  testPathExists: (config) => service.post('/collection/sources/test-path', config)
+  testPathExists: (config) => service.post('/collection/sources/test-path', config),
+
+  // 测试 Log4J 日志提取
+  testLog4jExtract: (data) => service.post('/collection/sources/test-log4j-extract', data)
 }
 
 // 原始日志相关

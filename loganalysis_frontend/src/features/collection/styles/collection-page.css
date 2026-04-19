@@ -71,12 +71,6 @@
   font-size: 12px;
 }
 
-.pattern-buttons {
-  display: flex;
-  gap: var(--space-8);
-  margin-top: var(--space-10);
-}
-
 .test-result {
   display: inline-block;
   margin-left: var(--space-10);
@@ -152,4 +146,16 @@
 .project-item-check {
   font-size: 18px;
   color: var(--color-accent);
+}
+
+.log4j-tester-form {
+  margin-bottom: var(--space-16);
+}
+
+.log4j-result-panel {
+  margin-top: var(--space-12);
+}
+
+.log4j-result-fields {
+  margin-top: var(--space-12);
 }

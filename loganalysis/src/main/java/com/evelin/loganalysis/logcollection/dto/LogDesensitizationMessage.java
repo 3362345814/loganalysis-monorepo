@@ -86,6 +86,11 @@ public class LogDesensitizationMessage implements Serializable {
     private String logType;
 
     /**
+     * 日志追踪字段名（用户配置，如 traceId/requestId/tid）
+     */
+    private String traceFieldName;
+
+    /**
      * 脱敏配置
      */
     private DesensitizationConfig desensitizationConfig;

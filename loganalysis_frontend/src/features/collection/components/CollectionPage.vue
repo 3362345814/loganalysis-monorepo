@@ -116,6 +116,11 @@
             />
             <span class="form-tip">请输入 Log4j/Logback 格式的日志格式字符串</span>
           </el-form-item>
+          <el-form-item label="提取测试">
+            <el-button type="primary" plain :icon="Search" @click="openLog4jTester">
+              打开日志提取测试
+            </el-button>
+          </el-form-item>
           <el-form-item label="格式说明">
             <div class="pattern-help">
               <el-alert type="info" :closable="false" show-icon>
@@ -130,23 +135,16 @@
                     <li><code>%logger</code> - Logger名称（完整）</li>
                     <li><code>%msg</code> 或 <code>%m</code> - 消息内容</li>
                     <li><code>%n</code> - 换行符</li>
+                    <li><code>%throwable</code> - 异常堆栈（可选，有异常时输出）</li>
                     <li><code>%X{key}</code> - MDC 键值</li>
                   </ul>
                 </template>
               </el-alert>
               <el-alert type="warning" :closable="false" show-icon class="pattern-warning-alert">
                 <template #title>
-                  如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+                  如需支持链路追踪，请在上方填写“追踪字段名”，并确保日志里包含该字段
                 </template>
               </el-alert>
-              <div class="pattern-buttons">
-                <el-button size="small" type="primary" plain @click="applySpringBootPattern">
-                  使用 Spring Boot 格式
-                </el-button>
-                <el-button size="small" type="primary" plain @click="applyLog4jPattern">
-                  使用 Log4j 格式
-                </el-button>
-              </div>
             </div>
           </el-form-item>
         </template>
@@ -168,7 +166,7 @@
           </span>
           <el-alert type="warning" :closable="false" show-icon class="form-alert-spacing">
             <template #title>
-              如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+              如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
             </template>
           </el-alert>
         </template>
@@ -189,10 +187,18 @@
           </el-alert>
           <el-alert type="warning" :closable="false" show-icon>
             <template #title>
-              如需支持链路追踪，日志中需包含 <code>traceId</code> 或 <code>trace_id</code> 字段
+              如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
             </template>
           </el-alert>
         </template>
+
+        <el-form-item label="追踪字段名" prop="traceFieldName">
+          <el-input
+            v-model="form.traceFieldName"
+            placeholder="如: traceId / requestId / tid（不填则不支持链路追踪）"
+          />
+          <span class="form-tip">用于从日志中提取链路追踪标识，不填则默认不提取</span>
+        </el-form-item>
         
         <el-form-item label="编码" prop="encoding">
           <el-select v-model="form.encoding" placeholder="选择编码">
@@ -375,6 +381,83 @@
         <el-button type="primary" @click="handleCreateProject">新建项目</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="log4jTesterDialogVisible" title="Log4J 日志提取测试" width="900px">
+  <el-form label-width="110px" class="log4j-tester-form">
+        <el-form-item label="日志格式">
+          <el-input
+            v-model="log4jTester.pattern"
+            type="textarea"
+            :rows="3"
+            placeholder="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+          />
+          <span class="form-tip">会带入当前表单中的日志格式，可在此临时修改测试</span>
+        </el-form-item>
+        <el-form-item label="示例日志">
+          <el-input
+            v-model="log4jTester.sampleLog"
+            type="textarea"
+            :rows="8"
+            placeholder="粘贴一段完整日志（支持多行堆栈）"
+          />
+        </el-form-item>
+        <el-form-item label="追踪字段名">
+          <el-input
+            v-model="log4jTester.traceFieldName"
+            placeholder="如 traceId / requestId / tid（可留空）"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="testingLog4jExtract" @click="handleTestLog4jExtract">
+            开始提取测试
+          </el-button>
+          <span v-if="log4jTesterResult" class="test-result" :class="log4jTesterResult.matched ? 'success' : 'error'">
+            {{ log4jTesterResult.message }}
+          </span>
+        </el-form-item>
+      </el-form>
+
+      <div v-if="log4jTesterResult" class="log4j-result-panel">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="匹配结果">
+            <el-tag :type="log4jTesterResult.matched ? 'success' : 'danger'">
+              {{ log4jTesterResult.matched ? '匹配成功' : '不匹配' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="日志级别">
+            {{ log4jTesterResult.logLevel || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="日志时间">
+            {{ log4jTesterResult.logTime || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="线程名">
+            {{ log4jTesterResult.threadName || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="Logger">
+            {{ log4jTesterResult.loggerName || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="traceFieldDisplayLabel">
+            {{ traceFieldDisplayValue }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-form label-width="90px" class="log4j-result-fields">
+          <el-form-item label="日志内容">
+            <el-input :model-value="log4jTesterResult.content || ''" type="textarea" :rows="3" readonly />
+          </el-form-item>
+          <el-form-item label="堆栈">
+            <el-input :model-value="log4jTesterResult.stackTrace || ''" type="textarea" :rows="4" readonly />
+          </el-form-item>
+          <el-form-item label="提取字段">
+            <el-input :model-value="formattedParsedFields" type="textarea" :rows="8" readonly />
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <template #footer>
+        <el-button @click="log4jTesterDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -410,6 +493,14 @@ const sshPasswordConfigured = ref(false)
 const testingPath = ref(false)
 const pathTestResult = ref(null)
 const pathTestMessage = ref('')
+const log4jTesterDialogVisible = ref(false)
+const testingLog4jExtract = ref(false)
+const log4jTester = reactive({
+  pattern: '',
+  sampleLog: '',
+  traceFieldName: ''
+})
+const log4jTesterResult = ref(null)
 
 const filteredProjects = computed(() => {
   if (!projectSearchText.value) {
@@ -420,6 +511,41 @@ const filteredProjects = computed(() => {
     p.name.toLowerCase().includes(search) || 
     p.code.toLowerCase().includes(search)
   )
+})
+
+const formattedParsedFields = computed(() => {
+  if (!log4jTesterResult.value?.parsedFields) {
+    return ''
+  }
+  try {
+    return JSON.stringify(log4jTesterResult.value.parsedFields, null, 2)
+  } catch (error) {
+    return ''
+  }
+})
+
+const traceFieldDisplayLabel = computed(() => {
+  const fieldName = log4jTesterResult.value?.traceFieldName || log4jTester.traceFieldName?.trim()
+  return fieldName ? fieldName : 'TraceId'
+})
+
+const traceFieldDisplayValue = computed(() => {
+  if (!log4jTesterResult.value) {
+    return '-'
+  }
+  const fieldName = log4jTesterResult.value.traceFieldName || log4jTester.traceFieldName?.trim()
+  if (!fieldName) {
+    return log4jTesterResult.value.traceId || '-'
+  }
+  const fields = log4jTesterResult.value.parsedFields || {}
+  if (Object.prototype.hasOwnProperty.call(fields, fieldName)) {
+    return String(fields[fieldName] ?? '-')
+  }
+  const ignoreCaseKey = Object.keys(fields).find(key => key.toLowerCase() === fieldName.toLowerCase())
+  if (ignoreCaseKey) {
+    return String(fields[ignoreCaseKey] ?? '-')
+  }
+  return log4jTesterResult.value.traceId || '-'
 })
 
 const projectForm = reactive({
@@ -452,9 +578,11 @@ const form = ref({
   aggregationLevel: 'WARN',
   enabledRuleIds: [],
   customRules: [],
+  traceFieldName: '',
   config: {
     accessLogPath: '',
-    errorLogPath: ''
+    errorLogPath: '',
+    traceFieldName: ''
   }
 })
 
@@ -495,6 +623,44 @@ const rules = {
     },
     trigger: 'blur'
   }],
+  logFormatPattern: [{
+    validator: (rule, value, callback) => {
+      if (form.value.logFormat !== 'LOG4J') {
+        callback()
+        return
+      }
+      const pattern = value ? String(value).trim() : ''
+      if (!pattern) {
+        callback(new Error('请输入 Log4J 日志格式'))
+        return
+      }
+      if (!/%d\{[^}]+\}/.test(pattern)) {
+        callback(new Error('日志格式需要包含时间占位符，如 %d{yyyy-MM-dd HH:mm:ss.SSS}'))
+        return
+      }
+      if (!pattern.includes('%msg') && !pattern.includes('%m')) {
+        callback(new Error('日志格式需要包含消息占位符 %msg 或 %m'))
+        return
+      }
+      callback()
+    },
+    trigger: 'blur'
+  }],
+  traceFieldName: [{
+    validator: (rule, value, callback) => {
+      const fieldName = value ? String(value).trim() : ''
+      if (!fieldName) {
+        callback()
+        return
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(fieldName)) {
+        callback(new Error('追踪字段名仅支持字母、数字、下划线、中划线，且不能以数字开头'))
+        return
+      }
+      callback()
+    },
+    trigger: 'blur'
+  }],
 }
 
 // 日志格式变更处理
@@ -505,6 +671,54 @@ const handleLogFormatChange = (value) => {
   } else if (value === 'NGINX') {
     form.value.paths = ['', '']
     form.value.logFormatPattern = ''
+  } else if (value === 'JSON') {
+    form.value.paths = ['']
+    form.value.logFormatPattern = ''
+  }
+}
+
+const openLog4jTester = () => {
+  const pattern = form.value.logFormatPattern?.trim()
+  if (!pattern) {
+    ElMessage.warning('请先填写 Log4J 日志格式')
+    return
+  }
+  log4jTester.pattern = pattern
+  log4jTester.sampleLog = ''
+  log4jTester.traceFieldName = form.value.traceFieldName?.trim() || ''
+  log4jTesterResult.value = null
+  log4jTesterDialogVisible.value = true
+}
+
+const handleTestLog4jExtract = async () => {
+  const pattern = log4jTester.pattern?.trim()
+  const sampleLog = log4jTester.sampleLog?.trim()
+  const traceFieldName = log4jTester.traceFieldName?.trim() || ''
+  if (!pattern) {
+    ElMessage.warning('请输入日志格式')
+    return
+  }
+  if (!sampleLog) {
+    ElMessage.warning('请输入示例日志')
+    return
+  }
+  if (traceFieldName && !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(traceFieldName)) {
+    ElMessage.warning('追踪字段名格式不正确，请使用字母、数字、下划线或中划线，且不能以数字开头')
+    return
+  }
+
+  testingLog4jExtract.value = true
+  try {
+    const res = await logSourceApi.testLog4jExtract({
+      pattern,
+      sampleLog,
+      traceFieldName: traceFieldName || null
+    })
+    log4jTesterResult.value = res.data
+  } catch (error) {
+    log4jTesterResult.value = null
+  } finally {
+    testingLog4jExtract.value = false
   }
 }
 
@@ -576,6 +790,12 @@ const handleCreateSource = () => {
   pathTestResult.value = null
   pathTestMessage.value = ''
   sshPasswordConfigured.value = false
+  log4jTesterDialogVisible.value = false
+  testingLog4jExtract.value = false
+  log4jTester.pattern = ''
+  log4jTester.sampleLog = ''
+  log4jTester.traceFieldName = ''
+  log4jTesterResult.value = null
   form.value = {
     id: null,
     name: '',
@@ -594,9 +814,11 @@ const handleCreateSource = () => {
     aggregationLevel: 'WARN',
     enabledRuleIds: [],
     customRules: [],
+    traceFieldName: '',
     config: {
       accessLogPath: '',
-      errorLogPath: ''
+      errorLogPath: '',
+      traceFieldName: ''
     }
   }
   dialogVisible.value = true
@@ -626,6 +848,12 @@ const handleEdit = (row) => {
   pathTestResult.value = null
   pathTestMessage.value = ''
   sshPasswordConfigured.value = row.passwordConfigured === true
+  log4jTesterDialogVisible.value = false
+  testingLog4jExtract.value = false
+  log4jTester.pattern = ''
+  log4jTester.sampleLog = ''
+  log4jTester.traceFieldName = ''
+  log4jTesterResult.value = null
 
   let parsedPaths = []
   if (row.paths && Array.isArray(row.paths)) {
@@ -647,9 +875,11 @@ const handleEdit = (row) => {
     enabledRuleIds: row.enabledRuleIds || [],
     customRules: row.customRules || [],
     logFormatPattern: row.logFormatPattern || '',
+    traceFieldName: row.config?.traceFieldName || '',
     config: row.config || {
       accessLogPath: '',
-      errorLogPath: ''
+      errorLogPath: '',
+      traceFieldName: ''
     }
   }
   dialogVisible.value = true
@@ -672,16 +902,6 @@ const addCustomRule = () => {
 // 删除自定义规则
 const removeCustomRule = (index) => {
   form.value.customRules.splice(index, 1)
-}
-
-// 应用 Spring Boot 格式
-const applySpringBootPattern = () => {
-  form.value.logFormatPattern = '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n'
-}
-
-// 应用 Log4j 格式
-const applyLog4jPattern = () => {
-  form.value.logFormatPattern = '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n'
 }
 
 // 测试SSH连接
@@ -852,6 +1072,11 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     const submitData = { ...form.value }
+    submitData.config = {
+      ...(submitData.config || {}),
+      traceFieldName: submitData.traceFieldName?.trim() || null
+    }
+    delete submitData.traceFieldName
     if (!submitData.password || !submitData.password.trim()) {
       delete submitData.password
     }

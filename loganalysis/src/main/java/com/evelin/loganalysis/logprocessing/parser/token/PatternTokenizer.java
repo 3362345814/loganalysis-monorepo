@@ -269,6 +269,11 @@ public class PatternTokenizer {
             case "n":
                 return new NewLineToken();
 
+            case "throwable":
+            case "exception":
+            case "ex":
+                return new ThrowableToken();
+
             default:
                 log.warn("Unknown token pattern: {}", name);
                 return new MessageToken();

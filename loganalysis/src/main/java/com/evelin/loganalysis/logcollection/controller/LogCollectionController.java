@@ -9,6 +9,7 @@ import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logcollection.model.RawLogEvent;
 import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.service.ConnectionTestService;
+import com.evelin.loganalysis.logcollection.service.Log4jExtractTestService;
 import com.evelin.loganalysis.logcollection.service.LogSourceService;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.model.PageResult;
@@ -39,6 +40,7 @@ public class LogCollectionController {
     private final RawLogEventService rawLogEventService;
     private final CollectorFactory collectorFactory;
     private final ConnectionTestService connectionTestService;
+    private final Log4jExtractTestService log4jExtractTestService;
 
     // ==================== 日志源管理 ====================
 
@@ -589,6 +591,12 @@ public class LogCollectionController {
     @PostMapping("/sources/test-path")
     public Result<ConnectionTestResponse> testPathExists(@RequestBody ConnectionTestRequest request) {
         ConnectionTestResponse response = connectionTestService.testPathExists(request);
+        return Result.success(response);
+    }
+
+    @PostMapping("/sources/test-log4j-extract")
+    public Result<Log4jExtractTestResponse> testLog4jExtract(@Valid @RequestBody Log4jExtractTestRequest request) {
+        Log4jExtractTestResponse response = log4jExtractTestService.testExtract(request);
         return Result.success(response);
     }
 

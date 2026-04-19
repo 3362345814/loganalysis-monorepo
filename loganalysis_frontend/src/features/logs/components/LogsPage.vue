@@ -324,9 +324,6 @@ const loadEsLogs = async () => {
   const querySeq = ++esQuerySeq
   try {
     loading.value = true
-    // 开始新查询时先清空旧结果，避免视觉上误以为时间筛选未生效
-    logs.value = []
-    total.value = 0
 
     const currentHighlightTime = highlightTime.value
     const currentHighlightId = highlightId.value
@@ -366,14 +363,6 @@ const loadEsLogs = async () => {
     // 仅保留最后一次查询结果，防止旧请求晚返回覆盖新筛选
     if (querySeq !== esQuerySeq) return
 
-    // 使用 count API 获取准确的总数
-    const countParams = { ...params }
-    delete countParams.page
-    delete countParams.size
-    const countRes = await esLogApi.count(countParams)
-    if (querySeq !== esQuerySeq) return
-    total.value = countRes.data?.count ?? 0
-
     if (res.data && res.data.hits) {
       let hits = res.data.hits.slice().reverse()
 
@@ -396,7 +385,20 @@ const loadEsLogs = async () => {
         originalLogTime: hit.originalLogTime,
         parsedFields: hit.parsedFields || {}
       }))
+      total.value = hits.length
       currentLoadPage = 0
+
+      // 使用 count API 获取准确总数；失败时不影响本次结果展示
+      try {
+        const countParams = { ...params }
+        delete countParams.page
+        delete countParams.size
+        const countRes = await esLogApi.count(countParams)
+        if (querySeq !== esQuerySeq) return
+        total.value = countRes.data?.count ?? hits.length
+      } catch (countError) {
+        console.warn('获取日志总数失败，使用当前结果条数兜底:', countError)
+      }
 
       let foundIndex = -1
 

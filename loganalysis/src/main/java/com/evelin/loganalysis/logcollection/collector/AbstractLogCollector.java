@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -439,6 +440,7 @@ public abstract class AbstractLogCollector implements LogCollector {
                         .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
                         .logFormatPattern(logSource.getLogFormatPattern())
                         .logType(event.getLogType())
+                        .traceFieldName(resolveTraceFieldName())
                         .customPattern(logSource.getCustomPattern())
                         .desensitizationConfig(buildDesensitizationConfig())
                         .build();
@@ -499,6 +501,7 @@ public abstract class AbstractLogCollector implements LogCollector {
                     .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
                     .logFormatPattern(logSource.getLogFormatPattern())
                     .logType(logType)
+                    .traceFieldName(resolveTraceFieldName())
                     .build();
 
             boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
@@ -533,6 +536,19 @@ public abstract class AbstractLogCollector implements LogCollector {
             }
         }
         return null;
+    }
+
+    protected String resolveTraceFieldName() {
+        Map<String, Object> sourceConfig = logSource.getConfig();
+        if (sourceConfig == null) {
+            return null;
+        }
+        Object value = sourceConfig.get("traceFieldName");
+        if (value == null) {
+            return null;
+        }
+        String fieldName = value.toString().trim();
+        return fieldName.isEmpty() ? null : fieldName;
     }
 
     protected void processMultiLineLog(String line, long lineNumber, String filePath) {

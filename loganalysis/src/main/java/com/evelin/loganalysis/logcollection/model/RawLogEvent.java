@@ -109,6 +109,11 @@ public class RawLogEvent {
     private Map<String, Object> parsedFields;
 
     /**
+     * 日志追踪字段名（用户配置，如 traceId/requestId/tid）
+     */
+    private String traceFieldName;
+
+    /**
      * 关联的聚合组ID
      */
     private String aggregationGroupId;
@@ -126,7 +131,7 @@ public class RawLogEvent {
                                      Integer byteLength, String fileInode, LocalDateTime fileMtime,
                                      String logFormat) {
         return create(sourceId, sourceName, filePath, rawContent, lineNumber, fileOffset,
-                byteLength, fileInode, fileMtime, logFormat, null);
+                byteLength, fileInode, fileMtime, logFormat, null, null, null);
     }
 
     /**
@@ -136,21 +141,8 @@ public class RawLogEvent {
                                      String rawContent, Long lineNumber, Long fileOffset,
                                      Integer byteLength, String fileInode, LocalDateTime fileMtime,
                                      String logFormat, String logFormatPattern) {
-        return RawLogEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .sourceId(sourceId)
-                .sourceName(sourceName)
-                .filePath(filePath)
-                .rawContent(rawContent)
-                .lineNumber(lineNumber)
-                .fileOffset(fileOffset)
-                .byteLength(byteLength)
-                .collectionTime(LocalDateTime.now())
-                .fileInode(fileInode)
-                .fileMtime(fileMtime)
-                .logFormat(logFormat)
-                .logFormatPattern(logFormatPattern)
-                .build();
+        return create(sourceId, sourceName, filePath, rawContent, lineNumber, fileOffset,
+                byteLength, fileInode, fileMtime, logFormat, logFormatPattern, null, null);
     }
 
     /**
@@ -160,6 +152,18 @@ public class RawLogEvent {
                                      String rawContent, Long lineNumber, Long fileOffset,
                                      Integer byteLength, String fileInode, LocalDateTime fileMtime,
                                      String logFormat, String logFormatPattern, String logType) {
+        return create(sourceId, sourceName, filePath, rawContent, lineNumber, fileOffset,
+                byteLength, fileInode, fileMtime, logFormat, logFormatPattern, logType, null);
+    }
+
+    /**
+     * 创建工厂方法（支持 logFormatPattern、logType 和 traceFieldName）
+     */
+    public static RawLogEvent create(UUID sourceId, String sourceName, String filePath,
+                                     String rawContent, Long lineNumber, Long fileOffset,
+                                     Integer byteLength, String fileInode, LocalDateTime fileMtime,
+                                     String logFormat, String logFormatPattern, String logType,
+                                     String traceFieldName) {
         return RawLogEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .sourceId(sourceId)
@@ -175,6 +179,7 @@ public class RawLogEvent {
                 .logFormat(logFormat)
                 .logFormatPattern(logFormatPattern)
                 .logType(logType)
+                .traceFieldName(traceFieldName)
                 .build();
     }
 }

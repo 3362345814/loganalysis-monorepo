@@ -201,7 +201,8 @@ public class DesensitizationConsumerService {
                 message.getCollectionTime(),
                 message.getLogFormat(),
                 message.getLogFormatPattern(),
-                message.getLogType()
+                message.getLogType(),
+                message.getTraceFieldName()
         );
     }
 
@@ -288,15 +289,8 @@ public class DesensitizationConsumerService {
         // 不保存 message、logLevel、threadName 等通用字段
         if (parsed.getParsedFields() != null && !parsed.getParsedFields().isEmpty()) {
             for (Map.Entry<String, Object> entry : parsed.getParsedFields().entrySet()) {
-                String key = entry.getKey();
                 Object value = entry.getValue();
-
-                // 映射 trace_id 到 traceId
-                if ("trace_id".equalsIgnoreCase(key)) {
-                    map.put("traceId", value);
-                } else {
-                    map.put(key, value);
-                }
+                map.put(entry.getKey(), value);
             }
         }
         return map;

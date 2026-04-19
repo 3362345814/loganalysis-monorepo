@@ -503,6 +503,7 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
                     .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
                     .logFormatPattern(logSource.getLogFormatPattern())
                     .logType(logType)
+                    .traceFieldName(resolveTraceFieldName())
                     .build();
 
             boolean offered = logQueue.offer(event, 1, TimeUnit.SECONDS);
@@ -532,6 +533,18 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
         return null;
     }
 
+    protected String resolveTraceFieldName() {
+        if (logSource.getConfig() == null) {
+            return null;
+        }
+        Object value = logSource.getConfig().get("traceFieldName");
+        if (value == null) {
+            return null;
+        }
+        String fieldName = value.toString().trim();
+        return fieldName.isEmpty() ? null : fieldName;
+    }
+
     // ==================== RabbitMQ 发送 ====================
 
     protected void sendToRabbitMQ(List<RawLogEvent> events) {
@@ -550,6 +563,7 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
                         .logFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null)
                         .logFormatPattern(logSource.getLogFormatPattern())
                         .logType(event.getLogType())
+                        .traceFieldName(resolveTraceFieldName())
                         .customPattern(logSource.getCustomPattern())
                         .desensitizationConfig(buildDesensitizationConfig())
                         .build();

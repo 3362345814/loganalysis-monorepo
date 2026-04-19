@@ -193,16 +193,7 @@ public class LogParser {
         fields.put("packageName", parseResult.getFileName());
         fields.put("simpleClassName", parseResult.getMethodName());
 
-        // 从解析结果中提取 traceId（支持 trace_id 和 traceId 两种字段名）
-        String traceId = null;
-        if (fields.containsKey("traceId")) {
-            traceId = String.valueOf(fields.get("traceId"));
-        } else if (fields.containsKey("trace_id")) {
-            traceId = String.valueOf(fields.get("trace_id"));
-            // 映射为标准字段名
-            fields.put("traceId", traceId);
-            fields.remove("trace_id");
-        }
+        String traceId = extractTraceIdByConfiguredField(rawLogEvent, fields);
 
         return ParsedLogEvent.builder()
                 .id(IdGenerator.nextId())
@@ -227,5 +218,29 @@ public class LogParser {
                 .anomalyScore(null)
                 .createdAt(LocalDateTime.now())
                 .build();
+    }
+
+    private String extractTraceIdByConfiguredField(RawLogEvent rawLogEvent, Map<String, Object> fields) {
+        String traceFieldName = rawLogEvent.getTraceFieldName();
+        if (traceFieldName == null || traceFieldName.trim().isEmpty()) {
+            return null;
+        }
+
+        String configuredField = traceFieldName.trim();
+        Object configuredValue = fields.get(configuredField);
+        if (configuredValue != null) {
+            String traceId = String.valueOf(configuredValue);
+            fields.put("traceId", traceId);
+            return traceId;
+        }
+
+        for (Map.Entry<String, Object> entry : fields.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(configuredField)) {
+                String traceId = String.valueOf(entry.getValue());
+                fields.put("traceId", traceId);
+                return traceId;
+            }
+        }
+        return null;
     }
 }

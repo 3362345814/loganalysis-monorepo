@@ -203,7 +203,7 @@ public class RawLogEventEntity extends BaseEntity {
             }
         }
 
-        // 从 parsedFields 中提取 traceId
+        // 从 parsedFields 中提取 traceId（仅接受标准字段 traceId）
         String traceId = dto.getTraceId();
         if (traceId == null && parsedFields != null) {
             Object traceIdObj = parsedFields.get("traceId");
