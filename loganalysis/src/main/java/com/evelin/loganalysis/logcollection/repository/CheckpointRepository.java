@@ -18,7 +18,7 @@ import java.util.UUID;
  * @author Evelin
  */
 @Repository
-public interface CheckpointRepository extends JpaRepository<LogCheckpoint, UUID> {
+public interface CheckpointRepository extends JpaRepository<LogCheckpoint, UUID>, CheckpointRepositoryCustom {
 
     /**
      * 根据日志源ID和文件路径查找检查点

@@ -6,16 +6,17 @@ import com.evelin.loganalysis.logcollection.repository.CheckpointRepository;
 import com.evelin.loganalysis.logcommon.model.LogCheckpoint;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -31,6 +32,8 @@ import java.util.concurrent.ConcurrentMap;
 @Slf4j
 @Service
 public class CheckpointManager {
+
+    private static final int MAX_FILE_INODE_LENGTH = 128;
 
     private final CheckpointRepository checkpointRepository;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -126,7 +129,6 @@ public class CheckpointManager {
      * @param fileInode 文件inode
      * @param fileMtime 文件修改时间
      */
-    @Transactional
     public void save(String sourceId, String filePath, Long offset,
                      Long fileSize, String fileInode, LocalDateTime fileMtime) {
         String cacheKey = buildCacheKey(sourceId, filePath);
@@ -134,37 +136,32 @@ public class CheckpointManager {
         synchronized (lock) {
             try {
                 UUID sourceUuid = UUID.fromString(sourceId);
-                LogSource source = new LogSource();
-                source.setId(sourceUuid);
+                LocalDateTime now = LocalDateTime.now();
+                String normalizedFileInode = normalizeFileInode(fileInode);
+                checkpointRepository.upsertCheckpoint(
+                        UUID.randomUUID(),
+                        sourceUuid,
+                        filePath,
+                        offset,
+                        fileSize,
+                        normalizedFileInode,
+                        fileMtime,
+                        now,
+                        now
+                );
 
+                // 回填缓存对象（不依赖数据库自增字段）
                 LogCheckpoint checkpoint = memoryCache.get(cacheKey);
                 if (checkpoint == null) {
-                    List<LogCheckpoint> existingCheckpoints = checkpointRepository.findAllBySourceIdAndFilePath(sourceUuid, filePath);
-                    if (!existingCheckpoints.isEmpty()) {
-                        checkpoint = existingCheckpoints.get(0);
-                        if (existingCheckpoints.size() > 1) {
-                            log.warn("Found {} duplicate checkpoints for sourceId={}, filePath={}, keeping the latest one",
-                                    existingCheckpoints.size(), sourceId, filePath);
-                            for (int i = 1; i < existingCheckpoints.size(); i++) {
-                                checkpointRepository.delete(existingCheckpoints.get(i));
-                            }
-                        }
-                    } else {
-                        checkpoint = new LogCheckpoint();
-                        checkpoint.setSourceId(source);
-                        checkpoint.setFilePath(filePath);
-                    }
+                    checkpoint = new LogCheckpoint();
+                    LogSource source = new LogSource();
+                    source.setId(sourceUuid);
+                    checkpoint.setSourceId(source);
+                    checkpoint.setFilePath(filePath);
                 }
-
-                fillCheckpointFields(checkpoint, offset, fileSize, fileInode, fileMtime);
-
-                // 立即刷盘，避免异常延迟到事务提交阶段才抛出
-                checkpointRepository.saveAndFlush(checkpoint);
+                fillCheckpointFields(checkpoint, offset, fileSize, normalizedFileInode, fileMtime);
                 memoryCache.put(cacheKey, checkpoint);
                 syncToRedisAsync(cacheKey, checkpoint);
-
-            } catch (DataIntegrityViolationException e) {
-                recoverCheckpointAfterDuplicate(sourceId, filePath, cacheKey, offset, fileSize, fileInode, fileMtime, e);
             } catch (Exception e) {
                 log.error("Failed to save checkpoint: sourceId={}, filePath={}, error={}",
                         sourceId, filePath, e.getMessage());
@@ -179,30 +176,6 @@ public class CheckpointManager {
         checkpoint.setFileInode(fileInode);
         checkpoint.setFileMtime(fileMtime);
         checkpoint.setUpdatedAt(LocalDateTime.now());
-    }
-
-    private void recoverCheckpointAfterDuplicate(String sourceId, String filePath, String cacheKey,
-                                                 Long offset, Long fileSize, String fileInode, LocalDateTime fileMtime,
-                                                 DataIntegrityViolationException ex) {
-        try {
-            UUID sourceUuid = UUID.fromString(sourceId);
-            Optional<LogCheckpoint> existing = checkpointRepository.findBySourceIdAndFilePath(sourceUuid, filePath);
-            if (existing.isEmpty()) {
-                log.error("Checkpoint duplicate key detected but no existing row found: sourceId={}, filePath={}",
-                        sourceId, filePath, ex);
-                return;
-            }
-
-            LogCheckpoint checkpoint = existing.get();
-            fillCheckpointFields(checkpoint, offset, fileSize, fileInode, fileMtime);
-            checkpointRepository.saveAndFlush(checkpoint);
-            memoryCache.put(cacheKey, checkpoint);
-            syncToRedisAsync(cacheKey, checkpoint);
-            log.warn("Recovered checkpoint save after duplicate key conflict: sourceId={}, filePath={}", sourceId, filePath);
-        } catch (Exception recoverEx) {
-            log.error("Failed to recover checkpoint after duplicate key: sourceId={}, filePath={}, error={}",
-                    sourceId, filePath, recoverEx.getMessage(), recoverEx);
-        }
     }
 
     /**
@@ -330,5 +303,32 @@ public class CheckpointManager {
         log.debug("Converted checkpoint map: sourceId={}, filePath={}, offset={}, fileSize={}",
                 sourceId, filePath, offset, fileSize);
         return CollectionCheckpoint.of(sourceId, filePath, offset, fileSize, fileInode, fileMtime);
+    }
+
+    private String normalizeFileInode(String fileInode) {
+        if (fileInode == null) {
+            return null;
+        }
+        String normalized = fileInode.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.length() <= MAX_FILE_INODE_LENGTH) {
+            return normalized;
+        }
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(normalized.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >>> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return "sha256:" + hex;
+        } catch (NoSuchAlgorithmException e) {
+            log.warn("SHA-256 is unavailable, truncating inode value");
+            return normalized.substring(0, MAX_FILE_INODE_LENGTH);
+        }
     }
 }

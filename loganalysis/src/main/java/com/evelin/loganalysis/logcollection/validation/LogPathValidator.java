@@ -62,19 +62,36 @@ public class LogPathValidator {
     }
 
     private void validateNginxPaths(List<String> paths, ValidationResult result) {
-        if (paths.size() != 2) {
-            result.addError("paths", "Nginx日志需要两个文件路径（access.log和error.log）");
+        if (paths == null || paths.isEmpty()) {
+            result.addError("paths", "Nginx日志至少需要提供Access日志路径");
             return;
         }
 
-        for (String path : paths) {
-            if (containsWildcard(path)) {
-                result.addError("paths", "Nginx日志不支持文件模式匹配，请使用具体文件路径");
-                break;
-            }
-            if (!isValidFilePath(path)) {
-                result.addError("paths", "文件路径格式不正确: " + path);
-                break;
+        String accessPath = paths.get(0);
+        if (accessPath == null || accessPath.trim().isEmpty()) {
+            result.addError("paths", "Nginx Access日志路径不能为空");
+            return;
+        }
+        if (containsWildcard(accessPath)) {
+            result.addError("paths", "Nginx Access日志不支持文件模式匹配，请使用具体文件路径");
+            return;
+        }
+        if (!isValidFilePath(accessPath)) {
+            result.addError("paths", "Access日志路径格式不正确: " + accessPath);
+            return;
+        }
+
+        // Error 日志路径选填，填写时校验格式
+        if (paths.size() > 1) {
+            String errorPath = paths.get(1);
+            if (errorPath != null && !errorPath.trim().isEmpty()) {
+                if (containsWildcard(errorPath)) {
+                    result.addError("paths", "Nginx Error日志不支持文件模式匹配，请使用具体文件路径");
+                    return;
+                }
+                if (!isValidFilePath(errorPath)) {
+                    result.addError("paths", "Error日志路径格式不正确: " + errorPath);
+                }
             }
         }
     }

@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
 
 /**
@@ -277,12 +278,8 @@ public class AlertRecordService {
      */
     private String generateAlertId() {
         String dateStr = LocalDate.now().format(ALERT_ID_DATE_FORMAT);
-
-        // 获取今日告警数量
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
-        long todayCount = alertRecordRepository.countByTimeRange(startOfDay, LocalDateTime.now());
-
-        return String.format("%s-%s-%04d", ALERT_ID_PREFIX, dateStr, todayCount + 1);
+        String randomPart = Integer.toString(ThreadLocalRandom.current().nextInt(100000, 999999));
+        return String.format("%s-%s-%s", ALERT_ID_PREFIX, dateStr, randomPart);
     }
 
     /**

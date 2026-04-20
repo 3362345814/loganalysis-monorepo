@@ -246,6 +246,68 @@ const formatLatencyRange = (min, max, unit) => {
   return `${minNum.toFixed(unit === 'ms' ? 2 : 3)} ~ ${maxNum.toFixed(unit === 'ms' ? 2 : 3)} ${unit}`
 }
 
+const buildChartTooltip = (overrides = {}) => ({
+  appendToBody: true,
+  extraCssText: 'z-index: 10010;',
+  ...overrides
+})
+
+const buildScatterPlotData = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return []
+  }
+
+  const xValues = rows.map((item) => Number(item.freshnessSeconds ?? 0))
+  const yValues = rows.map((item) => Number(item.qualityScore ?? 0))
+  const xMin = Math.min(...xValues)
+  const xMax = Math.max(...xValues)
+  const yMin = Math.min(...yValues)
+  const yMax = Math.max(...yValues)
+  const xSpan = Math.max(1, xMax - xMin)
+  const ySpan = Math.max(1, yMax - yMin)
+  const duplicateGroups = new Map()
+
+  const points = rows.map((item, index) => {
+    const x = Number(item.freshnessSeconds ?? 0)
+    const y = Number(item.qualityScore ?? 0)
+    const key = `${x.toFixed(3)}|${y.toFixed(3)}`
+    const indices = duplicateGroups.get(key) ?? []
+    indices.push(index)
+    duplicateGroups.set(key, indices)
+
+    return {
+      value: [x, Number(y.toFixed(1)), item.total],
+      name: item.name,
+      symbolSize: clamp(Math.sqrt(item.total + 1) * 1.8, 8, 26),
+      itemStyle: {
+        color: item.qualityScore >= 80 ? '#1f8a65' : item.qualityScore >= 60 ? '#b87a2e' : '#b53333',
+        opacity: 0.82
+      }
+    }
+  })
+
+  duplicateGroups.forEach((indices) => {
+    if (indices.length <= 1) {
+      return
+    }
+
+    // 对完全重合点做轻微偏移，避免 tooltip 无法命中被覆盖的点
+    const baseRadius = Math.min(0.028, 0.008 * Math.sqrt(indices.length))
+    indices.forEach((pointIndex, idx) => {
+      const angle = (2 * Math.PI * idx) / indices.length
+      const round = Math.floor(idx / 8)
+      const radius = baseRadius * (1 + round * 0.65)
+      const xOffset = xSpan * radius * Math.cos(angle)
+      const yOffset = ySpan * radius * Math.sin(angle)
+      const point = points[pointIndex]
+      point.value[0] = Math.max(0, point.value[0] + xOffset)
+      point.value[1] = clamp(point.value[1] + yOffset, 0, 100)
+    })
+  })
+
+  return points
+}
+
 export const useHomeDashboard = () => {
   const stats = reactive({
     sources: 0,
@@ -391,7 +453,7 @@ export const useHomeDashboard = () => {
 
   const logIngestionTrendOption = computed(() => ({
     grid: { left: 6, right: 6, top: 8, bottom: 6 },
-    tooltip: {
+    tooltip: buildChartTooltip({
       trigger: 'axis',
       axisPointer: { type: 'line' },
       formatter: (params) => {
@@ -399,7 +461,7 @@ export const useHomeDashboard = () => {
         if (!point) return ''
         return `${point.axisValue}<br/>入库: ${Number(point.data ?? 0).toLocaleString('zh-CN')}`
       }
-    },
+    }),
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -433,7 +495,7 @@ export const useHomeDashboard = () => {
   }))
 
   const trafficOption = computed(() => ({
-    tooltip: { trigger: 'axis' },
+    tooltip: buildChartTooltip({ trigger: 'axis' }),
     legend: { top: 0, textStyle: { color: '#5d6d89' } },
     grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {
@@ -479,7 +541,7 @@ export const useHomeDashboard = () => {
   }))
 
   const anomalyOption = computed(() => ({
-    tooltip: { trigger: 'axis' },
+    tooltip: buildChartTooltip({ trigger: 'axis' }),
     legend: { top: 0, textStyle: { color: '#5d6d89' } },
     grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {
@@ -527,7 +589,7 @@ export const useHomeDashboard = () => {
   }))
 
   const alertTrendOption = computed(() => ({
-    tooltip: { trigger: 'axis' },
+    tooltip: buildChartTooltip({ trigger: 'axis' }),
     grid: { left: '6%', right: '4%', top: '12%', bottom: '6%', containLabel: true },
     xAxis: {
       type: 'category',
@@ -562,13 +624,13 @@ export const useHomeDashboard = () => {
     const nonZeroRows = alertLevelRows.value.filter((item) => Number(item.count ?? 0) > 0)
 
     return {
-      tooltip: {
+      tooltip: buildChartTooltip({
         trigger: 'item',
         formatter: (params) => {
           const percent = Number(params.percent ?? 0).toFixed(1)
           return `${params.marker}${params.name}: ${Number(params.value ?? 0).toLocaleString('zh-CN')} (${percent}%)`
         }
-      },
+      }),
       legend: {
         show: nonZeroRows.length > 0,
         orient: 'vertical',
@@ -611,7 +673,7 @@ export const useHomeDashboard = () => {
   })
 
   const sourceHealthOption = computed(() => ({
-    tooltip: {
+    tooltip: buildChartTooltip({
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
       formatter: (params) => {
@@ -627,7 +689,7 @@ export const useHomeDashboard = () => {
           `最近日志: ${row.freshnessMins} 分钟前`
         ].join('<br/>')
       }
-    },
+    }),
     grid: { left: '6%', right: '12%', top: '10%', bottom: '5%', containLabel: true },
     xAxis: {
       type: 'value',
@@ -657,7 +719,7 @@ export const useHomeDashboard = () => {
   }))
 
   const sourceAnomalyTopNOption = computed(() => ({
-    tooltip: {
+    tooltip: buildChartTooltip({
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
       formatter: (params) => {
@@ -672,7 +734,7 @@ export const useHomeDashboard = () => {
           `总日志: ${row.total.toLocaleString('zh-CN')}`
         ].join('<br/>')
       }
-    },
+    }),
     grid: { left: '6%', right: '12%', top: '10%', bottom: '5%', containLabel: true },
     xAxis: {
       type: 'value',
@@ -709,8 +771,9 @@ export const useHomeDashboard = () => {
   }))
 
   const sourceQualityScatterOption = computed(() => ({
-    tooltip: {
+    tooltip: buildChartTooltip({
       trigger: 'item',
+      triggerOn: 'mousemove|click',
       formatter: (params) => {
         const row = sourceQualityScatterRows.value[params.dataIndex]
         if (!row) return ''
@@ -722,7 +785,7 @@ export const useHomeDashboard = () => {
           `日志总量: ${row.total.toLocaleString('zh-CN')}`
         ].join('<br/>')
       }
-    },
+    }),
     grid: { left: '6%', right: '6%', top: '12%', bottom: '14%', containLabel: true },
     xAxis: {
       type: 'value',
@@ -744,26 +807,22 @@ export const useHomeDashboard = () => {
     series: [
       {
         type: 'scatter',
-        data: sourceQualityScatterRows.value.map((item) => ({
-          value: [item.freshnessSeconds, Number(item.qualityScore.toFixed(1)), item.total],
-          name: item.name,
-          symbolSize: clamp(Math.sqrt(item.total + 1) * 1.8, 8, 26),
-          itemStyle: {
-            color: item.qualityScore >= 80 ? '#1f8a65' : item.qualityScore >= 60 ? '#b87a2e' : '#b53333',
-            opacity: 0.82
-          }
-        }))
+        emphasis: {
+          focus: 'self',
+          scale: true
+        },
+        data: buildScatterPlotData(sourceQualityScatterRows.value)
       }
     ]
   }))
 
   const traceDistributionOption = computed(() => ({
-    tooltip: {
+    tooltip: buildChartTooltip({
       trigger: 'axis',
       confine: true,
-      appendToBody: false,
+      appendToBody: true,
       position: getConfinedTooltipPosition,
-      extraCssText: 'max-width: 320px; white-space: normal; word-break: break-word; overflow-wrap: anywhere;',
+      extraCssText: 'z-index: 10010; max-width: 320px; white-space: normal; word-break: break-word; overflow-wrap: anywhere;',
       formatter: (params) => {
         const lines = []
         const axisLabel = params?.[0]?.axisValueLabel ?? ''
@@ -799,7 +858,7 @@ export const useHomeDashboard = () => {
         })
         return lines.join('<br/>')
       }
-    },
+    }),
     legend: { top: 0, textStyle: { color: '#5d6d89' } },
     grid: { left: '4%', right: '4%', top: '16%', bottom: '5%', containLabel: true },
     xAxis: {

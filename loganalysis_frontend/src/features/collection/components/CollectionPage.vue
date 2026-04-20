@@ -100,14 +100,14 @@
 
         <!-- Log4j Log 配置 -->
         <template v-if="form.logFormat === 'LOG4J'">
-          <el-form-item label="日志路径" prop="paths">
+          <el-form-item label="日志路径" prop="paths" required>
             <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" @blur="handleAutoTestPath" />
             <span class="form-tip">Log4j日志只支持单个文件路径，不支持通配符</span>
             <span v-if="pathTestResult !== null" class="test-result" :class="pathTestResult ? 'success' : 'error'">
               {{ pathTestMessage }}
             </span>
           </el-form-item>
-          <el-form-item label="日志格式" prop="logFormatPattern">
+          <el-form-item label="日志格式" prop="logFormatPattern" required>
             <el-input 
               v-model="form.logFormatPattern" 
               placeholder="如: %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
@@ -151,10 +151,10 @@
 
         <!-- Nginx Log 配置 -->
         <template v-if="form.logFormat === 'NGINX'">
-          <el-form-item label="Access日志" prop="paths">
+          <el-form-item label="Access日志" prop="paths" required>
             <el-input v-model="form.paths[0]" placeholder="如: /var/log/nginx/access.log" @blur="handleAutoTestPath" />
           </el-form-item>
-          <el-form-item label="Error日志" prop="paths">
+          <el-form-item label="Error日志">
             <el-input v-model="form.paths[1]" placeholder="如: /var/log/nginx/error.log" @blur="handleAutoTestPath" />
           </el-form-item>
           <span
@@ -164,32 +164,31 @@
           >
             {{ pathTestMessage }}
           </span>
-          <el-alert type="warning" :closable="false" show-icon class="form-alert-spacing">
-            <template #title>
-              如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
-            </template>
-          </el-alert>
+          <div class="form-tip-alert-wrap">
+            <el-alert type="warning" :closable="false" show-icon class="form-alert-spacing">
+              <template #title>
+                如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
+              </template>
+            </el-alert>
+          </div>
         </template>
 
         <!-- JSON Log 配置 -->
         <template v-if="form.logFormat === 'JSON'">
-          <el-form-item label="日志路径" prop="paths">
+          <el-form-item label="日志路径" prop="paths" required>
             <el-input v-model="form.paths[0]" placeholder="如: /var/log/myapp/app.log" @blur="handleAutoTestPath" />
             <span class="form-tip">JSON日志只支持单个文件路径，不支持通配符</span>
             <span v-if="pathTestResult !== null" class="test-result" :class="pathTestResult ? 'success' : 'error'">
               {{ pathTestMessage }}
             </span>
           </el-form-item>
-          <el-alert type="info" :closable="false" show-icon class="form-alert-spacing">
-            <template #title>
-              JSON格式日志示例：<code>{"timestamp":"2026-03-19 10:00:00","level":"ERROR","message":"错误信息","traceId":"abc123"}</code>
-            </template>
-          </el-alert>
-          <el-alert type="warning" :closable="false" show-icon>
-            <template #title>
-              如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
-            </template>
-          </el-alert>
+          <div class="form-tip-alert-wrap">
+            <el-alert type="warning" :closable="false" show-icon class="form-alert-spacing">
+              <template #title>
+                如需支持链路追踪，请填写“追踪字段名”，并确保日志包含该字段
+              </template>
+            </el-alert>
+          </div>
         </template>
 
         <el-form-item label="追踪字段名" prop="traceFieldName">
@@ -368,6 +367,10 @@
             <div class="project-item-info">
               <div class="project-item-name">{{ project.name }}</div>
               <div class="project-item-code">{{ project.code }}</div>
+            </div>
+            <div class="project-item-actions">
+              <el-button link type="primary" @click.stop="handleEditProject(project)">编辑</el-button>
+              <el-button link type="danger" @click.stop="handleDeleteProject(project)">删除</el-button>
             </div>
             <div class="project-item-check" v-if="currentProject?.id === project.id">
               <el-icon><Check /></el-icon>
@@ -588,14 +591,15 @@ const form = ref({
 
 const rules = {
   name: [{ required: true, message: '请输入采集源名称', trigger: 'blur' }],
-  paths: [{ 
+  paths: [{
     validator: (rule, value, callback) => {
-      if (!value || value.length === 0) {
+      const normalized = Array.isArray(value) ? value.map(item => (item ?? '').trim()) : []
+      if (normalized.length === 0 || !normalized.some(item => item)) {
         callback(new Error('请输入日志文件路径'))
-      } else if (form.value.logFormat === 'LOG4J' && value.length > 1) {
+      } else if (form.value.logFormat === 'LOG4J' && normalized.filter(item => item).length > 1) {
         callback(new Error('该日志格式只支持单个文件路径'))
-      } else if (form.value.logFormat === 'NGINX' && value.length !== 2) {
-        callback(new Error('Nginx日志需要两个文件路径（access.log和error.log）'))
+      } else if (form.value.logFormat === 'NGINX' && !normalized[0]) {
+        callback(new Error('Nginx Access日志为必填项'))
       } else {
         callback()
       }
@@ -750,7 +754,22 @@ const loadProjects = async () => {
 
 const handleCreateProject = () => {
   isProjectEdit.value = false
-  Object.assign(projectForm, { name: '', description: '', owner: '', email: '', enabled: true })
+  Object.assign(projectForm, { id: null, name: '', description: '', owner: '', email: '', enabled: true })
+  projectSelectDialogVisible.value = false
+  projectDialogVisible.value = true
+}
+
+const handleEditProject = (project) => {
+  isProjectEdit.value = true
+  Object.assign(projectForm, {
+    id: project.id,
+    name: project.name || '',
+    description: project.description || '',
+    owner: project.owner || '',
+    email: project.email || '',
+    enabled: project.enabled !== false
+  })
+  projectSelectDialogVisible.value = false
   projectDialogVisible.value = true
 }
 
@@ -759,7 +778,13 @@ const handleProjectSubmit = async () => {
   projectSubmitting.value = true
   try {
     if (isProjectEdit.value) {
-      await projectApi.update(projectForm.id, projectForm)
+      const res = await projectApi.update(projectForm.id, projectForm)
+      const updatedProject = res.data || { ...projectForm }
+      if (currentProject.value?.id === updatedProject.id) {
+        currentProject.value = { ...currentProject.value, ...updatedProject }
+        localStorage.setItem('currentProjectId', currentProject.value.id)
+        localStorage.setItem('currentProjectName', currentProject.value.name)
+      }
       ElMessage.success('更新成功')
     } else {
       const res = await projectApi.create(projectForm)
@@ -774,6 +799,29 @@ const handleProjectSubmit = async () => {
     console.error('操作失败:', error)
   } finally {
     projectSubmitting.value = false
+  }
+}
+
+const handleDeleteProject = async (project) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除项目 "${project.name}" 吗？`,
+      '警告',
+      { type: 'warning' }
+    )
+    await projectApi.delete(project.id)
+    if (currentProject.value?.id === project.id) {
+      currentProject.value = null
+      localStorage.removeItem('currentProjectId')
+      localStorage.removeItem('currentProjectName')
+      await loadSources()
+    }
+    await loadProjects()
+    ElMessage.success('删除成功')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除项目失败:', error)
+    }
   }
 }
 
@@ -955,7 +1003,7 @@ const handleAutoTestPath = async () => {
   }
   handleAutoTestPath.lastTime = Date.now()
 
-  const paths = form.value.paths.filter(p => p && p.trim())
+  const paths = form.value.paths.map(p => (p || '').trim()).filter(Boolean)
   if (paths.length === 0) {
     return
   }
@@ -996,7 +1044,7 @@ const handleSubmit = async () => {
 
   // SSH 类型：点击确定时先执行连接和路径测试
   if (form.value.sourceType === 'SSH') {
-    const paths = form.value.paths?.filter(p => p && p.trim()) || []
+    const paths = form.value.paths?.map(p => (p || '').trim()).filter(Boolean) || []
     const hasInputPassword = !!form.value.password?.trim()
     const keepExistingPassword = isEdit.value && sshPasswordConfigured.value && !hasInputPassword
 
@@ -1072,6 +1120,7 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     const submitData = { ...form.value }
+    submitData.paths = (submitData.paths || []).map(path => (path || '').trim()).filter(Boolean)
     submitData.config = {
       ...(submitData.config || {}),
       traceFieldName: submitData.traceFieldName?.trim() || null
@@ -1082,12 +1131,10 @@ const handleSubmit = async () => {
     }
 
     if (submitData.logFormat === 'NGINX') {
-      if (submitData.paths && submitData.paths.length >= 2) {
-        submitData.config = {
-          ...submitData.config,
-          accessLogPath: submitData.paths[0],
-          errorLogPath: submitData.paths[1]
-        }
+      submitData.config = {
+        ...submitData.config,
+        accessLogPath: submitData.paths?.[0] || null,
+        errorLogPath: submitData.paths?.[1] || null
       }
     }
     

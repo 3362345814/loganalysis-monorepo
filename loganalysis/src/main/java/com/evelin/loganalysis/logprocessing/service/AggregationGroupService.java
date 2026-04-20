@@ -246,6 +246,18 @@ public class AggregationGroupService {
     }
 
     /**
+     * 删除指定日志源关联的所有聚合组（优先按 sourceId，兼容按 sourceName 清理历史异常数据）
+     */
+    @Transactional
+    public int deleteBySourceIdOrSourceName(String sourceId, String sourceName) {
+        int deleted = aggregationGroupRepository.deleteBySourceIdOrSourceName(sourceId, sourceName);
+        if (deleted > 0) {
+            log.info("删除日志源关联聚合组: sourceId={}, sourceName={}, deleted={}", sourceId, sourceName, deleted);
+        }
+        return deleted;
+    }
+
+    /**
      * 清理 sourceId 对应日志源已不存在的孤儿聚合组
      */
     @Transactional

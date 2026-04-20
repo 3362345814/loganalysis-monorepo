@@ -84,6 +84,19 @@ public interface AggregationGroupRepository extends JpaRepository<AggregationGro
     int deleteBySourceId(@Param("sourceId") String sourceId);
 
     /**
+     * 删除指定日志源ID或日志源名称对应的聚合组
+     * 用于兼容历史数据中 sourceId 缺失/异常的场景
+     */
+    @Modifying
+    @Query("""
+            DELETE FROM AggregationGroupEntity a
+            WHERE a.sourceId = :sourceId
+               OR (:sourceName IS NOT NULL AND a.sourceName = :sourceName)
+            """)
+    int deleteBySourceIdOrSourceName(@Param("sourceId") String sourceId,
+                                     @Param("sourceName") String sourceName);
+
+    /**
      * 批量删除指定日志源集合对应的聚合组
      */
     @Modifying

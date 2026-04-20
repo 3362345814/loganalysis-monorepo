@@ -1,12 +1,15 @@
 {
-  "version": "v0.4.6",
-  "releaseDate": "2026-04-15",
+  "version": "v0.5.0",
+  "releaseDate": "2026-04-20",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026041503",
+    "buildNumber": "2026042001",
     "environment": "production"
   }, 
   "updateInfo": [
-    "修正了docker仓库名错误的问题"
+    "修复了一系列的并发问题",
+    "修复了前端显示问题",
+    "修复了删除日志源时未清理聚合组的问题",
+    "Nginx日志现在可以只填access日志了"
   ]
 }

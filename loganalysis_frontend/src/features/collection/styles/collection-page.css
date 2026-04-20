@@ -26,6 +26,10 @@
   margin-bottom: var(--space-16);
 }
 
+.form-tip-alert-wrap {
+  margin-left: 100px;
+}
+
 .nginx-path-test-result {
   margin-left: 100px;
 }
@@ -129,6 +133,12 @@
 
 .project-item-info {
   flex: 1;
+}
+
+.project-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
 }
 
 .project-item-name {

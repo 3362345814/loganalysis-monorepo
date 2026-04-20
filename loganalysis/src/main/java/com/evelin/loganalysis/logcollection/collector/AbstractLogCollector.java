@@ -520,22 +520,43 @@ public abstract class AbstractLogCollector implements LogCollector {
     }
 
     protected String determineLogType(String filePath) {
+        String normalizedFilePath = asTrimmedString(filePath);
+        if (normalizedFilePath == null) {
+            return null;
+        }
+
+        // 优先使用配置中的 access/error 路径
         if (logSource.getConfig() != null) {
-            Object errorLogPathObj = logSource.getConfig().get("errorLogPath");
-            Object accessLogPathObj = logSource.getConfig().get("accessLogPath");
-
-            String errorLogPath = errorLogPathObj != null ? errorLogPathObj.toString() : null;
-            String accessLogPath = accessLogPathObj != null ? accessLogPathObj.toString() : null;
-
-            if (filePath != null) {
-                if (errorLogPath != null && filePath.equals(errorLogPath)) {
-                    return "error";
-                } else if (accessLogPath != null && filePath.equals(accessLogPath)) {
-                    return "access";
-                }
+            String errorLogPath = asTrimmedString(logSource.getConfig().get("errorLogPath"));
+            String accessLogPath = asTrimmedString(logSource.getConfig().get("accessLogPath"));
+            if (normalizedFilePath.equals(errorLogPath)) {
+                return "error";
+            }
+            if (normalizedFilePath.equals(accessLogPath)) {
+                return "access";
             }
         }
+
+        // 兼容历史数据：若未写入 config.access/error，按 paths 顺序回退（第1个为access，第2个为error）
+        if (logSource.getLogFormat() == LogFormat.NGINX) {
+            List<String> paths = com.evelin.loganalysis.logcollection.util.LogPathSerializer.deserializePaths(logSource.getPaths());
+            if (!paths.isEmpty() && normalizedFilePath.equals(asTrimmedString(paths.get(0)))) {
+                return "access";
+            }
+            if (paths.size() > 1 && normalizedFilePath.equals(asTrimmedString(paths.get(1)))) {
+                return "error";
+            }
+        }
+
         return null;
+    }
+
+    private String asTrimmedString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.toString().trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     protected String resolveTraceFieldName() {

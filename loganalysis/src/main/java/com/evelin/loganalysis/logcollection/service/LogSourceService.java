@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,6 +65,8 @@ public class LogSourceService {
             throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "日志源名称已存在: " + request.getName());
         }
 
+        List<String> normalizedPaths = normalizePaths(request.getPaths());
+
         LogFormat logFormat = null;
         if (request.getLogFormat() != null) {
             logFormat = LogFormat.valueOf(request.getLogFormat());
@@ -72,7 +75,7 @@ public class LogSourceService {
         if (logFormat != null) {
             LogPathValidator.ValidationResult validationResult = logPathValidator.validatePaths(
                 logFormat, 
-                request.getPaths()
+                normalizedPaths
             );
             if (!validationResult.isValid()) {
                 throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, validationResult.getErrorMessage());
@@ -85,7 +88,7 @@ public class LogSourceService {
         
         Map<String, Object> pathsMap = LogPathSerializer.createPathsMap(
             logFormat,
-            request.getPaths(),
+            normalizedPaths,
             request.getLogFormatPattern()
         );
         logSource.setPaths(pathsMap);
@@ -104,7 +107,7 @@ public class LogSourceService {
         }
         logSource.setCustomPattern(request.getCustomPattern());
         logSource.setLogFormatPattern(request.getLogFormatPattern());
-        logSource.setConfig(request.getConfig());
+        logSource.setConfig(normalizeConfig(logFormat, request.getConfig(), normalizedPaths));
         logSource.setRemark(request.getRemark());
         
         logSource.setDesensitizationEnabled(request.getDesensitizationEnabled() != null ? request.getDesensitizationEnabled() : false);
@@ -214,11 +217,12 @@ public class LogSourceService {
             }
             
             if (request.getPaths() != null) {
+                List<String> normalizedPaths = normalizePaths(request.getPaths());
                 LogFormat logFormat = existing.getLogFormat();
                 if (logFormat != null) {
                     LogPathValidator.ValidationResult validationResult = logPathValidator.validatePaths(
                         logFormat,
-                        request.getPaths()
+                        normalizedPaths
                     );
                     if (!validationResult.isValid()) {
                         throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, validationResult.getErrorMessage());
@@ -227,7 +231,7 @@ public class LogSourceService {
                 
                 Map<String, Object> pathsMap = LogPathSerializer.createPathsMap(
                     existing.getLogFormat(),
-                    request.getPaths(),
+                    normalizedPaths,
                     request.getLogFormatPattern() != null ? request.getLogFormatPattern() : existing.getLogFormatPattern()
                 );
                 existing.setPaths(pathsMap);
@@ -252,7 +256,10 @@ public class LogSourceService {
                 existing.setEnabled(request.getEnabled());
             }
             if (request.getConfig() != null) {
-                existing.setConfig(request.getConfig());
+                List<String> fallbackPaths = request.getPaths() != null
+                        ? normalizePaths(request.getPaths())
+                        : LogPathSerializer.deserializePaths(existing.getPaths());
+                existing.setConfig(normalizeConfig(existing.getLogFormat(), request.getConfig(), fallbackPaths));
             }
             if (request.getRemark() != null) {
                 existing.setRemark(request.getRemark());
@@ -331,13 +338,13 @@ public class LogSourceService {
         checkpointRepository.deleteBySourceId(id);
 
         // 级联删除关联聚合组，避免出现“组存在但组内日志为空”
-        int deletedGroups = aggregationGroupService.deleteBySourceId(id.toString());
+        int deletedGroups = aggregationGroupService.deleteBySourceIdOrSourceName(id.toString(), logSource.getName());
         
         // 删除日志源
         logSourceRepository.delete(logSource);
         
-        log.info("删除日志源成功: {}, 关联日志: {} 条, 关联告警: {} 条, 关联聚合组: {} 个",
-                id, logCount, deletedAlerts, deletedGroups);
+        log.info("删除日志源成功: {}, name={}, 关联日志: {} 条, 关联告警: {} 条, 关联聚合组: {} 个",
+                id, logSource.getName(), logCount, deletedAlerts, deletedGroups);
     }
 
     /**
@@ -494,5 +501,54 @@ public class LogSourceService {
         }
         int visibleCount = Math.min(4, secret.length());
         return MASK_PREFIX + secret.substring(secret.length() - visibleCount);
+    }
+
+    private List<String> normalizePaths(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String path : paths) {
+            if (path == null) {
+                continue;
+            }
+            String trimmed = path.trim();
+            if (!trimmed.isEmpty()) {
+                normalized.add(trimmed);
+            }
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> normalizeConfig(LogFormat logFormat, Map<String, Object> config, List<String> normalizedPaths) {
+        if (config == null) {
+            return null;
+        }
+        if (logFormat != LogFormat.NGINX) {
+            return config;
+        }
+
+        Map<String, Object> normalizedConfig = new java.util.HashMap<>(config);
+        String accessLogPath = asTrimmedString(normalizedConfig.get("accessLogPath"));
+        String errorLogPath = asTrimmedString(normalizedConfig.get("errorLogPath"));
+
+        if ((accessLogPath == null || accessLogPath.isBlank()) && normalizedPaths != null && !normalizedPaths.isEmpty()) {
+            accessLogPath = normalizedPaths.get(0);
+        }
+        if ((errorLogPath == null || errorLogPath.isBlank()) && normalizedPaths != null && normalizedPaths.size() > 1) {
+            errorLogPath = normalizedPaths.get(1);
+        }
+
+        normalizedConfig.put("accessLogPath", accessLogPath);
+        normalizedConfig.put("errorLogPath", errorLogPath);
+        return normalizedConfig;
+    }
+
+    private String asTrimmedString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.toString().trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
