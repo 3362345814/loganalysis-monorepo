@@ -162,7 +162,6 @@
           <el-tag :type="getSeverityType(currentGroup.severity)">{{ currentGroup.severity }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="事件数">{{ currentGroup.eventCount }}</el-descriptions-item>
-        <el-descriptions-item label="相似度">{{ currentGroup.similarityScore?.toFixed(2) || '-' }}</el-descriptions-item>
         <el-descriptions-item label="首次发生" :span="2">
           {{ formatTime(currentGroup.firstEventTime) }}
         </el-descriptions-item>
@@ -172,7 +171,6 @@
         <el-descriptions-item label="代表性日志" :span="2">
           <pre class="log-content">{{ currentGroup.representativeLog }}</pre>
         </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ currentGroup.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
 
       <!-- 组内日志列表 -->
@@ -182,14 +180,11 @@
       </el-divider>
       
       <el-table :data="groupLogs" v-loading="logsLoading" max-height="400" size="small">
-        <el-table-column prop="logTime" label="日志时间" width="160">
+        <el-table-column prop="logLevel" label="级别" width="100">
           <template #default="{ row }">
-            {{ formatTime(row.logTime) || formatTime(row.originalLogTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="logLevel" label="级别" width="80">
-          <template #default="{ row }">
-            <el-tag :type="getSeverityType(row.logLevel)" size="small">{{ row.logLevel }}</el-tag>
+            <el-tag :type="getLogLevelTagType(row.logLevel)" size="small">
+              {{ formatLogLevel(row.logLevel) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="rawContent" label="日志内容" min-width="400" show-overflow-tooltip>
@@ -395,6 +390,30 @@ const getSeverityType = (severity) => {
     'INFO': 'info'
   }
   return typeMap[severity] || 'info'
+}
+
+const formatLogLevel = (level) => {
+  if (!level) return '-'
+  return String(level).trim().toUpperCase()
+}
+
+const getLogLevelTagType = (level) => {
+  const normalizedLevel = formatLogLevel(level)
+  if (normalizedLevel === '-') return 'info'
+
+  if (['EMERG', 'ALERT', 'CRIT', 'CRITICAL', 'FATAL', 'ERROR', 'ERR'].includes(normalizedLevel)) {
+    return 'danger'
+  }
+  if (['WARN', 'WARNING'].includes(normalizedLevel)) {
+    return 'warning'
+  }
+  if (['INFO', 'NOTICE'].includes(normalizedLevel)) {
+    return 'success'
+  }
+  if (['DEBUG', 'TRACE'].includes(normalizedLevel)) {
+    return 'info'
+  }
+  return 'primary'
 }
 
 // 获取状态类型
