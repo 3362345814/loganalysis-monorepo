@@ -23,6 +23,12 @@
   justify-content: center;
 }
 
+.ai-llm-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
 .system-config-container .el-input-group__prepend {
   display: inline-flex;
   align-items: center;

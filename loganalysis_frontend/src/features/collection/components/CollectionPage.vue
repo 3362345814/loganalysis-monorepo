@@ -25,8 +25,15 @@
       :title="isEdit ? '编辑采集源' : '新建采集源'" 
       width="700px"
     >
-      <el-tabs v-model="activeTab">
-        <el-tab-pane label="基本信息" name="basic">
+      <div class="source-create-steps-bar">
+        <el-steps :active="currentStepIndex" finish-status="success" simple class="source-create-steps">
+          <el-step title="基本信息" />
+          <el-step title="脱敏配置" />
+          <el-step title="聚合配置" />
+        </el-steps>
+      </div>
+
+      <div v-show="activeTab === 'basic'">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入采集源名称" />
@@ -211,9 +218,9 @@
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
-        </el-tab-pane>
-        
-        <el-tab-pane label="脱敏配置" name="desensitization">
+      </div>
+
+      <div v-show="activeTab === 'desensitization'">
           <el-form label-width="120px">
             <!-- 脱敏开关 -->
             <el-form-item label="启用脱敏">
@@ -296,9 +303,9 @@
               </div>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
+      </div>
 
-        <el-tab-pane label="聚合配置" name="aggregation">
+      <div v-show="activeTab === 'aggregation'">
           <el-form label-width="120px">
             <el-form-item label="聚合级别">
               <el-select v-model="form.aggregationLevel" placeholder="选择聚合级别" clearable class="aggregation-level-select">
@@ -309,12 +316,13 @@
               <span class="form-tip">只有等于或高于此级别的日志才会被聚合，未选择则聚合所有日志</span>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
-      </el-tabs>
+      </div>
       
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
+        <el-button v-if="currentStepIndex > 0" @click="goPrevStep">上一步</el-button>
+        <el-button v-if="!isLastStep" type="primary" @click="handleNextStep">下一步</el-button>
+        <el-button v-else type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
 
@@ -484,6 +492,9 @@ const isEdit = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
 const activeTab = ref('basic')
+const stepOrder = ['basic', 'desensitization', 'aggregation']
+const currentStepIndex = computed(() => Math.max(stepOrder.indexOf(activeTab.value), 0))
+const isLastStep = computed(() => currentStepIndex.value === stepOrder.length - 1)
 
 const currentProject = ref(null)
 const projectDialogVisible = ref(false)
@@ -916,6 +927,7 @@ const handleCreateSource = () => {
       traceFieldName: ''
     }
   }
+  activeTab.value = 'basic'
   dialogVisible.value = true
 }
 
@@ -977,7 +989,25 @@ const handleEdit = (row) => {
       traceFieldName: ''
     }
   }
+  activeTab.value = 'basic'
   dialogVisible.value = true
+}
+
+const goPrevStep = () => {
+  if (currentStepIndex.value <= 0) return
+  activeTab.value = stepOrder[currentStepIndex.value - 1]
+}
+
+const handleNextStep = async () => {
+  if (activeTab.value === 'basic') {
+    const valid = await formRef.value?.validate()
+    if (!valid) {
+      return
+    }
+  }
+
+  if (currentStepIndex.value >= stepOrder.length - 1) return
+  activeTab.value = stepOrder[currentStepIndex.value + 1]
 }
 
 // 添加自定义规则

@@ -11,8 +11,29 @@
   justify-content: space-between;
 }
 
+.analysis-config-card :deep(.el-card__body) {
+  padding-bottom: var(--space-8);
+}
+
 .analysis-form {
-  max-width: 500px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-24);
+  row-gap: var(--space-8);
+}
+
+.analysis-form :deep(.el-form-item) {
+  margin-right: 0;
+  margin-bottom: var(--space-12);
+}
+
+.analysis-form :deep(.el-form-item__label) {
+  padding-right: var(--space-8);
+}
+
+.analysis-form :deep(.el-input-number) {
+  width: 120px;
 }
 
 .context-range-tip {
@@ -21,5 +42,5 @@
 }
 
 .analysis-level-select {
-  width: 100%;
+  width: 180px;
 }

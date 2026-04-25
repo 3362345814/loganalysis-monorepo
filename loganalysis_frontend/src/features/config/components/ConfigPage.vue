@@ -17,26 +17,24 @@
         />
       </el-tab-pane>
 
-      <!-- AI分析配置 -->
-      <el-tab-pane label="AI分析配置" name="ai">
-        <ConfigAnalysisTab
-          :analysis-config-form="analysisConfigForm"
-          :saving-analysis-config="savingAnalysisConfig"
-          @save-analysis-config="saveAnalysisConfig"
-        />
-      </el-tab-pane>
-
       <!-- LLM 配置 -->
-      <el-tab-pane label="LLM 配置" name="llm">
-        <ConfigLlmTab
-          :llm-config-list="llmConfigList"
-          :loading-llm="loadingLlm"
-          :active-config-name="activeConfigName"
-          @add-llm="handleAddLlm"
-          @edit-llm="handleEditLlm"
-          @set-default-llm="handleSetDefaultLlm"
-          @delete-llm="handleDeleteLlm"
-        />
+      <el-tab-pane label="LLM配置" name="ai-llm">
+        <div class="ai-llm-config-panel">
+          <ConfigAnalysisTab
+            :analysis-config-form="analysisConfigForm"
+            :saving-analysis-config="savingAnalysisConfig"
+            @save-analysis-config="saveAnalysisConfig"
+          />
+          <ConfigLlmTab
+            :llm-config-list="llmConfigList"
+            :loading-llm="loadingLlm"
+            :active-config-name="activeConfigName"
+            @add-llm="handleAddLlm"
+            @edit-llm="handleEditLlm"
+            @set-default-llm="handleSetDefaultLlm"
+            @delete-llm="handleDeleteLlm"
+          />
+        </div>
       </el-tab-pane>
     </el-tabs>
 

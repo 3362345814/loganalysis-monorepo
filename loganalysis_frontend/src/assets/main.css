@@ -849,9 +849,11 @@ a {
   border-radius: var(--radius-featured) !important;
   background: var(--color-white) !important;
   border: 1px solid var(--border-primary);
-  max-height: calc(100vh - 48px);
+  margin: 0 auto !important;
+  max-height: calc(100vh - 8vh);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .el-dialog__header {
@@ -867,6 +869,36 @@ a {
 }
 
 .el-dialog__footer {
+  border-top: 1px solid var(--border-primary);
+  padding: var(--space-16);
+}
+
+.el-overlay-dialog {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4vh 0;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.el-message-box {
+  border-radius: var(--radius-featured) !important;
+  background: var(--color-white) !important;
+  border: 1px solid var(--border-primary) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+.el-message-box .el-message-box__header {
+  border-bottom: 1px solid var(--border-primary);
+  padding: var(--space-16);
+}
+
+.el-message-box .el-message-box__content {
+  padding: var(--space-24);
+}
+
+.el-message-box .el-message-box__btns {
   border-top: 1px solid var(--border-primary);
   padding: var(--space-16);
 }
