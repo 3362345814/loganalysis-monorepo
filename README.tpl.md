@@ -604,7 +604,15 @@ loganalysis config set ports.backend 18080
 
 - `irm` 需要在 PowerShell(64位) 中执行，不是 `cmd`
 
-### 8) `mvn test` 失败并提示 Java 版本不匹配
+### 8) Elasticsearch 启动失败并显示 `exit code 137`
+
+`137` 通常表示容器进程被 Docker Desktop / WSL2 因内存不足杀掉。处理方式：
+
+- 在 Docker Desktop Settings -> Resources 中将 Memory 调高，建议至少 6GB
+- 关闭其他占用内存较高的容器或应用后重新执行 `loganalysis up`
+- 如果已反复失败，可先执行 `loganalysis down`，确认不需要保留 ES 数据时再执行 `loganalysis down --remove-volumes` 后重试
+
+### 9) `mvn test` 失败并提示 Java 版本不匹配
 
 - 本项目已固定 JDK 版本为 `21`，若使用 `17/24` 等版本会被 Maven Enforcer 拦截
 - 先执行 `java -version` 和 `mvn -v`，确认当前 Maven 使用的 Java Home

@@ -120,8 +120,9 @@ services:
     image: elasticsearch:8.10.2
     environment:
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms512m -Xmx1g
+      - ES_JAVA_OPTS=-Xms256m -Xmx512m
       - xpack.security.enabled=false
+      - xpack.ml.enabled=false
       - TZ=Asia/Shanghai
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data

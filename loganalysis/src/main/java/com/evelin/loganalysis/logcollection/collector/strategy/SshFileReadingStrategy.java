@@ -8,10 +8,15 @@ import com.jcraft.jsch.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -188,13 +193,10 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
             tempDirFile.mkdirs();
         }
 
-        String tempFilePath = tempDir + "/" + new File(filePath).getName();
+        String tempFilePath = tempDir + "/" + remoteFileName(filePath);
 
-        try {
-            channelSftp.get(filePath, tempFilePath);
-        } catch (SftpException e) {
-            log.error("SFTP exception during download: path={}, sftpErrorId={}, errorMessage='{}'",
-                    filePath, e.id, e.getMessage() != null ? e.getMessage() : "null", e);
+        if (!downloadViaSftp(filePath, tempFilePath) && !downloadViaSshExec(filePath, tempFilePath)) {
+            return;
         }
 
         File tempFile = new File(tempFilePath);
@@ -226,6 +228,151 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
 
         // 处理完成后删除临时文件
         tempFile.delete();
+    }
+
+    private boolean downloadViaSftp(String filePath, String tempFilePath) {
+        String pwd = null;
+        try {
+            pwd = channelSftp.pwd();
+        } catch (SftpException e) {
+            log.debug("Failed to get SFTP working directory: {}", e.getMessage());
+        }
+
+        SftpException lastException = null;
+        for (String candidate : buildSftpPathCandidates(filePath, pwd)) {
+            try {
+                channelSftp.get(candidate, tempFilePath);
+                if (!candidate.equals(filePath)) {
+                    log.info("SFTP download succeeded with normalized path: originalPath={}, downloadPath={}",
+                            filePath, candidate);
+                }
+                return true;
+            } catch (SftpException e) {
+                lastException = e;
+                log.debug("SFTP download candidate failed: originalPath={}, candidatePath={}, sftpErrorId={}, error='{}'",
+                        filePath, candidate, e.id, e.getMessage() != null ? e.getMessage() : "null");
+            }
+        }
+
+        if (lastException != null) {
+            log.error("SFTP exception during download: path={}, triedPaths={}, sftpErrorId={}, errorMessage='{}'",
+                    filePath, buildSftpPathCandidates(filePath, pwd), lastException.id,
+                    lastException.getMessage() != null ? lastException.getMessage() : "null", lastException);
+        }
+        return false;
+    }
+
+    private boolean downloadViaSshExec(String filePath, String tempFilePath) {
+        if (session == null || !session.isConnected()) {
+            return false;
+        }
+
+        List<String> commands = buildExecDownloadCommands(filePath);
+        for (String command : commands) {
+            try {
+                ExecDownloadResult result = runExecDownload(command, tempFilePath);
+                File downloadedFile = new File(tempFilePath);
+                if (result.exitStatus == 0 && downloadedFile.exists()) {
+                    log.info("SSH exec download succeeded: path={}, bytes={}", filePath, downloadedFile.length());
+                    return true;
+                }
+                log.warn("SSH exec download failed: path={}, exitStatus={}, stderr={}",
+                        filePath, result.exitStatus, result.stderr);
+            } catch (Exception e) {
+                log.warn("SSH exec download command failed: path={}, error={}", filePath, e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    private ExecDownloadResult runExecDownload(String command, String tempFilePath) throws Exception {
+        ChannelExec execChannel = (ChannelExec) session.openChannel("exec");
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        execChannel.setCommand(command);
+        execChannel.setInputStream(null);
+        execChannel.setErrStream(stderr);
+
+        try (InputStream in = execChannel.getInputStream();
+             FileOutputStream out = new FileOutputStream(tempFilePath)) {
+            execChannel.connect(30000);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+        } finally {
+            execChannel.disconnect();
+        }
+
+        return new ExecDownloadResult(execChannel.getExitStatus(), stderr.toString(charset));
+    }
+
+    private List<String> buildExecDownloadCommands(String filePath) {
+        List<String> commands = new ArrayList<>();
+        if (isWindowsPath(filePath)) {
+            commands.add("powershell -NoProfile -NonInteractive -Command \""
+                    + "$bytes=[System.IO.File]::ReadAllBytes('" + escapePowerShellSingleQuoted(filePath) + "'); "
+                    + "[Console]::OpenStandardOutput().Write($bytes,0,$bytes.Length)\"");
+            commands.add("cmd /c type \"" + filePath.replace("\"", "\"\"") + "\"");
+        } else {
+            commands.add("cat -- '" + filePath.replace("'", "'\\''") + "'");
+        }
+        return commands;
+    }
+
+    private boolean isWindowsPath(String filePath) {
+        return filePath != null && (filePath.matches("^[a-zA-Z]:[\\\\/].*") || filePath.contains("\\"));
+    }
+
+    private String escapePowerShellSingleQuoted(String value) {
+        return value.replace("'", "''");
+    }
+
+    private record ExecDownloadResult(int exitStatus, String stderr) {
+    }
+
+    static List<String> buildSftpPathCandidates(String filePath, String pwd) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return new ArrayList<>(candidates);
+        }
+
+        String trimmedPath = filePath.trim();
+        String normalizedPath = trimmedPath.replace("\\", "/");
+        candidates.add(trimmedPath);
+        candidates.add(normalizedPath);
+
+        String pwdWithoutSlash = pwd != null && pwd.startsWith("/") ? pwd.substring(1) : pwd;
+        if (pwdWithoutSlash != null && !pwdWithoutSlash.isEmpty()
+                && normalizedPath.toLowerCase().startsWith(pwdWithoutSlash.toLowerCase())) {
+            String relativeToHome = normalizedPath.substring(pwdWithoutSlash.length());
+            if (relativeToHome.startsWith("/")) {
+                relativeToHome = relativeToHome.substring(1);
+            }
+            if (!relativeToHome.isEmpty()) {
+                candidates.add(relativeToHome);
+            }
+        }
+
+        if (normalizedPath.length() >= 3 && normalizedPath.charAt(1) == ':' && normalizedPath.charAt(2) == '/') {
+            String driveLetter = String.valueOf(normalizedPath.charAt(0));
+            String pathAfterDrive = normalizedPath.substring(3);
+            candidates.add("/" + driveLetter + "/" + pathAfterDrive);
+            candidates.add("/" + driveLetter.toLowerCase() + "/" + pathAfterDrive);
+            candidates.add("/" + driveLetter.toUpperCase() + "/" + pathAfterDrive);
+        }
+
+        return new ArrayList<>(candidates);
+    }
+
+    private String remoteFileName(String filePath) {
+        String normalizedPath = filePath == null ? "remote.log" : filePath.replace("\\", "/");
+        int lastSlash = normalizedPath.lastIndexOf('/');
+        String fileName = lastSlash >= 0 ? normalizedPath.substring(lastSlash + 1) : normalizedPath;
+        if (fileName.isBlank()) {
+            fileName = "remote.log";
+        }
+        return fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private void processFileContent(File file, FileContext ctx, String filePath) throws IOException {
