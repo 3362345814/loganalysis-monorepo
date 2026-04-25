@@ -1,13 +1,12 @@
 {
-  "version": "v0.5.4",
+  "version": "v0.5.5",
   "releaseDate": "2026-04-25",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042503",
+    "buildNumber": "2026042504",
     "environment": "production"
   }, 
   "updateInfo": [
-    "修复了Windows日志文件写入时读取失败的问题",
-    "前端现在能显示采集器错误状态了"
+    "添加了Windows采集方式缓存"
   ]
 }

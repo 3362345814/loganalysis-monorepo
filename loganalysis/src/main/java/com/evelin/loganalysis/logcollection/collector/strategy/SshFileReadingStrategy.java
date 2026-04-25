@@ -42,6 +42,7 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
     private final Map<String, FileContext> fileContextMap = new ConcurrentHashMap<>();
     private String[] filePatterns;
     private boolean isDirectoryMode;
+    private static final long EXEC_EXIT_STATUS_WAIT_MS = 5000;
 
     // ==================== 构造函数 ====================
 
@@ -274,7 +275,9 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
             try {
                 ExecDownloadResult result = runExecDownload(command, tempFilePath);
                 File downloadedFile = new File(tempFilePath);
-                if (result.exitStatus == 0 && downloadedFile.exists()) {
+                if (downloadedFile.exists()
+                        && downloadedFile.length() > 0
+                        && (result.exitStatus == 0 || (result.exitStatus == -1 && result.stderr.isBlank()))) {
                     log.info("SSH exec download succeeded: path={}, bytes={}", filePath, downloadedFile.length());
                     return true;
                 }
@@ -294,6 +297,7 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         execChannel.setInputStream(null);
         execChannel.setErrStream(stderr);
 
+        int exitStatus;
         try (InputStream in = execChannel.getInputStream();
              FileOutputStream out = new FileOutputStream(tempFilePath)) {
             execChannel.connect(30000);
@@ -302,11 +306,21 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
             }
+            out.flush();
+            exitStatus = waitForExecExitStatus(execChannel);
         } finally {
             execChannel.disconnect();
         }
 
-        return new ExecDownloadResult(execChannel.getExitStatus(), stderr.toString(charset));
+        return new ExecDownloadResult(exitStatus, stderr.toString(charset));
+    }
+
+    private int waitForExecExitStatus(ChannelExec execChannel) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + EXEC_EXIT_STATUS_WAIT_MS;
+        while (!execChannel.isClosed() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        return execChannel.getExitStatus();
     }
 
     private List<String> buildExecDownloadCommands(String filePath) {
