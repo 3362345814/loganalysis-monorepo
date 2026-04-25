@@ -173,6 +173,12 @@ public class LogSource extends BaseEntity {
     private UUID projectId;
 
     /**
+     * 是否沿用所属项目的采集连接配置
+     */
+    @Column(name = "use_project_connection_config")
+    private Boolean useProjectConnectionConfig;
+
+    /**
      * 是否启用脱敏
      */
     @Column(name = "desensitization_enabled", nullable = false)

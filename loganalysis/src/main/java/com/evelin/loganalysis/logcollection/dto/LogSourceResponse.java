@@ -35,6 +35,11 @@ public class LogSourceResponse {
     private String sourceType;
 
     /**
+     * 是否沿用所属项目的采集连接配置
+     */
+    private Boolean useProjectConnectionConfig;
+
+    /**
      * 日志格式
      */
     private String logFormat;

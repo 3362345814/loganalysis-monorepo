@@ -20,6 +20,12 @@ public class ProjectResponse {
     private String description;
     private String owner;
     private String email;
+    private String collectionSourceType;
+    private String sshHost;
+    private Integer sshPort;
+    private String sshUsername;
+    private String sshPassword;
+    private Boolean sshPasswordConfigured;
     private Boolean enabled;
     private String remark;
 

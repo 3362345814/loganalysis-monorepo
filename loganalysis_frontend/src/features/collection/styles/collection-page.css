@@ -21,7 +21,7 @@
 }
 
 .source-create-steps {
-  width: 500px;
+  width: 560px;
   max-width: 100%;
   margin: 0 auto;
 }
@@ -69,6 +69,16 @@
   margin-left: var(--space-10);
 }
 
+.connection-config-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.connection-config-tip {
+  margin-top: var(--space-8);
+}
+
 .source-type-alert {
   margin-top: var(--space-8);
   padding: 8px 12px;
@@ -88,6 +98,39 @@
 
 .nginx-path-test-result {
   margin-left: 100px;
+}
+
+.form-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.format-help-icon {
+  color: var(--color-gold);
+  cursor: help;
+  font-size: 15px;
+  vertical-align: middle;
+}
+
+.pattern-help-tooltip {
+  max-width: 460px;
+}
+
+.pattern-help-tooltip-content {
+  max-width: 420px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.pattern-help-title {
+  margin-bottom: var(--space-6);
+  font-weight: 600;
+}
+
+.pattern-help-note {
+  margin-top: var(--space-8);
+  color: var(--text-secondary);
 }
 
 .custom-rules {

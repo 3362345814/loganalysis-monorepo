@@ -20,6 +20,10 @@ public class LogSourceUpdateRequest {
     @NotEmpty(message = "日志路径不能为空")
     private List<String> paths;
 
+    private Boolean useProjectConnectionConfig;
+
+    private String sourceType;
+
     @Size(max = 255, message = "主机地址长度不能超过255")
     private String host;
 

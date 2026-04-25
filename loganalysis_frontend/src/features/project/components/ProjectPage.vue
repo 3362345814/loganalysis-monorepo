@@ -21,6 +21,14 @@
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
         <el-table-column prop="owner" label="负责人" width="120" />
         <el-table-column prop="email" label="邮箱" width="180" show-overflow-tooltip />
+        <el-table-column label="采集配置" width="130">
+          <template #default="{ row }">
+            <el-tag v-if="row.collectionSourceType" type="success">
+              {{ formatSourceType(row.collectionSourceType) }}
+            </el-tag>
+            <el-tag v-else type="info">未配置</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="enabled" label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">
@@ -52,6 +60,32 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="联系人邮箱" />
         </el-form-item>
+        <el-divider content-position="left">采集配置（可选）</el-divider>
+        <el-form-item label="采集类型">
+          <el-select v-model="form.collectionSourceType" placeholder="不配置" clearable @change="handleProjectSourceTypeChange">
+            <el-option label="本地文件" value="LOCAL_FILE" />
+            <el-option label="SSH远程" value="SSH" />
+          </el-select>
+        </el-form-item>
+        <template v-if="form.collectionSourceType === 'SSH'">
+          <el-form-item label="SSH主机" prop="sshHost">
+            <el-input v-model="form.sshHost" placeholder="如 192.168.1.100" />
+          </el-form-item>
+          <el-form-item label="SSH端口" prop="sshPort">
+            <el-input-number v-model="form.sshPort" :min="1" :max="65535" :controls="false" />
+          </el-form-item>
+          <el-form-item label="SSH用户" prop="sshUsername">
+            <el-input v-model="form.sshUsername" placeholder="SSH用户名" />
+          </el-form-item>
+          <el-form-item label="SSH密码" prop="sshPassword">
+            <el-input
+              v-model="form.sshPassword"
+              type="password"
+              show-password
+              :placeholder="isEdit && form.sshPasswordConfigured ? '已配置（留空则保留原密码）' : 'SSH密码'"
+            />
+          </el-form-item>
+        </template>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="form.enabled" />
         </el-form-item>
@@ -82,11 +116,39 @@ const form = reactive({
   description: '',
   owner: '',
   email: '',
+  collectionSourceType: null,
+  sshHost: '',
+  sshPort: 22,
+  sshUsername: '',
+  sshPassword: '',
+  sshPasswordConfigured: false,
   enabled: true
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
+  sshHost: [{
+    validator: (rule, value, callback) => {
+      if (form.collectionSourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH主机地址'))
+    },
+    trigger: 'blur'
+  }],
+  sshUsername: [{
+    validator: (rule, value, callback) => {
+      if (form.collectionSourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH用户名'))
+    },
+    trigger: 'blur'
+  }],
+  sshPassword: [{
+    validator: (rule, value, callback) => {
+      if (form.collectionSourceType !== 'SSH') return callback()
+      if (value?.trim() || (isEdit.value && form.sshPasswordConfigured)) return callback()
+      callback(new Error('请输入SSH密码'))
+    },
+    trigger: 'blur'
+  }]
 }
 
 onMounted(() => {
@@ -107,14 +169,52 @@ const loadProjects = async () => {
 
 const handleCreate = () => {
   isEdit.value = false
-  Object.assign(form, { name: '', code: '', description: '', owner: '', email: '', enabled: true })
+  Object.assign(form, createEmptyProjectForm())
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
-  Object.assign(form, row)
+  Object.assign(form, {
+    ...row,
+    sshPassword: '',
+    sshPasswordConfigured: row.sshPasswordConfigured === true,
+    sshPort: row.sshPort || 22
+  })
   dialogVisible.value = true
+}
+
+const createEmptyProjectForm = () => ({
+  id: null,
+  name: '',
+  code: '',
+  description: '',
+  owner: '',
+  email: '',
+  collectionSourceType: null,
+  sshHost: '',
+  sshPort: 22,
+  sshUsername: '',
+  sshPassword: '',
+  sshPasswordConfigured: false,
+  enabled: true
+})
+
+const handleProjectSourceTypeChange = (value) => {
+  if (value !== 'SSH') {
+    form.sshHost = ''
+    form.sshPort = 22
+    form.sshUsername = ''
+    form.sshPassword = ''
+  }
+}
+
+const formatSourceType = (sourceType) => {
+  const map = {
+    LOCAL_FILE: '本地文件',
+    SSH: 'SSH远程'
+  }
+  return map[sourceType] || sourceType
 }
 
 const handleSubmit = async () => {
@@ -122,10 +222,10 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (isEdit.value) {
-      await projectApi.update(form.id, form)
+      await projectApi.update(form.id, { ...form })
       ElMessage.success('更新成功')
     } else {
-      await projectApi.create(form)
+      await projectApi.create({ ...form })
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

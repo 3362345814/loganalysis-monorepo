@@ -136,7 +136,7 @@ public class LogCollectionController {
     @PostMapping("/collectors/{sourceId}/start")
     public Result<Map<String, Object>> startCollector(@PathVariable UUID sourceId) {
         // 1. 从数据库查询日志源
-        Optional<LogSource> sourceOpt = logSourceService.getEntityById(sourceId);
+        Optional<LogSource> sourceOpt = logSourceService.getEffectiveEntityById(sourceId);
         if (sourceOpt.isEmpty()) {
             return Result.error("日志源不存在: " + sourceId);
         }
@@ -147,6 +147,8 @@ public class LogCollectionController {
         LogCollector existing = collectorFactory.get(source);
         if (existing != null && existing.isRunning()) {
             return Result.error("采集器已在运行中");
+        } else if (existing != null) {
+            collectorFactory.remove(source);
         }
 
         // 3. 创建并启动采集器（工厂内部按 sourceId 串行化）

@@ -22,8 +22,9 @@ public class LogSourceCreateRequest {
     @Size(max = 500, message = "描述长度不能超过500")
     private String description;
 
-    @NotBlank(message = "日志源类型不能为空")
     private String sourceType;
+
+    private Boolean useProjectConnectionConfig;
 
     private String logFormat;
 

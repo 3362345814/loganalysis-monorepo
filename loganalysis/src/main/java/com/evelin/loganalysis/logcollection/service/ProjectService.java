@@ -2,6 +2,7 @@ package com.evelin.loganalysis.logcollection.service;
 
 import com.evelin.loganalysis.logcollection.dto.ProjectCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.ProjectResponse;
+import com.evelin.loganalysis.logcollection.enums.LogSourceType;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
 import com.evelin.loganalysis.logcommon.exception.BusinessException;
 import com.evelin.loganalysis.logcommon.constant.ResultCode;
@@ -25,6 +26,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ProjectService {
+
+    private static final String MASK_PREFIX = "******";
 
     private final ProjectRepository projectRepository;
 
@@ -55,6 +58,7 @@ public class ProjectService {
         project.setDescription(request.getDescription());
         project.setOwner(request.getOwner());
         project.setEmail(request.getEmail());
+        applyConnectionConfig(project, request);
         project.setEnabled(request.getEnabled() != null ? request.getEnabled() : true);
         project.setRemark(request.getRemark());
 
@@ -120,6 +124,7 @@ public class ProjectService {
                     if (request.getEmail() != null) {
                         project.setEmail(request.getEmail());
                     }
+                    applyConnectionConfig(project, request);
                     if (request.getEnabled() != null) {
                         project.setEnabled(request.getEnabled());
                     }
@@ -194,10 +199,52 @@ public class ProjectService {
         response.setDescription(project.getDescription());
         response.setOwner(project.getOwner());
         response.setEmail(project.getEmail());
+        response.setCollectionSourceType(project.getCollectionSourceType() != null ? project.getCollectionSourceType().name() : null);
+        response.setSshHost(project.getSshHost());
+        response.setSshPort(project.getSshPort());
+        response.setSshUsername(project.getSshUsername());
+        boolean sshPasswordConfigured = project.getSshPassword() != null && !project.getSshPassword().isBlank();
+        response.setSshPasswordConfigured(sshPasswordConfigured);
+        response.setSshPassword(sshPasswordConfigured ? maskSecret(project.getSshPassword()) : null);
         response.setEnabled(project.getEnabled());
         response.setRemark(project.getRemark());
         response.setCreatedAt(project.getCreatedAt());
         response.setUpdatedAt(project.getUpdatedAt());
         return response;
+    }
+
+    private void applyConnectionConfig(Project project, ProjectCreateRequest request) {
+        project.setCollectionSourceType(parseSourceType(request.getCollectionSourceType()));
+        project.setSshHost(trimToNull(request.getSshHost()));
+        project.setSshPort(request.getSshPort());
+        project.setSshUsername(trimToNull(request.getSshUsername()));
+        if (shouldUpdateSecret(request.getSshPassword())) {
+            project.setSshPassword(request.getSshPassword());
+        }
+    }
+
+    private LogSourceType parseSourceType(String sourceType) {
+        String normalized = trimToNull(sourceType);
+        return normalized == null ? null : LogSourceType.valueOf(normalized);
+    }
+
+    private boolean shouldUpdateSecret(String secret) {
+        if (secret == null || secret.isBlank()) {
+            return false;
+        }
+        return !secret.startsWith(MASK_PREFIX);
+    }
+
+    private String maskSecret(String secret) {
+        int visibleCount = Math.min(4, secret.length());
+        return MASK_PREFIX + secret.substring(secret.length() - visibleCount);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

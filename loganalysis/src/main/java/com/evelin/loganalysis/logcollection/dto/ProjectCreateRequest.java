@@ -20,6 +20,22 @@ public class ProjectCreateRequest {
     @Size(max = 255, message = "邮箱长度不能超过255")
     private String email;
 
+    @Size(max = 50, message = "采集类型长度不能超过50")
+    private String collectionSourceType;
+
+    @Size(max = 255, message = "SSH主机地址长度不能超过255")
+    private String sshHost;
+
+    @Min(value = 1, message = "SSH端口号必须大于0")
+    @Max(value = 65535, message = "SSH端口号不能超过65535")
+    private Integer sshPort;
+
+    @Size(max = 100, message = "SSH用户名长度不能超过100")
+    private String sshUsername;
+
+    @Size(max = 255, message = "SSH密码长度不能超过255")
+    private String sshPassword;
+
     private Boolean enabled;
 
     @Size(max = 500, message = "备注长度不能超过500")

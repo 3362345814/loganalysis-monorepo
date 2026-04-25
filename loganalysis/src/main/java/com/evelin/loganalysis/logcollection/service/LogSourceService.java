@@ -21,6 +21,7 @@ import com.evelin.loganalysis.logcommon.constant.ResultCode;
 import com.evelin.loganalysis.logcommon.model.Project;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +66,14 @@ public class LogSourceService {
             throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "日志源名称已存在: " + request.getName());
         }
 
+        Project project = null;
+        if (request.getProjectId() != null) {
+            project = projectRepository.findById(request.getProjectId())
+                    .orElseThrow(() -> new BusinessException(ResultCode.DATA_NOT_FOUND, "项目不存在: " + request.getProjectId()));
+        }
+
+        boolean useProjectConnectionConfig = Boolean.TRUE.equals(request.getUseProjectConnectionConfig());
+        LogSourceType resolvedSourceType = resolveSourceTypeForCreate(request, project, useProjectConnectionConfig);
         List<String> normalizedPaths = normalizePaths(request.getPaths());
 
         LogFormat logFormat = null;
@@ -92,14 +101,17 @@ public class LogSourceService {
             request.getLogFormatPattern()
         );
         logSource.setPaths(pathsMap);
-        
-        logSource.setHost(request.getHost());
-        logSource.setPort(request.getPort());
-        logSource.setUsername(request.getUsername());
-        logSource.setPassword(request.getPassword());
+
+        logSource.setUseProjectConnectionConfig(useProjectConnectionConfig);
+        logSource.setSourceType(resolvedSourceType);
+        if (!useProjectConnectionConfig) {
+            logSource.setHost(request.getHost());
+            logSource.setPort(request.getPort());
+            logSource.setUsername(request.getUsername());
+            logSource.setPassword(request.getPassword());
+        }
         logSource.setEncoding(request.getEncoding() != null ? request.getEncoding() : "UTF-8");
         logSource.setEnabled(request.getEnabled() != null ? request.getEnabled() : true);
-        logSource.setSourceType(LogSourceType.valueOf(request.getSourceType() != null ? request.getSourceType() : "LOCAL_FILE"));
         logSource.setStatus(CollectionStatus.STOPPED);
         
         if (logFormat != null) {
@@ -115,11 +127,7 @@ public class LogSourceService {
         logSource.setCustomRules(convertToCustomRules(request.getCustomRules()));
         logSource.setAggregationLevel(request.getAggregationLevel());
         
-        if (request.getProjectId() != null) {
-            Optional<Project> projectOpt = projectRepository.findById(request.getProjectId());
-            if (projectOpt.isEmpty()) {
-                throw new BusinessException(ResultCode.DATA_NOT_FOUND, "项目不存在: " + request.getProjectId());
-            }
+        if (project != null) {
             logSource.setProjectId(request.getProjectId());
         }
 
@@ -236,17 +244,37 @@ public class LogSourceService {
                 );
                 existing.setPaths(pathsMap);
             }
-            
-            if (request.getHost() != null) {
+
+            if (request.getUseProjectConnectionConfig() != null) {
+                existing.setUseProjectConnectionConfig(request.getUseProjectConnectionConfig());
+            }
+
+            Project projectForConnection = null;
+            if (request.getProjectId() != null) {
+                projectForConnection = projectRepository.findById(request.getProjectId())
+                        .orElseThrow(() -> new BusinessException(ResultCode.DATA_NOT_FOUND, "项目不存在: " + request.getProjectId()));
+            } else if (existing.getProjectId() != null) {
+                projectForConnection = projectRepository.findById(existing.getProjectId()).orElse(null);
+            }
+
+            boolean useProjectConnectionConfig = Boolean.TRUE.equals(existing.getUseProjectConnectionConfig());
+            if (useProjectConnectionConfig) {
+                validateProjectConnectionConfig(projectForConnection);
+                existing.setSourceType(projectForConnection.getCollectionSourceType());
+            } else if (request.getSourceType() != null) {
+                existing.setSourceType(LogSourceType.valueOf(request.getSourceType()));
+            }
+
+            if (!useProjectConnectionConfig && request.getHost() != null) {
                 existing.setHost(request.getHost());
             }
-            if (request.getPort() != null) {
+            if (!useProjectConnectionConfig && request.getPort() != null) {
                 existing.setPort(request.getPort());
             }
-            if (request.getUsername() != null) {
+            if (!useProjectConnectionConfig && request.getUsername() != null) {
                 existing.setUsername(request.getUsername());
             }
-            if (shouldUpdateSecret(request.getPassword())) {
+            if (!useProjectConnectionConfig && shouldUpdateSecret(request.getPassword())) {
                 existing.setPassword(request.getPassword());
             }
             if (request.getEncoding() != null) {
@@ -390,6 +418,13 @@ public class LogSourceService {
     }
 
     /**
+     * 获取带有效采集连接配置的日志源实体，用于启动采集器。
+     */
+    public Optional<LogSource> getEffectiveEntityById(UUID id) {
+        return logSourceRepository.findById(id).map(this::resolveEffectiveConnectionConfig);
+    }
+
+    /**
      * 转换为响应DTO
      *
      * @param logSource 实体
@@ -445,6 +480,7 @@ public class LogSourceService {
         response.setName(logSource.getName());
         response.setDescription(logSource.getDescription());
         response.setSourceType(logSource.getSourceType() != null ? logSource.getSourceType().name() : null);
+        response.setUseProjectConnectionConfig(Boolean.TRUE.equals(logSource.getUseProjectConnectionConfig()));
         response.setLogFormat(logSource.getLogFormat() != null ? logSource.getLogFormat().name() : null);
         response.setLogFormatPattern(logSource.getLogFormatPattern());
         response.setCustomPattern(logSource.getCustomPattern());
@@ -473,10 +509,23 @@ public class LogSourceService {
         response.setProjectId(logSource.getProjectId());
         if (logSource.getProjectId() != null) {
             Optional<Project> projectOpt = projectRepository.findById(logSource.getProjectId());
-            projectOpt.ifPresent(project -> response.setProjectName(project.getName()));
+            projectOpt.ifPresent(project -> {
+                response.setProjectName(project.getName());
+                if (Boolean.TRUE.equals(logSource.getUseProjectConnectionConfig())) {
+                    response.setSourceType(project.getCollectionSourceType() != null ? project.getCollectionSourceType().name() : null);
+                    response.setHost(project.getSshHost());
+                    response.setPort(project.getSshPort());
+                    response.setUsername(project.getSshUsername());
+                }
+            });
         }
 
         String rawPassword = logSource.getPassword();
+        if (Boolean.TRUE.equals(logSource.getUseProjectConnectionConfig()) && logSource.getProjectId() != null) {
+            rawPassword = projectRepository.findById(logSource.getProjectId())
+                    .map(Project::getSshPassword)
+                    .orElse(null);
+        }
         boolean passwordConfigured = rawPassword != null && !rawPassword.isBlank();
         response.setPasswordConfigured(passwordConfigured);
         response.setPassword(passwordConfigured ? maskSecret(rawPassword) : null);
@@ -489,6 +538,59 @@ public class LogSourceService {
             return false;
         }
         return !isMaskedSecret(secret);
+    }
+
+    private LogSourceType resolveSourceTypeForCreate(LogSourceCreateRequest request, Project project, boolean useProjectConnectionConfig) {
+        if (useProjectConnectionConfig) {
+            validateProjectConnectionConfig(project);
+            return project.getCollectionSourceType();
+        }
+        String sourceType = request.getSourceType() != null ? request.getSourceType() : "LOCAL_FILE";
+        return LogSourceType.valueOf(sourceType);
+    }
+
+    private void validateProjectConnectionConfig(Project project) {
+        if (project == null) {
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "沿用项目配置时必须选择有效项目");
+        }
+        if (project.getCollectionSourceType() == null) {
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "当前项目未配置采集连接信息");
+        }
+        if (project.getCollectionSourceType() == LogSourceType.SSH) {
+            if (isBlank(project.getSshHost()) || isBlank(project.getSshUsername()) || isBlank(project.getSshPassword())) {
+                throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "当前项目 SSH 配置不完整");
+            }
+        }
+    }
+
+    private LogSource resolveEffectiveConnectionConfig(LogSource source) {
+        if (!Boolean.TRUE.equals(source.getUseProjectConnectionConfig())) {
+            return source;
+        }
+        Project project = source.getProjectId() == null
+                ? null
+                : projectRepository.findById(source.getProjectId()).orElse(null);
+        validateProjectConnectionConfig(project);
+
+        LogSource effective = new LogSource();
+        BeanUtils.copyProperties(source, effective);
+        effective.setSourceType(project.getCollectionSourceType());
+        if (project.getCollectionSourceType() == LogSourceType.SSH) {
+            effective.setHost(project.getSshHost());
+            effective.setPort(project.getSshPort() != null ? project.getSshPort() : 22);
+            effective.setUsername(project.getSshUsername());
+            effective.setPassword(project.getSshPassword());
+        } else {
+            effective.setHost(null);
+            effective.setPort(null);
+            effective.setUsername(null);
+            effective.setPassword(null);
+        }
+        return effective;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private boolean isMaskedSecret(String secret) {

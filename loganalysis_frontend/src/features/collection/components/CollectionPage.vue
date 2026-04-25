@@ -28,13 +28,14 @@
       <div class="source-create-steps-bar">
         <el-steps :active="currentStepIndex" finish-status="success" simple class="source-create-steps">
           <el-step title="基本信息" />
+          <el-step title="日志配置" />
           <el-step title="脱敏配置" />
           <el-step title="聚合配置" />
         </el-steps>
       </div>
 
-      <div v-show="activeTab === 'basic'">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+      <div v-show="activeTab === 'basic'">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入采集源名称" />
         </el-form-item>
@@ -42,7 +43,17 @@
           <el-tag type="info">{{ currentProject?.name || '未选择' }}</el-tag>
           <span class="form-tip form-tip-inline">采集源将绑定到此项目</span>
         </el-form-item>
-        <el-form-item label="类型" prop="sourceType">
+        <el-form-item label="连接配置">
+          <div class="connection-config-control">
+            <el-radio-group v-model="form.useProjectConnectionConfig">
+              <el-radio-button :value="true" :disabled="!currentProjectConnectionConfigured">沿用项目配置</el-radio-button>
+              <el-radio-button :value="false">自定义配置</el-radio-button>
+            </el-radio-group>
+            <span v-if="!currentProjectConnectionConfigured" class="form-tip connection-config-tip">当前项目未配置采集连接信息</span>
+            <span v-else class="form-tip connection-config-tip">当前项目配置：{{ projectConnectionSummary }}</span>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="!form.useProjectConnectionConfig" label="类型" prop="sourceType">
           <el-select v-model="form.sourceType" placeholder="请选择类型">
             <el-option label="SSH远程" value="SSH" />
             <el-option label="本地文件" value="LOCAL_FILE" />
@@ -60,7 +71,7 @@
         </el-form-item>
         
         <!-- SSH配置 -->
-        <template v-if="form.sourceType === 'SSH'">
+        <template v-if="!form.useProjectConnectionConfig && form.sourceType === 'SSH'">
           <el-form-item label="主机地址" prop="host">
             <el-input v-model="form.host" placeholder="SSH服务器地址，如 192.168.1.100" />
           </el-form-item>
@@ -95,7 +106,13 @@
             </span>
           </el-form-item>
         </template>
-        
+
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" :rows="3" />
+        </el-form-item>
+      </div>
+
+      <div v-show="activeTab === 'log-config'">
         <el-form-item label="日志格式" prop="logFormat">
           <el-select v-model="form.logFormat" placeholder="选择日志格式" @change="handleLogFormatChange">
             <el-option label="Log4j" value="LOG4J" />
@@ -114,7 +131,31 @@
               {{ pathTestMessage }}
             </span>
           </el-form-item>
-          <el-form-item label="日志格式" prop="logFormatPattern" required>
+          <el-form-item prop="logFormatPattern" required>
+            <template #label>
+              <span class="form-label-with-help">
+                日志格式
+                <el-tooltip placement="right" effect="light" popper-class="pattern-help-tooltip">
+                  <template #content>
+                    <div class="pattern-help-tooltip-content">
+                      <div class="pattern-help-title">支持的占位符</div>
+                      <ul class="pattern-list">
+                        <li><code>%d{format}</code> - 日期时间，如 <code>%d{yyyy-MM-dd HH:mm:ss.SSS}</code></li>
+                        <li><code>%thread</code> - 线程名称</li>
+                        <li><code>%level</code> / <code>%-5level</code> - 日志级别</li>
+                        <li><code>%logger{length}</code> / <code>%logger</code> - Logger 名称</li>
+                        <li><code>%msg</code> / <code>%m</code> - 消息内容</li>
+                        <li><code>%n</code> - 换行符</li>
+                        <li><code>%throwable</code> - 异常堆栈</li>
+                        <li><code>%X{key}</code> - MDC 键值</li>
+                      </ul>
+                      <div class="pattern-help-note">如需支持链路追踪，请填写“追踪字段名”，并确保日志里包含该字段。</div>
+                    </div>
+                  </template>
+                  <el-icon class="format-help-icon"><WarningFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
             <el-input 
               v-model="form.logFormatPattern" 
               placeholder="如: %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
@@ -127,32 +168,6 @@
             <el-button type="primary" plain :icon="Search" @click="openLog4jTester">
               打开日志提取测试
             </el-button>
-          </el-form-item>
-          <el-form-item label="格式说明">
-            <div class="pattern-help">
-              <el-alert type="info" :closable="false" show-icon>
-                <template #title>
-                  <div>支持的占位符：</div>
-                  <ul class="pattern-list">
-                    <li><code>%d{format}</code> - 日期时间，如 <code>%d{yyyy-MM-dd HH:mm:ss.SSS}</code></li>
-                    <li><code>%thread</code> - 线程名称</li>
-                    <li><code>%level</code> - 日志级别</li>
-                    <li><code>%-5level</code> - 左对齐宽度5的日志级别</li>
-                    <li><code>%logger{length}</code> - Logger名称，可指定最大长度</li>
-                    <li><code>%logger</code> - Logger名称（完整）</li>
-                    <li><code>%msg</code> 或 <code>%m</code> - 消息内容</li>
-                    <li><code>%n</code> - 换行符</li>
-                    <li><code>%throwable</code> - 异常堆栈（可选，有异常时输出）</li>
-                    <li><code>%X{key}</code> - MDC 键值</li>
-                  </ul>
-                </template>
-              </el-alert>
-              <el-alert type="warning" :closable="false" show-icon class="pattern-warning-alert">
-                <template #title>
-                  如需支持链路追踪，请在上方填写“追踪字段名”，并确保日志里包含该字段
-                </template>
-              </el-alert>
-            </div>
           </el-form-item>
         </template>
 
@@ -213,12 +228,8 @@
             <el-option label="GB2312" value="GB2312" />
           </el-select>
         </el-form-item>
-        
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="3" />
-        </el-form-item>
-      </el-form>
       </div>
+      </el-form>
 
       <div v-show="activeTab === 'desensitization'">
           <el-form label-width="120px">
@@ -341,6 +352,32 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="projectForm.email" placeholder="联系人邮箱" />
         </el-form-item>
+        <el-divider content-position="left">采集配置（可选）</el-divider>
+        <el-form-item label="采集类型">
+          <el-select v-model="projectForm.collectionSourceType" placeholder="不配置" clearable @change="handleProjectSourceTypeChange">
+            <el-option label="本地文件" value="LOCAL_FILE" />
+            <el-option label="SSH远程" value="SSH" />
+          </el-select>
+        </el-form-item>
+        <template v-if="projectForm.collectionSourceType === 'SSH'">
+          <el-form-item label="SSH主机" prop="sshHost">
+            <el-input v-model="projectForm.sshHost" placeholder="如 192.168.1.100" />
+          </el-form-item>
+          <el-form-item label="SSH端口" prop="sshPort">
+            <el-input-number v-model="projectForm.sshPort" :min="1" :max="65535" :controls="false" />
+          </el-form-item>
+          <el-form-item label="SSH用户" prop="sshUsername">
+            <el-input v-model="projectForm.sshUsername" placeholder="SSH用户名" />
+          </el-form-item>
+          <el-form-item label="SSH密码" prop="sshPassword">
+            <el-input
+              v-model="projectForm.sshPassword"
+              type="password"
+              show-password
+              :placeholder="isProjectEdit && projectForm.sshPasswordConfigured ? '已配置（留空则保留原密码）' : 'SSH密码'"
+            />
+          </el-form-item>
+        </template>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="projectForm.enabled" />
         </el-form-item>
@@ -474,7 +511,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
-import { Plus, Search, Folder, Check, Connection } from '@element-plus/icons-vue'
+import { Plus, Search, Folder, Check, Connection, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logSourceApi, projectApi } from '@/api'
 import CollectionToolbar from './CollectionToolbar.vue'
@@ -492,7 +529,7 @@ const isEdit = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
 const activeTab = ref('basic')
-const stepOrder = ['basic', 'desensitization', 'aggregation']
+const stepOrder = ['basic', 'log-config', 'desensitization', 'aggregation']
 const currentStepIndex = computed(() => Math.max(stepOrder.indexOf(activeTab.value), 0))
 const isLastStep = computed(() => currentStepIndex.value === stepOrder.length - 1)
 
@@ -569,17 +606,46 @@ const projectForm = reactive({
   description: '',
   owner: '',
   email: '',
+  collectionSourceType: null,
+  sshHost: '',
+  sshPort: 22,
+  sshUsername: '',
+  sshPassword: '',
+  sshPasswordConfigured: false,
   enabled: true
 })
 
 const projectRules = {
-  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
+  sshHost: [{
+    validator: (rule, value, callback) => {
+      if (projectForm.collectionSourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH主机地址'))
+    },
+    trigger: 'blur'
+  }],
+  sshUsername: [{
+    validator: (rule, value, callback) => {
+      if (projectForm.collectionSourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH用户名'))
+    },
+    trigger: 'blur'
+  }],
+  sshPassword: [{
+    validator: (rule, value, callback) => {
+      if (projectForm.collectionSourceType !== 'SSH') return callback()
+      if (value?.trim() || (isProjectEdit.value && projectForm.sshPasswordConfigured)) return callback()
+      callback(new Error('请输入SSH密码'))
+    },
+    trigger: 'blur'
+  }]
 }
 
 const form = ref({
   id: null,
   name: '',
   projectId: null,
+  useProjectConnectionConfig: false,
   sourceType: 'SSH',
   host: '',
   port: 22,
@@ -602,6 +668,24 @@ const form = ref({
   }
 })
 
+const currentProjectConnectionConfigured = computed(() => {
+  if (!currentProject.value?.collectionSourceType) return false
+  if (currentProject.value.collectionSourceType !== 'SSH') return true
+  return Boolean(
+    currentProject.value.sshHost &&
+    currentProject.value.sshUsername &&
+    currentProject.value.sshPasswordConfigured
+  )
+})
+
+const projectConnectionSummary = computed(() => {
+  const project = currentProject.value
+  if (!project?.collectionSourceType) return '未配置'
+  if (project.collectionSourceType === 'LOCAL_FILE') return '本地文件'
+  const port = project.sshPort || 22
+  return `SSH ${project.sshUsername || '-'}@${project.sshHost || '-'}:${port}`
+})
+
 const rules = {
   name: [{ required: true, message: '请输入采集源名称', trigger: 'blur' }],
   paths: [{
@@ -619,11 +703,33 @@ const rules = {
     }, 
     trigger: 'blur' 
   }],
-  sourceType: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  host: [{ required: true, message: '请输入SSH主机地址', trigger: 'blur' }],
-  username: [{ required: true, message: '请输入SSH用户名', trigger: 'blur' }],
+  sourceType: [{
+    validator: (rule, value, callback) => {
+      if (form.value.useProjectConnectionConfig || value) return callback()
+      callback(new Error('请选择类型'))
+    },
+    trigger: 'change'
+  }],
+  host: [{
+    validator: (rule, value, callback) => {
+      if (form.value.useProjectConnectionConfig || form.value.sourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH主机地址'))
+    },
+    trigger: 'blur'
+  }],
+  username: [{
+    validator: (rule, value, callback) => {
+      if (form.value.useProjectConnectionConfig || form.value.sourceType !== 'SSH' || value?.trim()) return callback()
+      callback(new Error('请输入SSH用户名'))
+    },
+    trigger: 'blur'
+  }],
   password: [{
     validator: (rule, value, callback) => {
+      if (form.value.useProjectConnectionConfig) {
+        callback()
+        return
+      }
       if (form.value.sourceType !== 'SSH') {
         callback()
         return
@@ -810,9 +916,21 @@ const loadProjects = async () => {
   }
 }
 
+const refreshCurrentProject = async () => {
+  if (!currentProject.value?.id) return
+  try {
+    const res = await projectApi.getById(currentProject.value.id)
+    currentProject.value = res.data || currentProject.value
+    localStorage.setItem('currentProjectId', currentProject.value.id)
+    localStorage.setItem('currentProjectName', currentProject.value.name)
+  } catch (error) {
+    console.error('刷新当前项目失败:', error)
+  }
+}
+
 const handleCreateProject = () => {
   isProjectEdit.value = false
-  Object.assign(projectForm, { id: null, name: '', description: '', owner: '', email: '', enabled: true })
+  Object.assign(projectForm, createEmptyProjectForm())
   projectSelectDialogVisible.value = false
   projectDialogVisible.value = true
 }
@@ -825,10 +943,40 @@ const handleEditProject = (project) => {
     description: project.description || '',
     owner: project.owner || '',
     email: project.email || '',
+    collectionSourceType: project.collectionSourceType || null,
+    sshHost: project.sshHost || '',
+    sshPort: project.sshPort || 22,
+    sshUsername: project.sshUsername || '',
+    sshPassword: '',
+    sshPasswordConfigured: project.sshPasswordConfigured === true,
     enabled: project.enabled !== false
   })
   projectSelectDialogVisible.value = false
   projectDialogVisible.value = true
+}
+
+const createEmptyProjectForm = () => ({
+  id: null,
+  name: '',
+  description: '',
+  owner: '',
+  email: '',
+  collectionSourceType: null,
+  sshHost: '',
+  sshPort: 22,
+  sshUsername: '',
+  sshPassword: '',
+  sshPasswordConfigured: false,
+  enabled: true
+})
+
+const handleProjectSourceTypeChange = (value) => {
+  if (value !== 'SSH') {
+    projectForm.sshHost = ''
+    projectForm.sshPort = 22
+    projectForm.sshUsername = ''
+    projectForm.sshPassword = ''
+  }
 }
 
 const handleProjectSubmit = async () => {
@@ -883,11 +1031,12 @@ const handleDeleteProject = async (project) => {
   }
 }
 
-const handleCreateSource = () => {
+const handleCreateSource = async () => {
   if (!currentProject.value) {
     ElMessage.warning('请先选择项目')
     return
   }
+  await refreshCurrentProject()
   isEdit.value = false
   // 重置测试结果
   testingSsh.value = false
@@ -906,6 +1055,7 @@ const handleCreateSource = () => {
     id: null,
     name: '',
     projectId: currentProject.value.id,
+    useProjectConnectionConfig: false,
     sourceType: 'SSH',
     host: '',
     port: 22,
@@ -975,6 +1125,7 @@ const handleEdit = (row) => {
 
   form.value = {
     ...row,
+    useProjectConnectionConfig: row.useProjectConnectionConfig === true,
     password: '',
     paths: parsedPaths,
     desensitizationEnabled: row.desensitizationEnabled || false,
@@ -998,12 +1149,36 @@ const goPrevStep = () => {
   activeTab.value = stepOrder[currentStepIndex.value - 1]
 }
 
+const validateSourceFields = async (fields) => {
+  if (!formRef.value) return true
+  try {
+    await formRef.value.validateField(fields)
+    return true
+  } catch {
+    return false
+  }
+}
+
 const handleNextStep = async () => {
   if (activeTab.value === 'basic') {
-    const valid = await formRef.value?.validate()
-    if (!valid) {
+    if (form.value.useProjectConnectionConfig && !currentProjectConnectionConfigured.value) {
+      ElMessage.warning('当前项目未配置采集连接信息')
       return
     }
+    const fields = ['name']
+    if (!form.value.useProjectConnectionConfig) {
+      fields.push('sourceType')
+    }
+    if (!form.value.useProjectConnectionConfig && form.value.sourceType === 'SSH') {
+      fields.push('host', 'username', 'password')
+    }
+    const valid = await validateSourceFields(fields)
+    if (!valid) return
+  }
+
+  if (activeTab.value === 'log-config') {
+    const valid = await validateSourceFields(['paths', 'logFormatPattern', 'traceFieldName'])
+    if (!valid) return
   }
 
   if (currentStepIndex.value >= stepOrder.length - 1) return
@@ -1085,6 +1260,10 @@ const handleAutoTestPath = async () => {
     return
   }
 
+  if (form.value.useProjectConnectionConfig) {
+    return
+  }
+
   // 如果是 SSH 类型但没有配置 SSH，则跳过
   if (form.value.sourceType === 'SSH') {
     if (!form.value.host || !form.value.username || !form.value.password) {
@@ -1119,8 +1298,13 @@ const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
 
+  if (form.value.useProjectConnectionConfig && !currentProjectConnectionConfigured.value) {
+    ElMessage.warning('当前项目未配置采集连接信息')
+    return
+  }
+
   // SSH 类型：点击确定时先执行连接和路径测试
-  if (form.value.sourceType === 'SSH') {
+  if (!form.value.useProjectConnectionConfig && form.value.sourceType === 'SSH') {
     const paths = form.value.paths?.map(p => (p || '').trim()).filter(Boolean) || []
     const hasInputPassword = !!form.value.password?.trim()
     const keepExistingPassword = isEdit.value && sshPasswordConfigured.value && !hasInputPassword
@@ -1278,6 +1462,7 @@ onMounted(() => {
   const savedProjectName = localStorage.getItem('currentProjectName')
   if (savedProjectId && savedProjectName) {
     currentProject.value = { id: savedProjectId, name: savedProjectName }
+    refreshCurrentProject()
   }
   loadProjects()
   loadSources()
