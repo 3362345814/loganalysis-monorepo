@@ -29,6 +29,14 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="aggregationLevel" label="聚合级别" width="120">
+        <template #default="{ row }">
+          <el-tag v-if="row.aggregationLevel" :type="row.aggregationLevel === 'ERROR' ? 'danger' : 'warning'">
+            {{ row.aggregationLevel }}及以上
+          </el-tag>
+          <el-tag v-else type="info">全部</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="错误信息" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">
           <el-tooltip
@@ -42,19 +50,6 @@
             </span>
           </el-tooltip>
           <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="enabled" label="启用" width="80">
-        <template #default="{ row }">
-          <el-switch v-model="row.enabled" disabled />
-        </template>
-      </el-table-column>
-      <el-table-column prop="aggregationLevel" label="聚合级别" width="120">
-        <template #default="{ row }">
-          <el-tag v-if="row.aggregationLevel" :type="row.aggregationLevel === 'ERROR' ? 'danger' : 'warning'">
-            {{ row.aggregationLevel }}及以上
-          </el-tag>
-          <el-tag v-else type="info">全部</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="280" fixed="right">

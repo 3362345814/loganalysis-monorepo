@@ -40,9 +40,15 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
 
     // ==================== 文件上下文 ====================
     private final Map<String, FileContext> fileContextMap = new ConcurrentHashMap<>();
+    private final Map<String, DownloadMethod> downloadMethodCache = new ConcurrentHashMap<>();
     private String[] filePatterns;
     private boolean isDirectoryMode;
     private static final long EXEC_EXIT_STATUS_WAIT_MS = 5000;
+
+    private enum DownloadMethod {
+        SFTP,
+        SSH_EXEC
+    }
 
     // ==================== 构造函数 ====================
 
@@ -197,7 +203,7 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
 
         String tempFilePath = tempDir + "/" + remoteFileName(filePath);
 
-        if (!downloadViaSftp(filePath, tempFilePath) && !downloadViaSshExec(filePath, tempFilePath)) {
+        if (!downloadRemoteFile(filePath, tempFilePath)) {
             log.error("Unable to download remote log file via SFTP or SSH exec: path={}", filePath);
             throw new IOException("无法下载远程日志文件: " + filePath);
         }
@@ -233,7 +239,34 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         tempFile.delete();
     }
 
-    private boolean downloadViaSftp(String filePath, String tempFilePath) {
+    private boolean downloadRemoteFile(String filePath, String tempFilePath) {
+        DownloadMethod cachedMethod = downloadMethodCache.get(filePath);
+        if (cachedMethod == DownloadMethod.SFTP) {
+            if (downloadViaSftp(filePath, tempFilePath, false)) {
+                return true;
+            }
+            downloadMethodCache.remove(filePath, DownloadMethod.SFTP);
+            log.warn("Cached SFTP download method failed, retrying full detection: path={}", filePath);
+        } else if (cachedMethod == DownloadMethod.SSH_EXEC) {
+            if (downloadViaSshExec(filePath, tempFilePath)) {
+                return true;
+            }
+            downloadMethodCache.remove(filePath, DownloadMethod.SSH_EXEC);
+            log.warn("Cached SSH exec download method failed, retrying full detection: path={}", filePath);
+        }
+
+        if (downloadViaSftp(filePath, tempFilePath, true)) {
+            downloadMethodCache.put(filePath, DownloadMethod.SFTP);
+            return true;
+        }
+        if (downloadViaSshExec(filePath, tempFilePath)) {
+            downloadMethodCache.put(filePath, DownloadMethod.SSH_EXEC);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean downloadViaSftp(String filePath, String tempFilePath, boolean logFailureSummary) {
         String pwd = null;
         try {
             pwd = channelSftp.pwd();
@@ -257,7 +290,7 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
             }
         }
 
-        if (lastException != null) {
+        if (logFailureSummary && lastException != null) {
             log.warn("SFTP download failed, will try SSH exec fallback if available: path={}, triedPaths={}, sftpErrorId={}, errorMessage='{}'",
                     filePath, buildSftpPathCandidates(filePath, pwd), lastException.id,
                     lastException.getMessage() != null ? lastException.getMessage() : "null");
