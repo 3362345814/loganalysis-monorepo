@@ -3,7 +3,9 @@
     <el-card class="tool-card">
       <template #header>
         <div class="card-header">
-            <span>日志聚合</span>
+          <span>日志聚合</span>
+          <div class="card-header-actions">
+            <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
             <el-button
               type="warning"
               :icon="MagicStick"
@@ -12,8 +14,8 @@
             >
               重新组合
             </el-button>
-            <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
           </div>
+        </div>
       </template>
 
       <!-- 统计卡片 -->
@@ -83,19 +85,32 @@
                 <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
               </el-select>
             </el-form-item>
+            <el-form-item label="日志源">
+              <el-select
+                v-model="aggQuery.sourceId"
+                placeholder="请先选择项目"
+                clearable
+                filterable
+                :disabled="!aggQuery.projectId"
+                :loading="logSourcesLoading"
+                style="width: 180px"
+                @change="handleSourceChange"
+              >
+                <el-option v-for="source in logSources" :key="source.id" :label="source.name" :value="source.id" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="状态">
-              <el-select v-model="aggQuery.status" placeholder="全部" clearable style="width: 120px">
-                <el-option label="活跃" value="ACTIVE" />
-                <el-option label="已过期" value="EXPIRED" />
+              <el-select v-model="aggQuery.status" placeholder="全部" clearable style="width: 120px" @change="handleFilterChange">
                 <el-option label="已分析" value="ANALYZED" />
+                <el-option label="未分析" value="UNANALYZED" />
               </el-select>
             </el-form-item>
             <el-form-item label="严重程度">
-              <el-select v-model="aggQuery.severity" placeholder="全部" clearable style="width: 120px">
-                <el-option label="严重" value="CRITICAL" />
-                <el-option label="错误" value="ERROR" />
-                <el-option label="警告" value="WARNING" />
-                <el-option label="信息" value="INFO" />
+              <el-select v-model="aggQuery.severity" placeholder="全部" clearable style="width: 120px" @change="handleFilterChange">
+                <el-option label="CRITICAL" value="CRITICAL" />
+                <el-option label="ERROR" value="ERROR" />
+                <el-option label="WARNING" value="WARNING" />
+                <el-option label="INFO" value="INFO" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -155,7 +170,7 @@
 
     <!-- 聚合组详情对话框 -->
     <el-dialog v-model="detailVisible" title="聚合组详情" width="1000px" top="5vh">
-      <el-descriptions :column="2" border v-if="currentGroup">
+      <el-descriptions :column="2" border label-width="96px" v-if="currentGroup">
         <el-descriptions-item label="聚合组ID">{{ currentGroup.groupId }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(currentGroup.status)">{{ currentGroup.status }}</el-tag>
@@ -317,17 +332,32 @@ const aiAnalysisError = ref('')
 const traceTimelineVisible = ref(false)
 
 const projects = ref([])
+const logSources = ref([])
+const logSourcesLoading = ref(false)
 
 const aggQuery = reactive({
   projectId: null,
+  sourceId: null,
   page: 1,
   size: 20,
   status: '',
   severity: ''
 })
 
-const handleProjectChange = () => {
+const handleProjectChange = async () => {
   aggQuery.page = 1  // 重置为第1页
+  aggQuery.sourceId = null
+  await loadLogSourcesByProject()
+  loadAggregationGroups()
+}
+
+const handleSourceChange = () => {
+  aggQuery.page = 1
+  loadAggregationGroups()
+}
+
+const handleFilterChange = () => {
+  aggQuery.page = 1
   loadAggregationGroups()
 }
 
@@ -337,6 +367,24 @@ const loadProjects = async () => {
     projects.value = res.data || []
   } catch (error) {
     console.error('加载项目失败:', error)
+  }
+}
+
+const loadLogSourcesByProject = async () => {
+  logSources.value = []
+  if (!aggQuery.projectId) {
+    return
+  }
+
+  logSourcesLoading.value = true
+  try {
+    const res = await logSourceApi.getByProjectId(aggQuery.projectId)
+    logSources.value = res.data || []
+  } catch (error) {
+    console.error('加载日志源失败:', error)
+    ElMessage.error('加载日志源失败')
+  } finally {
+    logSourcesLoading.value = false
   }
 }
 
@@ -363,7 +411,7 @@ const loadAggregationGroups = async () => {
     }
     if (aggQuery.status) params.status = aggQuery.status
     if (aggQuery.severity) params.severity = aggQuery.severity
-    if (aggQuery.projectId) params.projectId = aggQuery.projectId
+    if (aggQuery.sourceId) params.sourceId = aggQuery.sourceId
 
     const res = await aggregationApi.getAll(params)
     aggGroups.value = res.data.content || []

@@ -207,3 +207,11 @@ func TestMigrateImageRegistry(t *testing.T) {
 		}
 	}
 }
+
+func TestPowerShellSingleQuotedEscapesSingleQuotes(t *testing.T) {
+	got := powershellSingleQuoted(`C:\Tools\loganalysis's\loganalysis.exe`)
+	want := `'C:\Tools\loganalysis''s\loganalysis.exe'`
+	if got != want {
+		t.Fatalf("powershellSingleQuoted() = %q, want %q", got, want)
+	}
+}

@@ -4,11 +4,15 @@ import com.evelin.loganalysis.loganalysisai.analysis.RootCauseAnalyzer;
 import com.evelin.loganalysis.loganalysisai.analysis.dto.AnalysisResultDTO;
 import com.evelin.loganalysis.loganalysisai.analysis.entity.AnalysisResultEntity;
 import com.evelin.loganalysis.loganalysisai.analysis.repository.AnalysisResultRepository;
+import com.evelin.loganalysis.logcommon.utils.IdGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,7 +49,6 @@ public class AnalysisService {
      * @param aggregationData 聚合组数据
      * @return 分析结果
      */
-    @Transactional
     public AnalysisResultDTO analyze(Map<String, Object> aggregationData) {
         return analyze(aggregationData, false);
     }
@@ -57,13 +60,30 @@ public class AnalysisService {
      * @param isManualTrigger 是否为手动触发（手动触发不做级别限制）
      * @return 分析结果
      */
-    @Transactional
     public AnalysisResultDTO analyze(Map<String, Object> aggregationData, boolean isManualTrigger) {
         String aggregationId = String.valueOf(aggregationData.get("groupId"));
         String severity = String.valueOf(aggregationData.getOrDefault("severity", "INFO"));
 
         log.info("开始分析聚合组: {}, 严重程度: {}, 触发类型: {}",
                 aggregationId, severity, isManualTrigger ? "手动" : "自动");
+
+        String analysisId = startAnalysis(aggregationData, isManualTrigger);
+        if (analysisId == null) {
+            return getAnalysisResult(aggregationId);
+        }
+
+        return finishStartedAnalysis(aggregationData, analysisId);
+    }
+
+    /**
+     * 创建 PROCESSING 记录作为分析任务锁。
+     *
+     * @return 分析记录 ID；如果已有 COMPLETED 结果则返回 null
+     */
+    @Transactional
+    public String startAnalysis(Map<String, Object> aggregationData, boolean isManualTrigger) {
+        String aggregationId = String.valueOf(aggregationData.get("groupId"));
+        String severity = String.valueOf(aggregationData.getOrDefault("severity", "INFO"));
 
         // 自动触发时才检查严重程度，手动触发不限制级别
         if (!isManualTrigger) {
@@ -74,26 +94,55 @@ public class AnalysisService {
             }
         }
         
-        // 检查是否已有分析结果
-        var existingResult = analysisResultRepository.findByAggregationId(aggregationId);
-        if (existingResult.isPresent()) {
-            AnalysisResultEntity entity = existingResult.get();
+        AnalysisResultEntity entity = deduplicateByAggregationId(aggregationId);
+        if (entity != null) {
             if ("COMPLETED".equals(entity.getStatus())) {
-                log.info("聚合组 {} 已有分析结果，直接返回", aggregationId);
-                return toDTO(entity);
+                log.info("聚合组 {} 已有分析结果，跳过重复分析", aggregationId);
+                return null;
             }
+            if (isRunningStatus(entity.getStatus())) {
+                throw new IllegalStateException("聚合组正在分析中，请勿重复触发");
+            }
+
+            entity.setStatus("PROCESSING");
+            entity.setStatusMessage("分析任务已提交，正在分析");
+            entity.setCreatedAt(LocalDateTime.now());
+            entity.setCompletedAt(null);
+            entity.setProcessingTimeMs(null);
+            analysisResultRepository.save(entity);
+            return entity.getId();
         }
-        
+
+        AnalysisResultEntity processing = new AnalysisResultEntity();
+        processing.setId(IdGenerator.nextId());
+        processing.setAggregationId(aggregationId);
+        processing.setAggregationName(String.valueOf(aggregationData.getOrDefault("name", aggregationId)));
+        processing.setStatus("PROCESSING");
+        processing.setStatusMessage("分析任务已提交，正在分析");
+        processing.setCreatedAt(LocalDateTime.now());
+        analysisResultRepository.save(processing);
+        return processing.getId();
+    }
+
+    /**
+     * 执行已开始的分析任务，并回写结果。
+     */
+    public AnalysisResultDTO finishStartedAnalysis(Map<String, Object> aggregationData, String analysisId) {
+        String aggregationId = String.valueOf(aggregationData.get("groupId"));
+        try {
         // 执行分析
         AnalysisResultDTO result = rootCauseAnalyzer.analyze(aggregationData);
-        
+
         // 保存结果
-        AnalysisResultEntity entity = toEntity(result);
-        analysisResultRepository.save(entity);
-        
+            result.setId(analysisId);
+            saveAnalysisResult(result);
+
         log.info("聚合组 {} 分析完成，状态: {}", aggregationId, result.getStatus());
-        
         return result;
+        } catch (Exception e) {
+            markAnalysisFailed(analysisId, aggregationId, e.getMessage());
+            throw e;
+        }
     }
     
     /**
@@ -103,9 +152,83 @@ public class AnalysisService {
      * @return 分析结果
      */
     public AnalysisResultDTO getAnalysisResult(String aggregationId) {
-        return analysisResultRepository.findByAggregationId(aggregationId)
+        return analysisResultRepository.findTopByAggregationIdOrderByCreatedAtDesc(aggregationId)
                 .map(this::toDTO)
                 .orElse(null);
+    }
+
+    @Transactional
+    protected void saveAnalysisResult(AnalysisResultDTO result) {
+        AnalysisResultEntity entity = toEntity(result);
+        analysisResultRepository.save(entity);
+    }
+
+    @Transactional
+    protected void markAnalysisFailed(String analysisId, String aggregationId, String message) {
+        AnalysisResultEntity entity = analysisResultRepository.findById(analysisId)
+                .orElseGet(() -> {
+                    AnalysisResultEntity fallback = new AnalysisResultEntity();
+                    fallback.setId(analysisId);
+                    fallback.setAggregationId(aggregationId);
+                    fallback.setCreatedAt(LocalDateTime.now());
+                    return fallback;
+                });
+        entity.setStatus("FAILED");
+        entity.setStatusMessage(limitLength(message != null ? message : "分析执行失败", 500));
+        entity.setCompletedAt(LocalDateTime.now());
+        analysisResultRepository.save(entity);
+    }
+
+    private boolean isRunningStatus(String status) {
+        return "PROCESSING".equalsIgnoreCase(status) || "PENDING".equalsIgnoreCase(status);
+    }
+
+    private boolean isAnalyzedStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        return "COMPLETED".equalsIgnoreCase(status)
+                || "FAILED".equalsIgnoreCase(status)
+                || "PARSE_ERROR".equalsIgnoreCase(status);
+    }
+
+    /**
+     * 同一聚合组只保留一条分析记录。
+     * 优先保留已分析记录，其次保留最新记录；其余记录会删除。
+     */
+    @Transactional
+    protected AnalysisResultEntity deduplicateByAggregationId(String aggregationId) {
+        List<AnalysisResultEntity> results = new ArrayList<>(analysisResultRepository.findAllByAggregationId(aggregationId));
+        if (results.isEmpty()) {
+            return null;
+        }
+
+        results.sort(Comparator.comparing(this::isAnalyzedStatusForSort).reversed()
+                .thenComparing(AnalysisResultEntity::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        AnalysisResultEntity keep = results.get(0);
+
+        for (int i = 1; i < results.size(); i++) {
+            AnalysisResultEntity duplicated = results.get(i);
+            if (duplicated.getId() != null && !duplicated.getId().equals(keep.getId())) {
+                analysisResultRepository.delete(duplicated);
+            }
+        }
+
+        return keep;
+    }
+
+    private boolean isAnalyzedStatusForSort(AnalysisResultEntity entity) {
+        return isAnalyzedStatus(entity.getStatus());
+    }
+
+    private String limitLength(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        if (maxLength <= 3) {
+            return value.substring(0, maxLength);
+        }
+        return value.substring(0, maxLength - 3) + "...";
     }
     
     /**

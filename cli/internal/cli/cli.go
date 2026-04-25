@@ -371,7 +371,7 @@ func (a *runtimeApp) printHelp() {
 	fmt.Fprintln(a.stdout, "  loganalysis auth passwd")
 	fmt.Fprintln(a.stdout, "  loganalysis auth show")
 	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major] [--auto-port] [--no-auto-port]")
-	fmt.Fprintln(a.stdout, "  loganalysis uninstall [--purge-data]")
+	fmt.Fprintln(a.stdout, "  loganalysis uninstall [--purge-data] [--keep-cli]")
 	fmt.Fprintln(a.stdout, "  loganalysis version")
 }
 
@@ -1414,6 +1414,7 @@ func (a *runtimeApp) cmdUninstall(args []string) int {
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
 	purge := fs.Bool("purge-data", false, "remove ~/.loganalysis including config and data")
+	keepCLI := fs.Bool("keep-cli", false, "keep CLI binary and only remove runtime files")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -1435,13 +1436,67 @@ func (a *runtimeApp) cmdUninstall(args []string) int {
 			return 1
 		}
 		fmt.Fprintf(a.stdout, "removed %s\n", a.paths.Root)
-		return 0
+	} else {
+		_ = os.Remove(a.paths.StatePath)
+		_ = os.RemoveAll(a.paths.RuntimeDir)
+		fmt.Fprintln(a.stdout, "runtime files removed; config/data kept")
 	}
 
-	_ = os.Remove(a.paths.StatePath)
-	_ = os.RemoveAll(a.paths.RuntimeDir)
-	fmt.Fprintln(a.stdout, "runtime files removed; config/data kept")
+	if *keepCLI {
+		fmt.Fprintln(a.stdout, "CLI binary kept")
+		return 0
+	}
+	if err := a.removeSelfBinary(); err != nil {
+		fmt.Fprintf(a.stderr, "warning: failed to remove CLI binary: %v\n", err)
+		return 1
+	}
 	return 0
+}
+
+func (a *runtimeApp) removeSelfBinary() error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable: %w", err)
+	}
+	exePath, err = filepath.Abs(exePath)
+	if err != nil {
+		return fmt.Errorf("resolve executable absolute path: %w", err)
+	}
+
+	base := strings.ToLower(filepath.Base(exePath))
+	if base != "loganalysis" && base != "loganalysis.exe" {
+		return fmt.Errorf("refuse to remove unexpected executable name %q at %s", filepath.Base(exePath), exePath)
+	}
+
+	if runtime.GOOS == "windows" {
+		if err := scheduleWindowsSelfRemove(exePath); err != nil {
+			return err
+		}
+		fmt.Fprintf(a.stdout, "CLI binary removal scheduled: %s\n", exePath)
+		return nil
+	}
+
+	if err := os.Remove(exePath); err != nil {
+		return fmt.Errorf("remove %s: %w", exePath, err)
+	}
+	fmt.Fprintf(a.stdout, "removed CLI binary %s\n", exePath)
+	return nil
+}
+
+func scheduleWindowsSelfRemove(exePath string) error {
+	ps := fmt.Sprintf(
+		"Start-Sleep -Seconds 1; Remove-Item -LiteralPath %s -Force -ErrorAction Stop",
+		powershellSingleQuoted(exePath),
+	)
+	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("schedule windows self removal: %w", err)
+	}
+	return nil
+}
+
+func powershellSingleQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func (a *runtimeApp) applyStack(profile, version string, ports PortsConfig) error {

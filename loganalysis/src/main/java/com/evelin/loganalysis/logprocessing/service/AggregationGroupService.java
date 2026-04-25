@@ -187,6 +187,13 @@ public class AggregationGroupService {
     }
 
     /**
+     * 按可选条件分页查询聚合组
+     */
+    public Page<AggregationGroupEntity> findByFilters(String analysisStatus, String severity, String sourceId, Pageable pageable) {
+        return aggregationGroupRepository.findByFilters(analysisStatus, severity, sourceId, pageable);
+    }
+
+    /**
      * 根据日志源ID查询聚合组
      */
     public List<AggregationGroupEntity> findBySourceId(String sourceId) {
@@ -555,7 +562,7 @@ public class AggregationGroupService {
         target.setImpactScope(limitLength(mergeShortField(target.getImpactScope(), source.getImpactScope()), IMPACT_SCOPE_MAX_LENGTH));
         target.setStatusMessage(limitLength(mergeStatusMessage(target.getStatusMessage(), source.getStatusMessage(), sourceGroupId), STATUS_MESSAGE_MAX_LENGTH));
         target.setRootCauseCategory(limitLength(
-                mergeShortField(target.getRootCauseCategory(), source.getRootCauseCategory()),
+                mergeRootCauseCategory(target.getRootCauseCategory(), source.getRootCauseCategory()),
                 ROOT_CAUSE_CATEGORY_MAX_LENGTH));
         target.setImpactSeverity(limitLength(
                 mergeSeverity(target.getImpactSeverity(), source.getImpactSeverity()),
@@ -592,6 +599,16 @@ public class AggregationGroupService {
             return incoming;
         }
         return current + " / " + incoming;
+    }
+
+    /**
+     * 问题分类只保留一个 tag，不拼接多个类别。
+     */
+    private String mergeRootCauseCategory(String current, String incoming) {
+        if (current != null && !current.isBlank()) {
+            return current;
+        }
+        return incoming;
     }
 
     private String mergeStatusMessage(String current, String incoming, String sourceGroupId) {

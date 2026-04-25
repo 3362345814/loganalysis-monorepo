@@ -16,11 +16,6 @@ import java.util.Optional;
 public interface AnalysisResultRepository extends JpaRepository<AnalysisResultEntity, String> {
     
     /**
-     * 根据聚合组ID查询分析结果
-     */
-    Optional<AnalysisResultEntity> findByAggregationId(String aggregationId);
-
-    /**
      * 查询聚合组的所有分析结果
      */
     List<AnalysisResultEntity> findAllByAggregationId(String aggregationId);

@@ -357,17 +357,21 @@ loganalysis upgrade --to {{VERSION}} --no-auto-port
 
 ### 9) `uninstall`
 
-用途：卸载运行态文件，可选彻底清理数据。
+用途：卸载 CLI 与运行态文件，可选彻底清理数据。
 
 关键参数：
 
 - `--purge-data`：删除 `~/.loganalysis`（包括配置、状态和数据）
+- `--keep-cli`：保留 `loganalysis` CLI 二进制，只清理运行态文件
 
 示例：
 
 ```bash
-# 只清理 runtime/state，保留配置和数据
+# 卸载 CLI，并清理 runtime/state，保留配置和数据
 loganalysis uninstall
+
+# 只清理 runtime/state，保留 CLI、配置和数据
+loganalysis uninstall --keep-cli
 
 # 彻底清理（不可恢复）
 loganalysis uninstall --purge-data

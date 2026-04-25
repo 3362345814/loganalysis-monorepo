@@ -1,12 +1,15 @@
 {
-  "version": "v1.0.0",
+  "version": "v1.1.0",
   "releaseDate": "2026-04-25",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042506",
+    "buildNumber": "2026042507",
     "environment": "production"
   }, 
   "updateInfo": [
-    "优化了聚合效果，添加了重新聚合功能"
+    "优化聚合模板与历史匹配，新增聚合组重新组合并同步合并分析结果",
+    "聚合与智能分析界面筛选和布局优化，支持按项目/日志源联动筛选与状态自动触发查询",
+    "智能分析新增 PROCESSING 状态展示与防重复触发，失败重试流程增强",
+    "全局弹窗增加高度限制与内部滚动，长表单不再溢出屏幕"
   ]
 }

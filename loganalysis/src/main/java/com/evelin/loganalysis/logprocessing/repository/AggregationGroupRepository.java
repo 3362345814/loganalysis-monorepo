@@ -64,6 +64,22 @@ public interface AggregationGroupRepository extends JpaRepository<AggregationGro
     List<AggregationGroupEntity> findActiveGroups();
 
     /**
+     * 按可选条件分页查询聚合组
+     */
+    @Query("""
+            SELECT a FROM AggregationGroupEntity a
+            WHERE (:analysisStatus IS NULL OR :analysisStatus = ''
+                   OR (:analysisStatus = 'ANALYZED' AND a.isAnalyzed = true)
+                   OR (:analysisStatus = 'UNANALYZED' AND (a.isAnalyzed = false OR a.isAnalyzed IS NULL)))
+              AND (:severity IS NULL OR :severity = '' OR UPPER(a.severity) = UPPER(:severity))
+              AND (:sourceId IS NULL OR :sourceId = '' OR a.sourceId = :sourceId)
+            """)
+    Page<AggregationGroupEntity> findByFilters(@Param("analysisStatus") String analysisStatus,
+                                               @Param("severity") String severity,
+                                               @Param("sourceId") String sourceId,
+                                               Pageable pageable);
+
+    /**
      * 统计各严重程度的数量
      */
     @Query("SELECT a.severity, COUNT(a) FROM AggregationGroupEntity a WHERE a.status = 'ACTIVE' GROUP BY a.severity")

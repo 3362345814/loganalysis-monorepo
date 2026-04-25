@@ -50,7 +50,7 @@
             </div>
 
             <div class="timeline-details" v-if="expandedIndex === index">
-              <el-descriptions :column="2" border size="small">
+              <el-descriptions :column="2" border size="small" label-width="80px">
                 <el-descriptions-item label="事件ID" :span="2">{{ log.id || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="日志源">{{ log.sourceName || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="文件路径">{{ log.filePath || '-' }}</el-descriptions-item>

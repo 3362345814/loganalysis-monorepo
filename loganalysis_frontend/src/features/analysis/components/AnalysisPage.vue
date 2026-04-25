@@ -130,7 +130,7 @@
         <el-table-column prop="status" label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">
-              {{ row.status || '-' }}
+              {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -155,6 +155,7 @@
               link
               size="small"
               :loading="retryingId === row.aggregationId"
+              :disabled="isAnalysisRunning(row.status)"
               @click="retryAnalysis(row)"
             >
               重试
@@ -191,7 +192,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="分析状态">
             <el-tag :type="getStatusType(currentDetail.status)">
-              {{ currentDetail.status }}
+              {{ getStatusText(currentDetail.status) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="问题分类">
@@ -339,6 +340,21 @@ const getStatusType = (status) => {
   return typeMap[status] || 'info'
 }
 
+const getStatusText = (status) => {
+  const textMap = {
+    'COMPLETED': '分析完成',
+    'PROCESSING': '正在分析',
+    'FAILED': '分析失败',
+    'PENDING': '等待分析',
+    'PARSE_ERROR': '解析失败'
+  }
+  return textMap[status] || status || '-'
+}
+
+const isAnalysisRunning = (status) => {
+  return status === 'PROCESSING' || status === 'PENDING'
+}
+
 // 获取置信度颜色
 const getConfidenceColor = (confidence) => {
   if (!confidence) return 'var(--text-tertiary)'
@@ -443,6 +459,8 @@ const retryAnalysis = async (row) => {
     }
 
     await analysisApi.trigger(analysisData)
+    row.status = 'PROCESSING'
+    row.statusMessage = '分析任务已提交，正在分析'
     ElMessage.success('已提交重试分析任务')
     await loadData()
   } catch (error) {

@@ -36,12 +36,15 @@ public class AnalysisController {
         try {
             Map<String, Object> payload = new HashMap<>(aggregationData);
             String groupId = String.valueOf(payload.get("groupId"));
+            String analysisId = analysisService.startAnalysis(payload, true);
+            if (analysisId == null) {
+                return Result.success("该聚合组已有分析结果，无需重复分析");
+            }
             log.info("收到手动分析请求，已异步提交: {}", groupId);
 
             llmExecutor.execute(() -> {
                 try {
-                    // 手动触发，设置为 true，不限制日志级别
-                    analysisService.analyze(payload, true);
+                    analysisService.finishStartedAnalysis(payload, analysisId);
                     log.info("手动分析任务执行完成: {}", groupId);
                 } catch (Exception ex) {
                     log.error("手动分析任务执行失败: {}, 错误: {}", groupId, ex.getMessage(), ex);
@@ -49,6 +52,9 @@ public class AnalysisController {
             });
 
             return Result.success("分析任务已提交，正在后台执行");
+        } catch (IllegalStateException e) {
+            log.warn("分析任务重复提交: {}", e.getMessage());
+            return Result.failed(409, e.getMessage());
         } catch (Exception e) {
             log.error("分析失败: {}", e.getMessage(), e);
             return Result.failed(500, "分析失败: " + e.getMessage());

@@ -849,6 +849,9 @@ a {
   border-radius: var(--radius-featured) !important;
   background: var(--color-white) !important;
   border: 1px solid var(--border-primary);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
 }
 
 .el-dialog__header {
@@ -858,6 +861,9 @@ a {
 
 .el-dialog__body {
   padding: var(--space-24);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .el-dialog__footer {

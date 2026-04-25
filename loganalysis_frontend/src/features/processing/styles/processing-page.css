@@ -42,6 +42,12 @@
   align-items: center;
 }
 
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
 .log-content {
   margin: 0;
   padding: var(--space-16);

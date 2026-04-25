@@ -67,8 +67,9 @@ public class AggregationGroupController {
      *
      * @param page    页码（从0开始）
      * @param size    每页大小
-     * @param status  状态过滤（可选）
+     * @param status  分析状态过滤（ANALYZED / UNANALYZED，可选）
      * @param severity 严重程度过滤（可选）
+     * @param sourceId 日志源过滤（可选）
      * @return 分页的聚合组列表
      */
     @GetMapping
@@ -76,24 +77,11 @@ public class AggregationGroupController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String severity) {
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String sourceId) {
         try {
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastEventTime"));
-            Page<AggregationGroupEntity> groupPage;
-
-            if (status != null && !status.isEmpty()) {
-                groupPage = aggregationGroupService.findByStatus(status, pageable);
-            } else {
-                groupPage = aggregationGroupService.findAll(pageable);
-            }
-
-            // 如果有严重程度过滤，在内存中过滤
-            if (severity != null && !severity.isEmpty() && groupPage.hasContent()) {
-                List<AggregationGroupEntity> filtered = groupPage.getContent().stream()
-                        .filter(g -> severity.equalsIgnoreCase(g.getSeverity()))
-                        .toList();
-                groupPage = new PageImplWrapper<>(filtered, pageable, filtered.size());
-            }
+            Page<AggregationGroupEntity> groupPage = aggregationGroupService.findByFilters(status, severity, sourceId, pageable);
 
             List<AggregationGroupEntity> content = groupPage.getContent();
             PageResult<AggregationGroupEntity> result = PageResult.<AggregationGroupEntity>builder()
