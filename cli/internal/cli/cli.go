@@ -391,7 +391,7 @@ func validateProfile(profile string) error {
 func (a *runtimeApp) cmdUp(args []string) int {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
-	version := fs.String("version", a.cfg.DefaultVersion, "image version tag")
+	version := fs.String("version", a.defaultUpVersion(), "image version tag")
 	autoPort := fs.Bool("auto-port", true, "auto-resolve host port conflicts")
 	noAutoPort := fs.Bool("no-auto-port", false, "disable auto-resolve host port conflicts")
 
@@ -450,6 +450,23 @@ func (a *runtimeApp) cmdUp(args []string) int {
 
 	fmt.Fprintf(a.stdout, "stack started with profile=%s version=%s\n", profileFull, *version)
 	return 0
+}
+
+func (a *runtimeApp) defaultUpVersion() string {
+	configured := strings.TrimSpace(a.cfg.DefaultVersion)
+	if configured != "" && configured != "latest" {
+		return configured
+	}
+
+	current := strings.TrimSpace(a.build.Version)
+	if current != "" && current != "dev" {
+		return current
+	}
+
+	if configured != "" {
+		return configured
+	}
+	return "latest"
 }
 
 func (a *runtimeApp) cmdDown(args []string) int {

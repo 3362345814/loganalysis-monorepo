@@ -183,14 +183,14 @@ loganalysis up --version {{VERSION}}
 
 关键参数：
 
-- `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`，初始为 `latest`）
+- `--version vX.Y.Z|latest`：镜像 tag（默认取 `config.default_version`；未固定时使用当前 CLI 版本）
 - `--auto-port`：兼容参数，行为同默认值（自动检测并避让端口冲突）
 - `--no-auto-port`：关闭自动端口避让
 
 示例：
 
 ```bash
-# 默认最新版本
+# 默认使用当前 CLI 版本对应的镜像
 loganalysis up 
 
 # 指定版本（默认也会自动避让端口）

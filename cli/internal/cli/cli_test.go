@@ -48,6 +48,39 @@ func TestConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestDefaultUpVersionPrefersBuildVersionOverLatest(t *testing.T) {
+	app := &runtimeApp{
+		build: BuildInfo{Version: "v0.5.0"},
+		cfg:   Config{DefaultVersion: "latest"},
+	}
+
+	if got := app.defaultUpVersion(); got != "v0.5.0" {
+		t.Fatalf("defaultUpVersion() = %q, want %q", got, "v0.5.0")
+	}
+}
+
+func TestDefaultUpVersionKeepsConfiguredPinnedVersion(t *testing.T) {
+	app := &runtimeApp{
+		build: BuildInfo{Version: "v0.5.0"},
+		cfg:   Config{DefaultVersion: "v0.4.0"},
+	}
+
+	if got := app.defaultUpVersion(); got != "v0.4.0" {
+		t.Fatalf("defaultUpVersion() = %q, want %q", got, "v0.4.0")
+	}
+}
+
+func TestDefaultUpVersionFallsBackToLatestForDevBuild(t *testing.T) {
+	app := &runtimeApp{
+		build: BuildInfo{Version: "dev"},
+		cfg:   Config{DefaultVersion: "latest"},
+	}
+
+	if got := app.defaultUpVersion(); got != "latest" {
+		t.Fatalf("defaultUpVersion() = %q, want %q", got, "latest")
+	}
+}
+
 func TestAutoResolveProfilePortsFull(t *testing.T) {
 	ports := PortsConfig{
 		Frontend:               3000,
