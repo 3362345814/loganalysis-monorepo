@@ -226,6 +226,9 @@ export const aggregationApi = {
   cleanup: (timeoutMinutes) => service.post('/processing/aggregation/cleanup', null, {
     params: { timeoutMinutes }
   }),
+
+  // 重新组合相似聚合组
+  recombine: (params) => service.post('/processing/aggregation/recombine', null, { params }),
   
   // 根据聚合组ID查询组内日志（分页）
   getLogsById: (id, params) => service.get(`/processing/aggregation/${id}/logs`, { params }),

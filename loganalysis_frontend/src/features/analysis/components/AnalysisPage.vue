@@ -48,7 +48,7 @@
               <el-icon><Timer /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ stats.avgTime }}ms</div>
+              <div class="stat-value">{{ formatDurationSeconds(stats.avgTimeMs) }}</div>
               <div class="stat-label">平均耗时</div>
             </div>
           </div>
@@ -127,7 +127,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">
               {{ row.status || '-' }}
@@ -136,7 +136,7 @@
         </el-table-column>
         <el-table-column prop="processingTimeMs" label="耗时" width="80">
           <template #default="{ row }">
-            {{ row.processingTimeMs ? row.processingTimeMs + 'ms' : '-' }}
+            {{ formatDurationSeconds(row.processingTimeMs) }}
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="分析时间" width="170">
@@ -144,10 +144,20 @@
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleViewDetail(row)">
               查看详情
+            </el-button>
+            <el-button
+              v-if="row.status === 'FAILED'"
+              type="warning"
+              link
+              size="small"
+              :loading="retryingId === row.aggregationId"
+              @click="retryAnalysis(row)"
+            >
+              重试
             </el-button>
           </template>
         </el-table-column>
@@ -198,7 +208,7 @@
             {{ currentDetail.confidence ? (currentDetail.confidence * 100).toFixed(1) + '%' : '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="处理耗时">
-            {{ currentDetail.processingTimeMs ? currentDetail.processingTimeMs + 'ms' : '-' }}
+            {{ formatDurationSeconds(currentDetail.processingTimeMs) }}
           </el-descriptions-item>
           <el-descriptions-item label="使用模型">
             {{ currentDetail.modelName || '-' }}
@@ -232,7 +242,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, CircleCheck, Warning, Timer, Refresh, Search } from '@element-plus/icons-vue'
-import { analysisApi, projectApi } from '@/api'
+import { aggregationApi, analysisApi, projectApi } from '@/api'
 
 const router = useRouter()
 
@@ -246,6 +256,7 @@ const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentDetail = ref(null)
 const projects = ref([])
+const retryingId = ref('')
 
 const query = ref({
   projectId: null
@@ -270,7 +281,7 @@ const stats = ref({
   totalAnalysis: 0,
   completed: 0,
   highSeverity: 0,
-  avgTime: 0
+  avgTimeMs: 0
 })
 
 // 筛选后的列表
@@ -343,6 +354,11 @@ const formatTime = (time) => {
   return date.toLocaleString('zh-CN')
 }
 
+const formatDurationSeconds = (milliseconds) => {
+  if (!milliseconds && milliseconds !== 0) return '-'
+  return `${(milliseconds / 1000).toFixed(2)}s`
+}
+
 // 加载数据
 const loadData = async () => {
   loading.value = true
@@ -373,7 +389,7 @@ const calculateStats = () => {
   stats.value.highSeverity = list.filter(item => item.impactSeverity === 'HIGH').length
   
   const totalTime = list.reduce((sum, item) => sum + (item.processingTimeMs || 0), 0)
-  stats.value.avgTime = list.length > 0 ? Math.round(totalTime / list.length) : 0
+  stats.value.avgTimeMs = list.length > 0 ? Math.round(totalTime / list.length) : 0
 }
 
 // 刷新
@@ -392,6 +408,49 @@ const handleSearch = () => {
 const handleViewDetail = (row) => {
   currentDetail.value = row
   detailDialogVisible.value = true
+}
+
+const retryAnalysis = async (row) => {
+  if (!row.aggregationId) {
+    ElMessage.error('无法获取聚合组ID')
+    return
+  }
+
+  retryingId.value = row.aggregationId
+  try {
+    const groupRes = await aggregationApi.getByGroupId(row.aggregationId)
+    const group = groupRes.data
+    if (!group?.id) {
+      ElMessage.error('未找到对应聚合组')
+      return
+    }
+
+    const contextRes = await aggregationApi.getContext(group.id, { contextSize: 10 })
+    const contextData = contextRes.data || {}
+
+    const analysisData = {
+      aggregationId: group.id,
+      groupId: group.groupId,
+      severity: group.severity || 'INFO',
+      name: contextData.name || group.name,
+      eventCount: contextData.eventCount || group.eventCount,
+      startTime: contextData.startTime || group.firstEventTime,
+      endTime: contextData.endTime || group.lastEventTime,
+      representativeLog: contextData.representativeLog || group.representativeLog,
+      relatedLogs: contextData.relatedLogs || [],
+      contextBefore: contextData.contextBefore || [],
+      contextAfter: contextData.contextAfter || []
+    }
+
+    await analysisApi.trigger(analysisData)
+    ElMessage.success('已提交重试分析任务')
+    await loadData()
+  } catch (error) {
+    console.error('重试分析失败:', error)
+    ElMessage.error('重试分析失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  } finally {
+    retryingId.value = ''
+  }
 }
 
 // 跳转到聚合组页面

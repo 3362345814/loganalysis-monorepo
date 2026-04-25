@@ -4,6 +4,14 @@
       <template #header>
         <div class="card-header">
             <span>日志聚合</span>
+            <el-button
+              type="warning"
+              :icon="MagicStick"
+              :loading="recombineLoading"
+              @click="recombineAggregationGroups"
+            >
+              重新组合
+            </el-button>
             <el-button :icon="Refresh" @click="loadAggregationGroups" :loading="aggLoading">刷新</el-button>
           </div>
       </template>
@@ -103,11 +111,6 @@
             <el-table-column prop="severity" label="严重程度" width="120">
               <template #default="{ row }">
                 <el-tag :type="getSeverityType(row.severity)">{{ row.severity }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="getStatusType(row.status)">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="sourceName" label="日志源" width="120" />
@@ -296,6 +299,7 @@ const route = useRoute()
 
 // 聚合组数据
 const aggLoading = ref(false)
+const recombineLoading = ref(false)
 const aggGroups = ref([])
 const aggTotal = ref(0)
 const aggSummary = ref({})
@@ -378,6 +382,36 @@ const loadAggSummary = async () => {
     aggSummary.value = res.data || {}
   } catch (error) {
     console.error('加载聚合组摘要失败:', error)
+  }
+}
+
+// 重新组合相似聚合组
+const recombineAggregationGroups = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将按当前相似度阈值重新组合全部聚合组，并迁移组内日志与智能分析结果。该操作会删除被合并的聚合组，是否继续？',
+      '重新组合聚合组',
+      {
+        confirmButtonText: '继续',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  recombineLoading.value = true
+  try {
+    const res = await aggregationApi.recombine()
+    const result = res.data || {}
+    ElMessage.success(`重新组合完成：合并 ${result.mergedGroups || 0} 个聚合组，迁移 ${result.migratedLogs || 0} 条日志，合并 ${result.mergedAnalysisResults || 0} 条分析结果`)
+    await Promise.all([loadAggregationGroups(), loadAggSummary()])
+  } catch (error) {
+    console.error('重新组合聚合组失败:', error)
+    ElMessage.error('重新组合失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  } finally {
+    recombineLoading.value = false
   }
 }
 

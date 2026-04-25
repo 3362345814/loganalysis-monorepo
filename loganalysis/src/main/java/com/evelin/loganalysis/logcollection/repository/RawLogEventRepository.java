@@ -188,6 +188,14 @@ public interface RawLogEventRepository extends JpaRepository<RawLogEventEntity, 
     long countByAggregationGroupId(String aggregationGroupId);
 
     /**
+     * 批量迁移日志到新的聚合组ID
+     */
+    @Modifying
+    @Query("UPDATE RawLogEventEntity r SET r.aggregationGroupId = :targetGroupId WHERE r.aggregationGroupId = :sourceGroupId")
+    int updateAggregationGroupId(@Param("sourceGroupId") String sourceGroupId,
+                                 @Param("targetGroupId") String targetGroupId);
+
+    /**
      * 根据日志源ID删除所有日志
      *
      * @param sourceId 日志源ID

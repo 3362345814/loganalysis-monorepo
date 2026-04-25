@@ -1,9 +1,13 @@
 package com.evelin.loganalysis.logprocessing.service;
 
+import com.evelin.loganalysis.loganalysisai.analysis.entity.AnalysisResultEntity;
+import com.evelin.loganalysis.loganalysisai.analysis.repository.AnalysisResultRepository;
+import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
+import com.evelin.loganalysis.logcollection.repository.RawLogEventRepository;
+import com.evelin.loganalysis.logprocessing.aggregation.LogTemplateUtils;
 import com.evelin.loganalysis.logprocessing.dto.AggregationResult;
 import com.evelin.loganalysis.logprocessing.entity.AggregationGroupEntity;
 import com.evelin.loganalysis.logprocessing.repository.AggregationGroupRepository;
-import com.evelin.loganalysis.logcollection.repository.LogSourceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,12 +37,20 @@ public class AggregationGroupService {
 
     private final AggregationGroupRepository aggregationGroupRepository;
     private final LogSourceRepository logSourceRepository;
+    private final RawLogEventRepository rawLogEventRepository;
+    private final AnalysisResultRepository analysisResultRepository;
     private static final Map<String, Integer> SEVERITY_PRIORITY = Map.of(
             "INFO", 1,
             "WARNING", 2,
             "ERROR", 3,
             "CRITICAL", 4
     );
+    private static final int AGGREGATION_NAME_MAX_LENGTH = 200;
+    private static final int ROOT_CAUSE_CATEGORY_MAX_LENGTH = 100;
+    private static final int IMPACT_SCOPE_MAX_LENGTH = 500;
+    private static final int IMPACT_SEVERITY_MAX_LENGTH = 20;
+    private static final int STATUS_MAX_LENGTH = 20;
+    private static final int STATUS_MESSAGE_MAX_LENGTH = 500;
 
     /**
      * 创建或更新聚合组
@@ -127,6 +139,30 @@ public class AggregationGroupService {
             return Optional.empty();
         }
         return aggregationGroupRepository.findTopBySourceIdAndRepresentativeLogOrderByLastEventTimeDesc(sourceId, representativeLog);
+    }
+
+    /**
+     * 在同一日志源的全部历史聚合组中查找最相似的分组。
+     */
+    public Optional<AggregationGroupEntity> findBestSimilarGroup(String sourceId, String message, double threshold) {
+        if (sourceId == null || sourceId.isBlank() || message == null || message.isBlank()) {
+            return Optional.empty();
+        }
+
+        AggregationGroupEntity bestGroup = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (AggregationGroupEntity group : aggregationGroupRepository.findBySourceId(sourceId)) {
+            if (group.getRepresentativeLog() == null || group.getRepresentativeLog().isBlank()) {
+                continue;
+            }
+            double score = LogTemplateUtils.calculateSimilarity(message, group.getRepresentativeLog());
+            if (score >= threshold && score > bestScore) {
+                bestGroup = group;
+                bestScore = score;
+            }
+        }
+
+        return Optional.ofNullable(bestGroup);
     }
 
     /**
@@ -222,6 +258,75 @@ public class AggregationGroupService {
                 "expired", expired,
                 "analyzed", analyzed,
                 "severityCounts", severityCounts
+        );
+    }
+
+    /**
+     * 按代表日志相似度重新组合已有聚合组，并同步迁移组内日志与 AI 分析结果。
+     */
+    @Transactional
+    public Map<String, Object> recombineSimilarGroups(double threshold) {
+        List<AggregationGroupEntity> groups = aggregationGroupRepository.findAll().stream()
+                .filter(group -> group.getGroupId() != null && !group.getGroupId().isBlank())
+                .filter(group -> group.getRepresentativeLog() != null && !group.getRepresentativeLog().isBlank())
+                .sorted(this::compareGroupsForMerge)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        Set<String> removedIds = new HashSet<>();
+        int mergedGroups = 0;
+        int migratedLogs = 0;
+        int mergedAnalysisResults = 0;
+        List<Map<String, Object>> mergeDetails = new ArrayList<>();
+
+        for (int i = 0; i < groups.size(); i++) {
+            AggregationGroupEntity target = groups.get(i);
+            if (target.getId() == null || removedIds.contains(target.getId())) {
+                continue;
+            }
+
+            for (int j = i + 1; j < groups.size(); j++) {
+                AggregationGroupEntity source = groups.get(j);
+                if (source.getId() == null || removedIds.contains(source.getId())) {
+                    continue;
+                }
+                if (!sameSource(target, source)) {
+                    continue;
+                }
+
+                double score = LogTemplateUtils.calculateSimilarity(
+                        target.getRepresentativeLog(),
+                        source.getRepresentativeLog());
+                if (score < threshold) {
+                    continue;
+                }
+
+                int movedLogCount = rawLogEventRepository.updateAggregationGroupId(source.getGroupId(), target.getGroupId());
+                int movedAnalysisCount = mergeAnalysisResults(target, source);
+                mergeGroupMetadata(target, source, score, movedLogCount);
+                aggregationGroupRepository.save(target);
+                aggregationGroupRepository.delete(source);
+
+                removedIds.add(source.getId());
+                mergedGroups++;
+                migratedLogs += movedLogCount;
+                mergedAnalysisResults += movedAnalysisCount;
+                mergeDetails.add(Map.of(
+                        "targetGroupId", target.getGroupId(),
+                        "sourceGroupId", source.getGroupId(),
+                        "similarityScore", score,
+                        "migratedLogs", movedLogCount,
+                        "mergedAnalysisResults", movedAnalysisCount
+                ));
+            }
+        }
+
+        return Map.of(
+                "threshold", threshold,
+                "scannedGroups", groups.size(),
+                "mergedGroups", mergedGroups,
+                "migratedLogs", migratedLogs,
+                "mergedAnalysisResults", mergedAnalysisResults,
+                "details", mergeDetails
         );
     }
 
@@ -325,5 +430,261 @@ public class AggregationGroupService {
         int currentPriority = SEVERITY_PRIORITY.getOrDefault(currentSeverity.toUpperCase(), 1);
         int incomingPriority = SEVERITY_PRIORITY.getOrDefault(incomingSeverity.toUpperCase(), 1);
         return incomingPriority >= currentPriority ? incomingSeverity : currentSeverity;
+    }
+
+    private int compareGroupsForMerge(AggregationGroupEntity left, AggregationGroupEntity right) {
+        int countCompare = Integer.compare(
+                right.getEventCount() != null ? right.getEventCount() : 0,
+                left.getEventCount() != null ? left.getEventCount() : 0);
+        if (countCompare != 0) {
+            return countCompare;
+        }
+
+        LocalDateTime leftTime = left.getLastEventTime();
+        LocalDateTime rightTime = right.getLastEventTime();
+        if (leftTime == null && rightTime == null) {
+            return 0;
+        }
+        if (leftTime == null) {
+            return 1;
+        }
+        if (rightTime == null) {
+            return -1;
+        }
+        return rightTime.compareTo(leftTime);
+    }
+
+    private boolean sameSource(AggregationGroupEntity left, AggregationGroupEntity right) {
+        String leftSource = left.getSourceId() != null && !left.getSourceId().isBlank() ? left.getSourceId() : "GLOBAL";
+        String rightSource = right.getSourceId() != null && !right.getSourceId().isBlank() ? right.getSourceId() : "GLOBAL";
+        return leftSource.equals(rightSource);
+    }
+
+    private void mergeGroupMetadata(
+            AggregationGroupEntity target,
+            AggregationGroupEntity source,
+            double similarityScore,
+            int migratedLogCount) {
+        Integer targetCount = target.getEventCount() != null ? target.getEventCount() : 0;
+        Integer sourceCount = source.getEventCount() != null ? source.getEventCount() : 0;
+        long rawCount = rawLogEventRepository.countByAggregationGroupId(target.getGroupId());
+        if (rawCount > 0) {
+            target.setEventCount(Math.toIntExact(Math.min(rawCount, Integer.MAX_VALUE)));
+        } else {
+            target.setEventCount(targetCount + Math.max(sourceCount, migratedLogCount));
+        }
+
+        target.setSeverity(mergeSeverity(target.getSeverity(), source.getSeverity()));
+        target.setFirstEventTime(earliest(target.getFirstEventTime(), source.getFirstEventTime()));
+        target.setLastEventTime(latest(target.getLastEventTime(), source.getLastEventTime()));
+        target.setSimilarityScore(Math.max(
+                target.getSimilarityScore() != null ? target.getSimilarityScore() : 0.0,
+                similarityScore));
+
+        boolean hasAnalysis = !analysisResultRepository.findAllByAggregationId(target.getGroupId()).isEmpty();
+        if (Boolean.TRUE.equals(target.getIsAnalyzed()) || Boolean.TRUE.equals(source.getIsAnalyzed()) || hasAnalysis) {
+            target.setIsAnalyzed(true);
+            target.setStatus("ANALYZED");
+        }
+    }
+
+    private int mergeAnalysisResults(AggregationGroupEntity target, AggregationGroupEntity source) {
+        List<AnalysisResultEntity> targetResults = new ArrayList<>(
+                analysisResultRepository.findAllByAggregationId(target.getGroupId()));
+        List<AnalysisResultEntity> sourceResults = new ArrayList<>(
+                analysisResultRepository.findAllByAggregationId(source.getGroupId()));
+
+        if (targetResults.isEmpty() && sourceResults.isEmpty()) {
+            return 0;
+        }
+
+        List<AnalysisResultEntity> allResults = new ArrayList<>();
+        allResults.addAll(targetResults);
+        allResults.addAll(sourceResults);
+        allResults.sort(this::compareAnalysisResultsForMerge);
+
+        AnalysisResultEntity primary = allResults.get(0);
+        primary.setAggregationId(target.getGroupId());
+        primary.setAggregationName(limitLength(target.getName(), AGGREGATION_NAME_MAX_LENGTH));
+
+        int mergedCount = 0;
+        for (int i = 1; i < allResults.size(); i++) {
+            AnalysisResultEntity duplicate = allResults.get(i);
+            mergeAnalysisResult(primary, duplicate, duplicate.getAggregationId());
+            analysisResultRepository.delete(duplicate);
+            mergedCount++;
+        }
+
+        if (allResults.size() == 1 && sourceResults.contains(primary)) {
+            mergedCount = 1;
+        }
+
+        analysisResultRepository.save(primary);
+        return mergedCount;
+    }
+
+    private int compareAnalysisResultsForMerge(AnalysisResultEntity left, AnalysisResultEntity right) {
+        boolean leftCompleted = "COMPLETED".equalsIgnoreCase(left.getStatus());
+        boolean rightCompleted = "COMPLETED".equalsIgnoreCase(right.getStatus());
+        if (leftCompleted != rightCompleted) {
+            return leftCompleted ? -1 : 1;
+        }
+
+        LocalDateTime leftTime = left.getCompletedAt() != null ? left.getCompletedAt() : left.getCreatedAt();
+        LocalDateTime rightTime = right.getCompletedAt() != null ? right.getCompletedAt() : right.getCreatedAt();
+        if (leftTime == null && rightTime == null) {
+            return 0;
+        }
+        if (leftTime == null) {
+            return 1;
+        }
+        if (rightTime == null) {
+            return -1;
+        }
+        return rightTime.compareTo(leftTime);
+    }
+
+    private void mergeAnalysisResult(
+            AnalysisResultEntity target,
+            AnalysisResultEntity source,
+            String sourceGroupId) {
+        target.setRootCause(mergeTextBlock(target.getRootCause(), source.getRootCause(), sourceGroupId, "根因分析"));
+        target.setAnalysisDetail(mergeTextBlock(target.getAnalysisDetail(), source.getAnalysisDetail(), sourceGroupId, "分析详情"));
+        target.setAnalysisDetail(mergeTextBlock(target.getAnalysisDetail(), source.getImpactScope(), sourceGroupId, "影响范围"));
+        target.setAnalysisDetail(mergeTextBlock(target.getAnalysisDetail(), source.getStatusMessage(), sourceGroupId, "状态信息"));
+        target.setImpactScope(limitLength(mergeShortField(target.getImpactScope(), source.getImpactScope()), IMPACT_SCOPE_MAX_LENGTH));
+        target.setStatusMessage(limitLength(mergeStatusMessage(target.getStatusMessage(), source.getStatusMessage(), sourceGroupId), STATUS_MESSAGE_MAX_LENGTH));
+        target.setRootCauseCategory(limitLength(
+                mergeShortField(target.getRootCauseCategory(), source.getRootCauseCategory()),
+                ROOT_CAUSE_CATEGORY_MAX_LENGTH));
+        target.setImpactSeverity(limitLength(
+                mergeSeverity(target.getImpactSeverity(), source.getImpactSeverity()),
+                IMPACT_SEVERITY_MAX_LENGTH));
+        target.setConfidence(mergeConfidence(target.getConfidence(), source.getConfidence()));
+        target.setRequestTokens(sum(target.getRequestTokens(), source.getRequestTokens()));
+        target.setResponseTokens(sum(target.getResponseTokens(), source.getResponseTokens()));
+        target.setProcessingTimeMs(max(target.getProcessingTimeMs(), source.getProcessingTimeMs()));
+        target.setCompletedAt(latest(target.getCompletedAt(), source.getCompletedAt()));
+        target.setStatus(limitLength(mergeAnalysisStatus(target.getStatus(), source.getStatus()), STATUS_MAX_LENGTH));
+        target.setRawResponse(mergeTextBlock(target.getRawResponse(), source.getRawResponse(), sourceGroupId, "原始响应"));
+    }
+
+    private String mergeTextBlock(String current, String incoming, String sourceGroupId, String label) {
+        if (incoming == null || incoming.isBlank()) {
+            return current;
+        }
+        String trimmedIncoming = incoming.trim();
+        String sourceBlock = "[" + sourceGroupId + " " + label + "]\n" + trimmedIncoming;
+        if (current == null || current.isBlank()) {
+            return sourceBlock;
+        }
+        if (current.contains(trimmedIncoming)) {
+            return current;
+        }
+        return current.trim() + "\n\n" + sourceBlock;
+    }
+
+    private String mergeShortField(String current, String incoming) {
+        if (incoming == null || incoming.isBlank()) {
+            return current;
+        }
+        if (current == null || current.isBlank() || current.equalsIgnoreCase(incoming)) {
+            return incoming;
+        }
+        return current + " / " + incoming;
+    }
+
+    private String mergeStatusMessage(String current, String incoming, String sourceGroupId) {
+        if (incoming == null || incoming.isBlank()) {
+            return current;
+        }
+        String incomingSummary = "[" + sourceGroupId + "] " + incoming.trim();
+        if (current == null || current.isBlank()) {
+            return incomingSummary;
+        }
+        if (current.contains(incoming.trim()) || current.contains(sourceGroupId)) {
+            return current;
+        }
+        return current.trim() + " | " + incomingSummary;
+    }
+
+    private String limitLength(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        if (maxLength <= 3) {
+            return value.substring(0, maxLength);
+        }
+        return value.substring(0, maxLength - 3) + "...";
+    }
+
+    private String mergeAnalysisStatus(String current, String incoming) {
+        if ("COMPLETED".equalsIgnoreCase(current) || "COMPLETED".equalsIgnoreCase(incoming)) {
+            return "COMPLETED";
+        }
+        if (current == null || current.isBlank()) {
+            return incoming;
+        }
+        return current;
+    }
+
+    private Double mergeConfidence(Double current, Double incoming) {
+        if (current == null) {
+            return incoming;
+        }
+        if (incoming == null) {
+            return current;
+        }
+        return Math.max(current, incoming);
+    }
+
+    private Integer sum(Integer current, Integer incoming) {
+        if (current == null) {
+            return incoming;
+        }
+        if (incoming == null) {
+            return current;
+        }
+        return current + incoming;
+    }
+
+    private Long sum(Long current, Long incoming) {
+        if (current == null) {
+            return incoming;
+        }
+        if (incoming == null) {
+            return current;
+        }
+        return current + incoming;
+    }
+
+    private Long max(Long current, Long incoming) {
+        if (current == null) {
+            return incoming;
+        }
+        if (incoming == null) {
+            return current;
+        }
+        return Math.max(current, incoming);
+    }
+
+    private LocalDateTime earliest(LocalDateTime left, LocalDateTime right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isBefore(right) ? left : right;
+    }
+
+    private LocalDateTime latest(LocalDateTime left, LocalDateTime right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left.isAfter(right) ? left : right;
     }
 }

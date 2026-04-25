@@ -90,6 +90,29 @@ class LogAggregatorTest {
         assertEquals(2, second.getEventCount());
     }
 
+    @Test
+    void shouldMergeBusinessMessagesWithDifferentOrderAndPaymentIds() {
+        InMemoryAggregationGroupService fakeService = new InMemoryAggregationGroupService();
+        LogAggregator aggregator = createAggregator(0.85, fakeService);
+
+        AggregationResult first = aggregator.aggregate(
+                event("payment rejected paymentNo=PM78544841D2 orderNo=OBD22478171 reason=OUTCOME_FAILED", "ERROR"),
+                "source-1",
+                "payment"
+        );
+        AggregationResult second = aggregator.aggregate(
+                event("payment rejected paymentNo=PMCF28527656 orderNo=OE2F3D2DCB6 reason=OUTCOME_FAILED", "ERROR"),
+                "source-1",
+                "payment"
+        );
+
+        assertNotNull(first);
+        assertNotNull(second);
+        assertEquals(first.getGroupId(), second.getGroupId());
+        assertFalse(second.isNewGroup());
+        assertEquals(2, second.getEventCount());
+    }
+
     private LogAggregator createAggregator(double threshold, AggregationGroupService groupService) {
         ProcessingConfig config = new ProcessingConfig();
         config.setSimilarityThreshold(threshold);
@@ -111,7 +134,7 @@ class LogAggregatorTest {
         private final Map<String, AggregationGroupEntity> groups = new ConcurrentHashMap<>();
 
         InMemoryAggregationGroupService() {
-            super(null, null);
+            super(null, null, null, null);
         }
 
         @Override
@@ -160,6 +183,13 @@ class LogAggregatorTest {
                         return ta.compareTo(tb);
                     });
         }
+
+        @Override
+        public Optional<AggregationGroupEntity> findBestSimilarGroup(String sourceId, String message, double threshold) {
+            return groups.values().stream()
+                    .filter(g -> sourceId.equals(g.getSourceId()))
+                    .filter(g -> LogTemplateUtils.calculateSimilarity(message, g.getRepresentativeLog()) >= threshold)
+                    .findFirst();
+        }
     }
 }
-

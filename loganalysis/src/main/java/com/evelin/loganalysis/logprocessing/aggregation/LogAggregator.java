@@ -16,7 +16,6 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 
 /**
  * 日志聚合器
@@ -30,14 +29,6 @@ public class LogAggregator {
 
     private final ProcessingConfig processingConfig;
     private final AggregationGroupService aggregationGroupService;
-
-    /**
-     * 当 message 退化为整行日志时，提取 " - " 之后的业务消息部分
-     * 例如：... ERROR com.demo.ApiController - Invalid user id: -1
-     */
-    private static final Pattern STRUCTURED_LOG_MESSAGE_PATTERN = Pattern.compile(
-            "^.*\\b(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)\\b\\s+[\\w.$]+\\s+-\\s+(.*)$"
-    );
 
     /**
      * 日志级别优先级（数值越大级别越高）
@@ -180,7 +171,15 @@ public class LogAggregator {
                 return persistAndBuildResult(group, scopedSourceId, sourceName, false, bestMatch.similarityScore());
             }
 
-            // 5) 都没命中，创建新分组（groupId 为稳定模板指纹）
+            // 5) 内存仍未命中时，回查同 source 的全部历史聚合组做相似度匹配
+            AggregationGroup historicalBySimilarity = loadHistoricalGroupBySimilarity(scopedSourceId, event);
+            if (historicalBySimilarity != null) {
+                activeGroups.put(deterministicGroupId, historicalBySimilarity);
+                double score = calculateSimilarity(event.getMessage(), historicalBySimilarity.getRepresentativeLog());
+                return persistAndBuildResult(historicalBySimilarity, scopedSourceId, sourceName, false, score);
+            }
+
+            // 6) 都没命中，创建新分组（groupId 为稳定模板指纹）
             AggregationGroup newGroup = new AggregationGroup(deterministicGroupId, scopedSourceId, event.getMessage(), 0, null, event);
             activeGroups.put(deterministicGroupId, newGroup);
             return persistAndBuildResult(newGroup, scopedSourceId, sourceName, true, 1.0);
@@ -229,90 +228,21 @@ public class LogAggregator {
      * 计算相似度
      */
     private double calculateSimilarity(String message1, String message2) {
-        if (message1 == null || message2 == null) {
-            return 0.0;
-        }
-
-        String normalizedMessage1 = normalizeMessage(message1);
-        String normalizedMessage2 = normalizeMessage(message2);
-
-        // 提取模板（将数字和特定字符串替换为占位符）
-        String template1 = extractTemplate(normalizedMessage1);
-        String template2 = extractTemplate(normalizedMessage2);
-
-        if (template1.equals(template2)) {
-            return 1.0;
-        }
-
-        // 简单的编辑距离相似度
-        int distance = levenshteinDistance(template1, template2);
-        int maxLength = Math.max(template1.length(), template2.length());
-        if (maxLength == 0) {
-            return 1.0;
-        }
-
-        return 1.0 - (double) distance / maxLength;
+        return LogTemplateUtils.calculateSimilarity(message1, message2);
     }
 
     /**
      * 归一化消息，避免 parser 退化时把整行日志头参与相似度计算
      */
     private String normalizeMessage(String message) {
-        if (message == null) {
-            return "";
-        }
-        String trimmed = message.trim();
-        java.util.regex.Matcher matcher = STRUCTURED_LOG_MESSAGE_PATTERN.matcher(trimmed);
-        if (matcher.matches()) {
-            return matcher.group(1).trim();
-        }
-        return trimmed;
+        return LogTemplateUtils.normalizeMessage(message);
     }
 
     /**
      * 提取日志模板
      */
     private String extractTemplate(String message) {
-        if (message == null) {
-            return "";
-        }
-
-        // 替换数字为占位符
-        String template = message.replaceAll("\\d+", "<N>");
-        // 替换常见路径
-        template = template.replaceAll("[/\\\\][\\w/.]+", "<PATH>");
-        // 替换IP地址
-        template = template.replaceAll("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", "<IP>");
-        // 替换UUID
-        template = template.replaceAll("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}", "<UUID>");
-
-        return template;
-    }
-
-    /**
-     * 计算编辑距离
-     */
-    private int levenshteinDistance(String s1, String s2) {
-        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
-
-        for (int i = 0; i <= s1.length(); i++) {
-            dp[i][0] = i;
-        }
-        for (int j = 0; j <= s2.length(); j++) {
-            dp[0][j] = j;
-        }
-
-        for (int i = 1; i <= s1.length(); i++) {
-            for (int j = 1; j <= s2.length(); j++) {
-                if (s1.charAt(i - 1) == s2.charAt(j - 1)) {
-                    dp[i][j] = dp[i - 1][j - 1];
-                } else {
-                    dp[i][j] = 1 + Math.min(dp[i - 1][j], Math.min(dp[i][j - 1], dp[i - 1][j - 1]));
-                }
-            }
-        }
-
-        return dp[s1.length()][s2.length()];
+        return LogTemplateUtils.extractTemplate(message);
     }
 
     /**
@@ -373,6 +303,26 @@ public class LogAggregator {
             return AggregationGroup.fromEntity(entityOpt.get(), sourceId, event);
         } catch (Exception e) {
             log.warn("按 source + message 回查历史聚合组失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 按 source 全量历史分组查找相似聚合组。
+     */
+    private AggregationGroup loadHistoricalGroupBySimilarity(String sourceId, ParsedLogEvent event) {
+        if (aggregationGroupService == null) {
+            return null;
+        }
+        try {
+            return aggregationGroupService.findBestSimilarGroup(
+                            sourceId,
+                            event.getMessage(),
+                            processingConfig.getSimilarityThreshold())
+                    .map(entity -> AggregationGroup.fromEntity(entity, sourceId, event))
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("按 source + 相似度回查历史聚合组失败: {}", e.getMessage());
             return null;
         }
     }

@@ -4,6 +4,7 @@ import com.evelin.loganalysis.logcollection.model.entity.RawLogEventEntity;
 import com.evelin.loganalysis.logcollection.service.RawLogEventService;
 import com.evelin.loganalysis.logcommon.model.PageResult;
 import com.evelin.loganalysis.logcommon.model.Result;
+import com.evelin.loganalysis.logprocessing.config.ProcessingConfig;
 import com.evelin.loganalysis.logprocessing.entity.AggregationGroupEntity;
 import com.evelin.loganalysis.logprocessing.service.AggregationGroupService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class AggregationGroupController {
 
     private final AggregationGroupService aggregationGroupService;
     private final RawLogEventService rawLogEventService;
+    private final ProcessingConfig processingConfig;
 
     /**
      * 获取聚合组统计摘要
@@ -382,6 +384,22 @@ public class AggregationGroupController {
         } catch (Exception e) {
             log.error("清理过期聚合组失败", e);
             return Result.error("清理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 重新组合相似聚合组，并同步合并组内日志与 AI 分析结果
+     */
+    @PostMapping("/recombine")
+    public Result<Map<String, Object>> recombineSimilarGroups(
+            @RequestParam(required = false) Double threshold) {
+        try {
+            double effectiveThreshold = threshold != null ? threshold : processingConfig.getSimilarityThreshold();
+            Map<String, Object> result = aggregationGroupService.recombineSimilarGroups(effectiveThreshold);
+            return Result.success(result);
+        } catch (Exception e) {
+            log.error("重新组合聚合组失败", e);
+            return Result.error("重新组合聚合组失败: " + e.getMessage());
         }
     }
 
