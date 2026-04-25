@@ -162,6 +162,7 @@ public class LocalFileReadingStrategy extends AbstractLogFileReaderStrategy {
                 readFromFileContext(ctx, filePath);
             } catch (Exception e) {
                 log.error("Error processing file: {}", filePath, e);
+                throw e;
             }
         }
     }

@@ -29,6 +29,21 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="错误信息" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-tooltip
+            v-if="row.status === 'ERROR' && row.lastErrorMessage"
+            :content="row.lastErrorMessage"
+            placement="top"
+          >
+            <span class="collector-error">
+              <WarningFilled class="collector-error-icon" />
+              {{ row.lastErrorMessage }}
+            </span>
+          </el-tooltip>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="enabled" label="启用" width="80">
         <template #default="{ row }">
           <el-switch v-model="row.enabled" disabled />
@@ -73,7 +88,7 @@
 </template>
 
 <script setup>
-import { Delete, Edit, VideoPause, VideoPlay } from '@element-plus/icons-vue'
+import { Delete, Edit, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import '../styles/collection-sources-table.css'
 
 defineProps({

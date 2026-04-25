@@ -153,7 +153,11 @@ public class LogCollectionController {
         LogCollector collector = collectorFactory.createAndStart(source);
 
         // 4. 更新数据库状态
-        logSourceService.updateStatus(sourceId, CollectionStatus.RUNNING);
+        if (collector.getState() == CollectionState.ERROR) {
+            logSourceService.updateStatus(sourceId, CollectionStatus.ERROR);
+        } else {
+            logSourceService.updateStatus(sourceId, CollectionStatus.RUNNING);
+        }
 
         // 5. 返回状态
         Map<String, Object> status = new HashMap<>();
@@ -162,6 +166,11 @@ public class LogCollectionController {
         status.put("running", collector.isRunning());
         status.put("healthy", collector.isHealthy());
         status.put("collectedLines", collector.getCollectedLines());
+        status.put("lastErrorMessage", collector.getLastErrorMessage());
+        if (collector.getState() == CollectionState.ERROR) {
+            status.put("dbStatus", CollectionStatus.ERROR.name());
+            return Result.error("采集器启动失败: " + collector.getLastErrorMessage());
+        }
 
         log.info("启动采集器: {} - {}", source.getName(), source.getPath());
         return Result.success(status);
@@ -226,11 +235,15 @@ public class LogCollectionController {
         status.put("path", source.getPath());
 
         if (collector != null) {
+            syncSourceStatusFromCollector(source, collector);
             status.put("state", collector.getState().name());
             status.put("running", collector.isRunning());
             status.put("healthy", collector.isHealthy());
             status.put("collectedLines", collector.getCollectedLines());
-            status.put("dbStatus", source.getStatus().name());
+            status.put("lastErrorMessage", collector.getLastErrorMessage());
+            status.put("dbStatus", collector.getState() == CollectionState.ERROR
+                    ? CollectionStatus.ERROR.name()
+                    : source.getStatus().name());
         } else {
             status.put("state", CollectionState.STOPPED.name());
             status.put("running", false);
@@ -279,6 +292,7 @@ public class LogCollectionController {
         List<LogSource> activeSources = new ArrayList<>();
         activeSources.addAll(logSourceService.findEntitiesByStatus(CollectionStatus.RUNNING));
         activeSources.addAll(logSourceService.findEntitiesByStatus(CollectionStatus.STOPPING));
+        activeSources.addAll(logSourceService.findEntitiesByStatus(CollectionStatus.ERROR));
 
         List<Map<String, Object>> statusList = activeSources.stream()
                 .map(source -> {
@@ -289,13 +303,19 @@ public class LogCollectionController {
                     status.put("path", source.getPath());
 
                     if (collector != null) {
+                        syncSourceStatusFromCollector(source, collector);
                         status.put("state", collector.getState().name());
                         status.put("running", collector.isRunning());
                         status.put("healthy", collector.isHealthy());
                         status.put("collectedLines", collector.getCollectedLines());
+                        status.put("lastErrorMessage", collector.getLastErrorMessage());
+                        status.put("dbStatus", collector.getState() == CollectionState.ERROR
+                                ? CollectionStatus.ERROR.name()
+                                : source.getStatus().name());
                     } else {
                         status.put("state", CollectionState.STOPPED.name());
                         status.put("running", false);
+                        status.put("dbStatus", source.getStatus().name());
                     }
 
                     return status;
@@ -303,6 +323,13 @@ public class LogCollectionController {
                 .toList();
 
         return Result.success(statusList);
+    }
+
+    private void syncSourceStatusFromCollector(LogSource source, LogCollector collector) {
+        if (collector.getState() == CollectionState.ERROR && source.getStatus() != CollectionStatus.ERROR) {
+            logSourceService.updateStatus(source.getId(), CollectionStatus.ERROR);
+            source.setStatus(CollectionStatus.ERROR);
+        }
     }
 
     // ==================== 原始日志查询 ====================

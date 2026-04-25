@@ -138,6 +138,9 @@ export const logSourceApi = {
   // 停止采集器
   stopCollector: (id) => service.post(`/collection/collectors/${id}/stop`),
 
+  // 获取运行中采集器状态
+  getCollectorsStatus: () => service.get('/collection/collectors/status'),
+
   // 测试SSH连接
   testSshConnection: (config) => service.post('/collection/sources/test-ssh', config),
 

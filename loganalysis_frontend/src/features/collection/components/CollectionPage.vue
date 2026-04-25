@@ -465,7 +465,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { Plus, Search, Folder, Check, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logSourceApi, projectApi } from '@/api'
@@ -477,6 +477,8 @@ import '../styles/collection-page.css'
 const sources = ref([])
 const projects = ref([])
 const loading = ref(false)
+const statusPollTimer = ref(null)
+const notifiedCollectorErrors = new Set()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
@@ -736,11 +738,56 @@ const loadSources = async () => {
       const res = await logSourceApi.getAll()
       sources.value = res.data || []
     }
+    await refreshCollectorStatuses()
   } catch (error) {
     console.error('加载采集源失败:', error)
   } finally {
     loading.value = false
   }
+}
+
+const refreshCollectorStatuses = async () => {
+  try {
+    const res = await logSourceApi.getCollectorsStatus()
+    const statuses = Array.isArray(res.data) ? res.data : []
+    if (!statuses.length) return
+
+    const statusMap = new Map(statuses.map(item => [String(item.sourceId), item]))
+    sources.value = sources.value.map(source => {
+      const runtimeStatus = statusMap.get(String(source.id))
+      if (!runtimeStatus) return source
+
+      const nextStatus = runtimeStatus.dbStatus || runtimeStatus.state || source.status
+      const nextSource = {
+        ...source,
+        status: nextStatus,
+        running: runtimeStatus.running,
+        healthy: runtimeStatus.healthy,
+        collectedLines: runtimeStatus.collectedLines,
+        lastErrorMessage: runtimeStatus.lastErrorMessage || source.lastErrorMessage
+      }
+
+      if (nextStatus === 'ERROR' && !notifiedCollectorErrors.has(String(source.id))) {
+        notifiedCollectorErrors.add(String(source.id))
+        ElMessage.error(`采集器已停止: ${source.name}，${nextSource.lastErrorMessage || '日志读取失败'}`)
+      }
+
+      return nextSource
+    })
+  } catch (error) {
+    console.error('刷新采集器状态失败:', error)
+  }
+}
+
+const startCollectorStatusPolling = () => {
+  if (statusPollTimer.value) return
+  statusPollTimer.value = window.setInterval(refreshCollectorStatuses, 5000)
+}
+
+const stopCollectorStatusPolling = () => {
+  if (!statusPollTimer.value) return
+  window.clearInterval(statusPollTimer.value)
+  statusPollTimer.value = null
 }
 
 const loadProjects = async () => {
@@ -1157,6 +1204,7 @@ const handleSubmit = async () => {
 
 const handleStart = async (row) => {
   try {
+    notifiedCollectorErrors.delete(String(row.id))
     await logSourceApi.startCollector(row.id)
     ElMessage.success('采集器已启动')
     loadSources()
@@ -1168,6 +1216,7 @@ const handleStart = async (row) => {
 
 const handleStop = async (row) => {
   try {
+    notifiedCollectorErrors.delete(String(row.id))
     await logSourceApi.stopCollector(row.id)
     ElMessage.success('采集器已停止')
     loadSources()
@@ -1202,5 +1251,10 @@ onMounted(() => {
   }
   loadProjects()
   loadSources()
+  startCollectorStatusPolling()
+})
+
+onUnmounted(() => {
+  stopCollectorStatusPolling()
 })
 </script>

@@ -51,6 +51,7 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
 
     // ==================== 状态变量 ====================
     protected volatile CollectionState state = CollectionState.STOPPED;
+    protected volatile String lastErrorMessage;
     protected final AtomicBoolean running;
     protected final AtomicBoolean paused;
     protected final AtomicLong collectedLines;
@@ -178,6 +179,11 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
     }
 
     @Override
+    public String getLastErrorMessage() {
+        return lastErrorMessage;
+    }
+
+    @Override
     public boolean isRunning() {
         return running.get() && state == CollectionState.RUNNING;
     }
@@ -213,6 +219,7 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
     public void start() {
         if (running.compareAndSet(false, true)) {
             state = CollectionState.STARTING;
+            lastErrorMessage = null;
             log.info("Starting collector: name={}, type={}", getName(), getClass().getSimpleName());
 
             try {
@@ -226,8 +233,9 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
                 log.info("Collector started successfully: name={}", getName());
             } catch (Exception e) {
                 log.error("Failed to start collector: name={}, error={}", getName(), e.getMessage(), e);
-                state = CollectionState.ERROR;
+                recordFailure("采集器启动失败: " + rootMessage(e), e);
                 stop();
+                state = CollectionState.ERROR;
             }
         } else {
             log.warn("Collector already running: name={}", getName());
@@ -380,12 +388,47 @@ public abstract class AbstractLogFileReaderStrategy implements LogCollector, Log
                 break;
             } catch (Exception e) {
                 log.error("Error in read loop", e);
-                state = CollectionState.ERROR;
+                failAndStopReading("日志读取失败: " + rootMessage(e), e);
                 break;
             }
         }
 
         log.info("Read loop stopped");
+    }
+
+    protected void recordFailure(String message, Exception e) {
+        lastErrorMessage = message;
+        state = CollectionState.ERROR;
+        log.error("Collector failure: name={}, message={}", getName(), message, e);
+    }
+
+    private void failAndStopReading(String message, Exception e) {
+        recordFailure(message, e);
+        running.set(false);
+        paused.set(false);
+
+        try {
+            saveCheckpointSync();
+        } catch (Exception checkpointEx) {
+            log.warn("Failed to save checkpoint after collector error: name={}", getName(), checkpointEx);
+        }
+        if (checkpointScheduler != null && !checkpointScheduler.isShutdown()) {
+            checkpointScheduler.shutdownNow();
+        }
+        try {
+            doDisconnect();
+        } catch (Exception disconnectEx) {
+            log.warn("Failed to disconnect after collector error: name={}", getName(), disconnectEx);
+        }
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
     }
 
     /**

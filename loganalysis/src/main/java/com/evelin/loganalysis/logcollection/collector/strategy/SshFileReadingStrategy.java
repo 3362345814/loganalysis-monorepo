@@ -144,6 +144,7 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
                 readFromFileContext(ctx, filePath);
             } catch (Exception e) {
                 log.error("Error processing file: {}", filePath, e);
+                throw e;
             }
         }
     }
@@ -196,7 +197,8 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         String tempFilePath = tempDir + "/" + remoteFileName(filePath);
 
         if (!downloadViaSftp(filePath, tempFilePath) && !downloadViaSshExec(filePath, tempFilePath)) {
-            return;
+            log.error("Unable to download remote log file via SFTP or SSH exec: path={}", filePath);
+            throw new IOException("无法下载远程日志文件: " + filePath);
         }
 
         File tempFile = new File(tempFilePath);
@@ -255,9 +257,9 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         }
 
         if (lastException != null) {
-            log.error("SFTP exception during download: path={}, triedPaths={}, sftpErrorId={}, errorMessage='{}'",
+            log.warn("SFTP download failed, will try SSH exec fallback if available: path={}, triedPaths={}, sftpErrorId={}, errorMessage='{}'",
                     filePath, buildSftpPathCandidates(filePath, pwd), lastException.id,
-                    lastException.getMessage() != null ? lastException.getMessage() : "null", lastException);
+                    lastException.getMessage() != null ? lastException.getMessage() : "null");
         }
         return false;
     }
@@ -311,8 +313,12 @@ public class SshFileReadingStrategy extends AbstractLogFileReaderStrategy {
         List<String> commands = new ArrayList<>();
         if (isWindowsPath(filePath)) {
             commands.add("powershell -NoProfile -NonInteractive -Command \""
-                    + "$bytes=[System.IO.File]::ReadAllBytes('" + escapePowerShellSingleQuoted(filePath) + "'); "
-                    + "[Console]::OpenStandardOutput().Write($bytes,0,$bytes.Length)\"");
+                    + "$fs=[System.IO.File]::Open('"
+                    + escapePowerShellSingleQuoted(filePath)
+                    + "', [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, "
+                    + "[System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete); "
+                    + "try { $out=[Console]::OpenStandardOutput(); $fs.CopyTo($out); $out.Flush() } "
+                    + "finally { $fs.Dispose() }\"");
             commands.add("cmd /c type \"" + filePath.replace("\"", "\"\"") + "\"");
         } else {
             commands.add("cat -- '" + filePath.replace("'", "'\\''") + "'");

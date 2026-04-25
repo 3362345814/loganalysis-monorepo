@@ -36,6 +36,15 @@ public interface LogCollector {
     CollectionState getState();
 
     /**
+     * 获取最近一次采集错误信息。
+     *
+     * @return 最近错误信息，无错误时为 null
+     */
+    default String getLastErrorMessage() {
+        return null;
+    }
+
+    /**
      * 启动采集器
      *
      * 调用此方法后，采集器开始工作，实时采集日志数据

@@ -15,3 +15,18 @@
   padding: 5px 8px;
   font-size: 12px;
 }
+
+.collector-error {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: var(--space-4);
+  color: var(--color-error);
+  vertical-align: middle;
+}
+
+.collector-error-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
