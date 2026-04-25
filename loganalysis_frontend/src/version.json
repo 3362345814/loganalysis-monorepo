@@ -1,13 +1,12 @@
 {
-  "version": "v0.5.1",
-  "releaseDate": "2026-04-22",
+  "version": "v0.5.2",
+  "releaseDate": "2026-04-25",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042201",
+    "buildNumber": "2026042501",
     "environment": "production"
   }, 
   "updateInfo": [
-    "修复了手动触发日志分析时前端超时的bug",
-    "优化了聚合组详情界面，去除了一些无用字段"
+    "修复了CLI up拉取镜像逻辑错误的问题"
   ]
 }
