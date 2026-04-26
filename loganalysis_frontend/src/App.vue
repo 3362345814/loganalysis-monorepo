@@ -153,7 +153,8 @@ const showShell = computed(() => !route.meta?.hideShell)
 
 <style scoped>
 .app-shell {
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
 }
 
 .app-aside {
@@ -300,6 +301,9 @@ const showShell = computed(() => !route.meta?.hideShell)
 
 .workspace {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-header {
@@ -339,7 +343,11 @@ const showShell = computed(() => !route.meta?.hideShell)
 }
 
 .app-main {
+  flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-24) var(--space-24) var(--space-24);
 }
 

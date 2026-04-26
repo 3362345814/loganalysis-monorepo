@@ -49,38 +49,85 @@
               {{ truncateMessage(log.parsedFields?.message || log.rawContent, 100) }}
             </div>
 
-            <div class="timeline-details" v-if="expandedIndex === index">
-              <el-descriptions :column="2" border size="small" label-width="80px">
-                <el-descriptions-item label="事件ID" :span="2">{{ log.id || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="日志源">{{ log.sourceName || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="文件路径">{{ log.filePath || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="行号">{{ log.lineNumber || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="日志时间" :span="2">
-                  {{ formatFullTime(log.originalLogTime || log.parsedFields?.logTime || log.collectionTime) }}
-                </el-descriptions-item>
-              </el-descriptions>
+            <Transition
+              @before-enter="beforeDetailsEnter"
+              @enter="enterDetails"
+              @after-enter="afterDetailsEnter"
+              @before-leave="beforeDetailsLeave"
+              @leave="leaveDetails"
+              @after-leave="afterDetailsLeave"
+            >
+              <div class="timeline-details-motion" v-if="expandedIndex === index">
+                <div class="timeline-details">
+                  <div class="timeline-keyline">
+                    <div class="keyline-card">
+                      <div class="keyline-label">日志源</div>
+                      <div class="keyline-value">{{ log.sourceName || '-' }}</div>
+                    </div>
+                    <div class="keyline-card">
+                      <div class="keyline-label">行号</div>
+                      <div class="keyline-value">{{ log.lineNumber ?? '-' }}</div>
+                    </div>
+                    <div class="keyline-card is-wide">
+                      <div class="keyline-label">文件路径</div>
+                      <div class="keyline-value">{{ log.filePath || '-' }}</div>
+                    </div>
+                  </div>
 
-              <div class="parsed-fields-section" v-if="log.parsedFields && Object.keys(log.parsedFields).length > 0">
-                <div class="section-header">解析信息</div>
-                <el-table :data="getParsedFieldsTableData(log.parsedFields)" size="small" border>
-                  <el-table-column prop="key" label="字段名" width="140">
-                    <template #default="{ row }">
-                      <span class="field-key">{{ row.key }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="value" label="值">
-                    <template #default="{ row }">
-                      <span class="field-value">{{ formatFieldValue(row.value) }}</span>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
+                  <div class="detail-section parsed-fields-section" v-if="log.parsedFields && Object.keys(log.parsedFields).length > 0">
+                    <div class="detail-section-header">
+                      <div>
+                        <div class="section-eyebrow">PARSED FIELDS</div>
+                        <div class="section-title">解析信息</div>
+                      </div>
+                      <span class="section-count">{{ getParsedFieldsTableData(log.parsedFields).length }} 项</span>
+                    </div>
 
-              <div class="raw-content-section" v-if="log.rawContent">
-                <div class="section-header">原始内容</div>
-                <pre class="detail-content raw">{{ log.rawContent }}</pre>
+                    <div class="parsed-field-list">
+                      <div
+                        v-for="row in getParsedFieldsTableData(log.parsedFields)"
+                        :key="row.key"
+                        class="parsed-field-row"
+                        :class="getParsedFieldToneClass(row.key)"
+                      >
+                        <div class="parsed-field-name">
+                          <span class="parsed-field-label">{{ formatParsedFieldLabel(row.key) }}</span>
+                          <span v-if="formatParsedFieldLabel(row.key) !== row.key" class="parsed-field-key">{{ row.key }}</span>
+                        </div>
+                        <pre class="parsed-field-value">{{ formatFieldValue(row.value) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="detail-section raw-content-section" v-if="log.rawContent">
+                    <div class="detail-section-header">
+                      <div>
+                        <div class="section-eyebrow">RAW LOG</div>
+                        <div class="section-title">原始内容</div>
+                      </div>
+                      <span class="section-count">{{ log.rawContent.length }} 字符</span>
+                    </div>
+
+                    <div class="raw-log-frame">
+                      <div class="raw-log-toolbar">
+                        <span class="raw-log-dot"></span>
+                        <span class="raw-log-dot"></span>
+                        <span class="raw-log-dot"></span>
+                        <span class="raw-log-label">source payload</span>
+                      </div>
+                      <pre class="detail-content raw"><template
+                        v-for="(segment, segmentIndex) in getRawContentSegments(log)"
+                        :key="segmentIndex"
+                      ><span
+                        v-if="segment.field"
+                        class="raw-highlight"
+                        :class="segment.toneClass"
+                      >{{ segment.text }}</span><span v-else>{{ segment.text }}</span></template></pre>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            </Transition>
           </div>
         </div>
       </div>
@@ -186,10 +233,126 @@ const toggleExpand = (index) => {
   }
 }
 
+const DETAILS_TRANSITION_DURATION = 280
+const DETAILS_TRANSITION_EASING = 'cubic-bezier(0.2, 0.65, 0.2, 1)'
+
+const clearDetailsMotionStyles = (el) => {
+  el.style.height = ''
+  el.style.opacity = ''
+  el.style.transform = ''
+  el.style.overflow = ''
+  el.style.willChange = ''
+  el.style.transition = ''
+}
+
+const beforeDetailsEnter = (el) => {
+  el.style.height = '0'
+  el.style.opacity = '0'
+  el.style.transform = 'translateY(-6px)'
+  el.style.overflow = 'hidden'
+  el.style.willChange = 'height, opacity, transform'
+}
+
+const enterDetails = (el, done) => {
+  const targetHeight = `${el.scrollHeight}px`
+  el.style.transition = `height ${DETAILS_TRANSITION_DURATION}ms ${DETAILS_TRANSITION_EASING}, opacity 220ms ease, transform ${DETAILS_TRANSITION_DURATION}ms ${DETAILS_TRANSITION_EASING}`
+  requestAnimationFrame(() => {
+    el.style.height = targetHeight
+    el.style.opacity = '1'
+    el.style.transform = 'translateY(0)'
+  })
+  setTimeout(done, DETAILS_TRANSITION_DURATION + 40)
+}
+
+const afterDetailsEnter = (el) => {
+  el.style.height = 'auto'
+  el.style.overflow = 'visible'
+  el.style.willChange = ''
+  el.style.transition = ''
+}
+
+const beforeDetailsLeave = (el) => {
+  el.style.height = `${el.scrollHeight}px`
+  el.style.opacity = '1'
+  el.style.transform = 'translateY(0)'
+  el.style.overflow = 'hidden'
+  el.style.willChange = 'height, opacity, transform'
+}
+
+const leaveDetails = (el, done) => {
+  el.style.transition = `height ${DETAILS_TRANSITION_DURATION}ms ${DETAILS_TRANSITION_EASING}, opacity 200ms ease, transform ${DETAILS_TRANSITION_DURATION}ms ${DETAILS_TRANSITION_EASING}`
+  void el.offsetHeight
+  requestAnimationFrame(() => {
+    el.style.height = '0'
+    el.style.opacity = '0'
+    el.style.transform = 'translateY(-6px)'
+  })
+  setTimeout(done, DETAILS_TRANSITION_DURATION + 40)
+}
+
+const afterDetailsLeave = (el) => {
+  clearDetailsMotionStyles(el)
+}
+
 const truncateMessage = (text, maxLength) => {
   if (!text) return ''
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'
+}
+
+const parsedFieldLabels = {
+  timestamp: '时间戳',
+  level: '级别',
+  thread: '线程',
+  logger: 'Logger',
+  logTime: '日志时间',
+  logLevel: '日志级别',
+  message: '日志消息',
+  traceId: 'TraceID',
+  spanId: 'SpanID',
+  parentSpanId: '父 SpanID',
+  threadName: '线程名',
+  loggerName: 'Logger',
+  className: '类名',
+  methodName: '方法名',
+  exceptionType: '异常类型',
+  exceptionMessage: '异常消息',
+  stackTrace: '堆栈跟踪',
+  requestId: '请求ID',
+  userId: '用户ID',
+  path: '请求路径',
+  method: '请求方法',
+  status: '状态码',
+  duration: '耗时'
+}
+
+const parsedFieldOrder = [
+  'timestamp',
+  'logLevel',
+  'level',
+  'logTime',
+  'thread',
+  'logger',
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'exceptionType',
+  'exceptionMessage',
+  'stackTrace',
+  'threadName',
+  'loggerName',
+  'className',
+  'methodName'
+]
+
+const isLogMessageField = (key) => {
+  const normalizedKey = String(key).toLowerCase()
+  return normalizedKey === 'message' || normalizedKey === 'logmessage' || normalizedKey.includes('content')
+}
+
+const getParsedFieldPriority = (key) => {
+  const index = parsedFieldOrder.findIndex(item => item.toLowerCase() === String(key).toLowerCase())
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index
 }
 
 const getParsedFieldsTableData = (parsedFields) => {
@@ -203,13 +366,116 @@ const getParsedFieldsTableData = (parsedFields) => {
       })
     }
   }
-  return data
+  return data.sort((a, b) => {
+    const isMessageA = isLogMessageField(a.key)
+    const isMessageB = isLogMessageField(b.key)
+    if (isMessageA !== isMessageB) return isMessageA ? 1 : -1
+    const priorityA = getParsedFieldPriority(a.key)
+    const priorityB = getParsedFieldPriority(b.key)
+    if (priorityA !== priorityB) return priorityA - priorityB
+    return a.key.localeCompare(b.key)
+  })
 }
 
 const formatFieldValue = (value) => {
   if (value === null || value === undefined) return '-'
-  if (typeof value === 'object') return JSON.stringify(value)
+  if (typeof value === 'object') return JSON.stringify(value, null, 2)
   return String(value)
+}
+
+const formatRawHighlightValue = (value) => {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value).trim()
+}
+
+const formatParsedFieldLabel = (key) => {
+  return parsedFieldLabels[key] || key
+}
+
+const getParsedFieldToneClass = (key) => {
+  const normalizedKey = String(key).toLowerCase()
+  if (normalizedKey.includes('exception') || normalizedKey.includes('stack') || normalizedKey.includes('error')) return 'is-danger'
+  if (normalizedKey.includes('trace') || normalizedKey.includes('span') || normalizedKey.includes('request')) return 'is-trace'
+  if (normalizedKey.includes('message') || normalizedKey.includes('content')) return 'is-message'
+  if (normalizedKey.includes('time') || normalizedKey.includes('duration')) return 'is-time'
+  if (normalizedKey.includes('level') || normalizedKey.includes('status')) return 'is-level'
+  return ''
+}
+
+const rangesOverlap = (rangeA, rangeB) => {
+  return rangeA.start < rangeB.end && rangeB.start < rangeA.end
+}
+
+const findAvailableRange = (rawContent, value, occupiedRanges) => {
+  let start = rawContent.indexOf(value)
+  while (start !== -1) {
+    const candidate = {
+      start,
+      end: start + value.length
+    }
+    if (!occupiedRanges.some(range => rangesOverlap(range, candidate))) {
+      return candidate
+    }
+    start = rawContent.indexOf(value, start + 1)
+  }
+  return null
+}
+
+const getRawHighlightCandidates = (log) => {
+  const rawContent = String(log?.rawContent || '')
+  if (!rawContent || !log?.parsedFields) return []
+
+  return getParsedFieldsTableData(log.parsedFields)
+    .map(field => ({
+      key: field.key,
+      value: formatRawHighlightValue(field.value),
+      toneClass: getParsedFieldToneClass(field.key) || 'is-default'
+    }))
+    .filter(field => field.value && field.value.length > 1 && field.value.length <= rawContent.length)
+}
+
+const getRawHighlightRanges = (log) => {
+  const rawContent = String(log?.rawContent || '')
+  if (!rawContent) return []
+
+  const ranges = []
+  for (const field of getRawHighlightCandidates(log)) {
+    const range = findAvailableRange(rawContent, field.value, ranges)
+    if (range) {
+      ranges.push({
+        ...range,
+        field: field.key,
+        toneClass: field.toneClass
+      })
+    }
+  }
+
+  return ranges.sort((a, b) => a.start - b.start)
+}
+
+const getRawContentSegments = (log) => {
+  const rawContent = String(log?.rawContent || '')
+  const ranges = getRawHighlightRanges(log)
+  if (!rawContent || ranges.length === 0) return [{ text: rawContent }]
+
+  const segments = []
+  let cursor = 0
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      segments.push({ text: rawContent.slice(cursor, range.start) })
+    }
+    segments.push({
+      text: rawContent.slice(range.start, range.end),
+      field: range.field,
+      toneClass: range.toneClass
+    })
+    cursor = range.end
+  }
+  if (cursor < rawContent.length) {
+    segments.push({ text: rawContent.slice(cursor) })
+  }
+  return segments
 }
 
 watch(() => props.traceId, (newVal) => {
@@ -233,8 +499,13 @@ export default {
 </script>
 
 <style scoped>
+.trace-timeline-dialog :deep(.el-dialog) {
+  max-width: calc(100vw - 32px);
+}
+
 .trace-timeline-dialog :deep(.el-dialog__body) {
   padding: 0 var(--space-24) var(--space-24) var(--space-24);
+  overflow-x: hidden;
 }
 
 .trace-header {
@@ -264,6 +535,8 @@ export default {
   padding: 2px 8px;
   border-radius: var(--radius-small);
   font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .trace-stats {
@@ -274,6 +547,7 @@ export default {
 .timeline-container {
   max-height: 600px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .timeline-empty {
@@ -287,6 +561,7 @@ export default {
 .timeline-item {
   display: flex;
   position: relative;
+  min-width: 0;
 }
 
 .timeline-marker {
@@ -338,6 +613,7 @@ export default {
 
 .timeline-content {
   flex: 1;
+  min-width: 0;
   padding: 0 0 var(--space-24) var(--space-16);
   cursor: pointer;
   margin-left: var(--space-8);
@@ -354,6 +630,7 @@ export default {
   align-items: center;
   gap: var(--space-16);
   margin-bottom: var(--space-4);
+  min-width: 0;
 }
 
 .timeline-time {
@@ -397,6 +674,10 @@ export default {
 .timeline-source {
   font-size: 12px;
   color: var(--text-tertiary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .expand-icon {
@@ -413,7 +694,13 @@ export default {
   font-size: 13px;
   color: var(--text-primary);
   line-height: 1.5;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.timeline-details-motion {
+  overflow: hidden;
+  transform-origin: top center;
 }
 
 .timeline-details {
@@ -422,67 +709,256 @@ export default {
   background: var(--surface-100);
   border-radius: var(--radius-comfortable);
   border: 1px solid var(--border-primary);
+  min-width: 0;
+}
+
+.timeline-keyline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.keyline-card {
+  min-width: 0;
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-standard);
+  border: 1px solid rgba(201, 100, 66, 0.25);
+  background: linear-gradient(145deg, rgba(201, 100, 66, 0.14), rgba(201, 100, 66, 0.05));
+}
+
+.keyline-card.is-wide {
+  grid-column: 1 / -1;
+}
+
+.keyline-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  margin-bottom: var(--space-6);
+}
+
+.keyline-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .timeline-keyline {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detail-section {
+  margin-top: var(--space-16);
+  min-width: 0;
+}
+
+.detail-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-bottom: var(--space-10);
+}
+
+.section-eyebrow {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.section-title {
+  margin-top: var(--space-4);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.section-count {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-small);
+  background: var(--surface-300);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.parsed-field-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-10);
+}
+
+.parsed-field-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-standard);
+  background: var(--color-white);
+}
+
+.parsed-field-row.is-message,
+.parsed-field-row.is-danger {
+  grid-column: 1 / -1;
+}
+
+.parsed-field-row.is-danger {
+  background: rgba(181, 51, 51, 0.07);
+  border-color: rgba(181, 51, 51, 0.18);
+}
+
+.parsed-field-row.is-trace {
+  background: rgba(47, 111, 115, 0.07);
+  border-color: rgba(47, 111, 115, 0.18);
+}
+
+.parsed-field-row.is-message {
+  background: rgba(201, 100, 66, 0.08);
+  border-color: rgba(201, 100, 66, 0.2);
+}
+
+.parsed-field-row.is-time,
+.parsed-field-row.is-level {
+  background: rgba(79, 111, 159, 0.07);
+  border-color: rgba(79, 111, 159, 0.18);
+}
+
+.parsed-field-name {
+  min-width: 0;
+  padding: 9px var(--space-12);
+  background: rgba(255, 255, 255, 0.5);
+  border-right: 1px solid var(--border-primary);
+}
+
+.parsed-field-label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.parsed-field-key {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parsed-field-value {
+  min-width: 0;
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 9px var(--space-12);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.raw-log-frame {
+  overflow: hidden;
+  border: 1px solid rgba(38, 37, 30, 0.18);
+  border-radius: var(--radius-standard);
+  background: #26251e;
+}
+
+.raw-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px var(--space-12);
+  border-bottom: 1px solid rgba(242, 241, 237, 0.12);
+}
+
+.raw-log-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(242, 241, 237, 0.35);
+}
+
+.raw-log-label {
+  margin-left: var(--space-6);
+  color: rgba(242, 241, 237, 0.55);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
 }
 
 .detail-content {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  background: var(--color-white);
-  padding: var(--space-8);
-  border-radius: var(--radius-small);
-  font-size: 12px;
-  line-height: 1.4;
-  max-height: 200px;
-  overflow-y: auto;
-  margin: var(--space-4) 0;
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--space-12);
   font-family: var(--font-family-mono);
-}
-
-.detail-content.error {
-  background: rgba(181, 51, 51, 0.1);
-  color: #b53333;
-}
-
-.detail-content.error.stack {
-  max-height: 300px;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-content.raw {
-  background: var(--surface-300);
-  color: var(--text-secondary);
-  font-size: 11px;
+  color: rgba(242, 241, 237, 0.84);
 }
 
-.raw-content-section {
-  margin-top: var(--space-16);
+.raw-highlight {
+  display: inline;
 }
 
-.section-header {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-8);
+.raw-highlight.is-danger {
+  color: #ff8f8f;
 }
 
-.parsed-fields-section {
-  margin-top: var(--space-16);
+.raw-highlight.is-trace {
+  color: #7ed0d2;
 }
 
-.parsed-fields-section .section-header {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: var(--space-8);
+.raw-highlight.is-message {
+  color: #ffb48f;
 }
 
-.field-key {
-  color: var(--text-secondary);
-  font-weight: 500;
+.raw-highlight.is-time,
+.raw-highlight.is-level {
+  color: #9fc2ff;
 }
 
-.field-value {
-  color: var(--text-primary);
-  word-break: break-all;
+.raw-highlight.is-default {
+  color: var(--color-cream);
+}
+
+@media (max-width: 768px) {
+  .parsed-field-list {
+    grid-template-columns: 1fr;
+  }
+
+  .parsed-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .parsed-field-name {
+    border-right: none;
+    border-bottom: 1px solid var(--border-primary);
+  }
 }
 </style>

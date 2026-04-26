@@ -63,22 +63,29 @@
       </el-form>
     </el-card>
 
-    <!-- 日志终端和解析信息面板 -->
+      <!-- 日志终端和解析信息面板 -->
     <div class="logs-content" :class="{ 'panel-hidden': !parsedInfoVisible }">
       <el-card class="terminal-card">
         <div class="terminal-header">
-          <span class="terminal-title">日志终端</span>
-          <span class="log-count">共 {{ total }} 条</span>
+          <div class="terminal-toolbar">
+            <span class="terminal-dot"></span>
+            <span class="terminal-dot"></span>
+            <span class="terminal-dot"></span>
+            <span class="terminal-title">log terminal</span>
+          </div>
+          <span class="log-count">{{ total }} logs</span>
         </div>
-        <div class="terminal-content" ref="terminalRef" @scroll="handleScroll">
+        <div class="terminal-content" :class="{ 'log-list-entering': isLogListEntering }" ref="terminalRef" @scroll="handleScroll">
           <div
             v-for="(log, index) in logs"
-            :key="index"
+            :key="log.uid"
             class="log-line"
             :class="[getLogLevelClass(log.parsedFields?.logLevel), {
+              'log-query-enter': isLogQueryEntering(log),
               'log-highlight': highlightedIndex === index,
               'log-selected': selectedLogIndex === index
             }]"
+            :style="getLogQueryEnterStyle(log)"
             @click="handleLogClick(log, index)"
           >
             <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
@@ -97,30 +104,32 @@
       <!-- 解析信息面板 -->
       <div class="parsed-info-sidebar">
         <div class="parsed-info-header">
-          <span class="parsed-info-title">解析信息</span>
+          <div class="parsed-info-title-row">
+            <span class="parsed-info-title">解析信息</span>
+            <span class="parsed-info-count">{{ parsedInfoTableData.length }} 项</span>
+          </div>
           <el-button type="primary" link @click="closeParsedInfo">
             <el-icon><Close /></el-icon>
           </el-button>
         </div>
         <div class="parsed-info-content">
-          <div class="parsed-info-summary">
-            <span class="parsed-info-count">{{ Object.keys(parsedInfoFields).length }} 个字段</span>
+          <div class="parsed-info-field-list">
+            <div
+              v-for="row in parsedInfoTableData"
+              :key="row.key"
+              class="parsed-info-field-row"
+              :class="getParsedFieldToneClass(row.key)"
+            >
+              <div class="parsed-info-field-name">
+                <span class="parsed-info-field-label">{{ formatFieldKey(row.key) }}</span>
+                <span v-if="formatFieldKey(row.key) !== row.key" class="parsed-info-field-key">{{ row.key }}</span>
+              </div>
+              <pre class="parsed-info-field-value">{{ formatFieldValue(row.value) }}</pre>
+            </div>
           </div>
-          <el-table :data="parsedInfoTableData" size="small" max-height="400" stripe>
-            <el-table-column prop="key" label="字段名" width="120">
-              <template #default="{ row }">
-                <span class="field-key">{{ formatFieldKey(row.key) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="value" label="值">
-              <template #default="{ row }">
-                <span class="field-value">{{ formatFieldValue(row.value) }}</span>
-              </template>
-            </el-table-column>
-          </el-table>
         </div>
-        <div class="parsed-info-footer">
-          <el-button v-if="currentHoverTraceId" type="primary" @click="openTraceTimeline">
+        <div v-if="currentHoverTraceId" class="parsed-info-footer">
+          <el-button type="primary" @click="openTraceTimeline">
             <el-icon><Link /></el-icon>
             链路追踪
           </el-button>
@@ -247,6 +256,221 @@ const normalizeUuid = (value) => {
   return UUID_REGEX.test(trimmed) ? trimmed : null
 }
 
+const QUERY_ANIMATION_ROW_CAP = 30
+const QUERY_ANIMATION_STAGGER_MS = 14
+const QUERY_ANIMATION_DURATION_MS = 220
+const QUERY_ANIMATION_CLEANUP_BUFFER_MS = 180
+const QUERY_LIST_ENTER_DURATION_MS = 140
+const AUTO_SCROLL_DURATION_MS = 260
+const AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD = 24
+const AUTO_APPEND_LOG_CAP = 4000
+const QUERY_TRIGGER_TYPES = new Set(['manual', 'filter', 'auto', 'silent'])
+
+const animatedUidDelayMap = ref({})
+const lastAnimatedUidCount = ref(0)
+const currentAnimationMode = ref('none')
+const isLogListEntering = ref(false)
+let queryAnimationCleanupTimer = null
+let listEnterCleanupTimer = null
+let listEnterRaf = null
+let autoScrollRaf = null
+
+const normalizeQueryTrigger = (trigger) => {
+  const triggerValue = String(trigger || 'silent')
+  return QUERY_TRIGGER_TYPES.has(triggerValue) ? triggerValue : 'silent'
+}
+
+const clearQueryAnimationTimer = () => {
+  if (queryAnimationCleanupTimer) {
+    clearTimeout(queryAnimationCleanupTimer)
+    queryAnimationCleanupTimer = null
+  }
+}
+
+const clearListEnterAnimation = () => {
+  if (listEnterCleanupTimer) {
+    clearTimeout(listEnterCleanupTimer)
+    listEnterCleanupTimer = null
+  }
+  if (listEnterRaf) {
+    cancelAnimationFrame(listEnterRaf)
+    listEnterRaf = null
+  }
+  isLogListEntering.value = false
+}
+
+const stopAutoScrollToBottom = () => {
+  if (autoScrollRaf) {
+    cancelAnimationFrame(autoScrollRaf)
+    autoScrollRaf = null
+  }
+}
+
+const isTerminalNearBottom = () => {
+  const terminalEl = terminalRef.value
+  if (!terminalEl) return true
+  const distanceToBottom = terminalEl.scrollHeight - terminalEl.clientHeight - terminalEl.scrollTop
+  return distanceToBottom <= AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD
+}
+
+const smoothScrollTerminalToBottom = (duration = AUTO_SCROLL_DURATION_MS) => {
+  stopAutoScrollToBottom()
+  const terminalEl = terminalRef.value
+  if (!terminalEl) return
+
+  const from = terminalEl.scrollTop
+  const to = Math.max(terminalEl.scrollHeight - terminalEl.clientHeight, 0)
+  if (Math.abs(to - from) < 1) {
+    terminalEl.scrollTop = to
+    return
+  }
+
+  const start = performance.now()
+  const step = (now) => {
+    const progress = Math.min((now - start) / duration, 1)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    terminalEl.scrollTop = from + (to - from) * eased
+    if (progress < 1) {
+      autoScrollRaf = requestAnimationFrame(step)
+    } else {
+      autoScrollRaf = null
+    }
+  }
+
+  autoScrollRaf = requestAnimationFrame(step)
+}
+
+const startListEnterAnimation = () => {
+  clearListEnterAnimation()
+  listEnterRaf = requestAnimationFrame(() => {
+    isLogListEntering.value = true
+    listEnterCleanupTimer = setTimeout(() => {
+      isLogListEntering.value = false
+      listEnterCleanupTimer = null
+    }, QUERY_LIST_ENTER_DURATION_MS + 40)
+    listEnterRaf = null
+  })
+}
+
+const clearQueryEnterAnimation = () => {
+  clearQueryAnimationTimer()
+  animatedUidDelayMap.value = {}
+  lastAnimatedUidCount.value = 0
+  currentAnimationMode.value = 'none'
+  clearListEnterAnimation()
+  stopAutoScrollToBottom()
+}
+
+const scheduleQueryEnterAnimationCleanup = (animatedCount) => {
+  clearQueryAnimationTimer()
+  if (animatedCount <= 0) return
+  const cleanupDelay = QUERY_ANIMATION_DURATION_MS + ((animatedCount - 1) * QUERY_ANIMATION_STAGGER_MS) + QUERY_ANIMATION_CLEANUP_BUFFER_MS
+  queryAnimationCleanupTimer = setTimeout(() => {
+    clearQueryEnterAnimation()
+  }, cleanupDelay)
+}
+
+const hashString = (value) => {
+  const input = String(value || '')
+  let hash = 5381
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+const buildLogUid = (log, fallbackIndex = 0) => {
+  const stableId = log?.id || log?.dbId
+  if (stableId !== null && stableId !== undefined && String(stableId).length > 0) {
+    return `id:${stableId}`
+  }
+  const filePath = log?.filePath || '-'
+  const lineNumber = log?.lineNumber ?? '-'
+  const time = log?.originalLogTime || log?.collectionTime || log?.parsedFields?.logTime || '-'
+  const level = log?.logLevel || log?.parsedFields?.logLevel || '-'
+  const rawHash = hashString(log?.rawContent || '')
+  return `fallback:${filePath}|${lineNumber}|${time}|${level}|${rawHash}|${fallbackIndex}`
+}
+
+const normalizeLogItem = (log, fallbackIndex = 0) => {
+  const normalizedLog = {
+    id: log?.id || log?.dbId || null,
+    dbId: log?.dbId || null,
+    rawContent: log?.rawContent || '',
+    filePath: log?.filePath,
+    lineNumber: log?.lineNumber,
+    logLevel: log?.logLevel,
+    collectionTime: log?.collectionTime,
+    originalLogTime: log?.originalLogTime,
+    parsedFields: log?.parsedFields || {}
+  }
+  normalizedLog.uid = buildLogUid(normalizedLog, fallbackIndex)
+  return normalizedLog
+}
+
+const collectAnimatedUidsForTrigger = (nextLogs, trigger, previousUidSet) => {
+  const normalizedTrigger = normalizeQueryTrigger(trigger)
+  if (normalizedTrigger === 'silent' || !Array.isArray(nextLogs) || nextLogs.length === 0) {
+    return []
+  }
+
+  let candidates = []
+  if (normalizedTrigger === 'auto') {
+    candidates = nextLogs
+      .filter(log => log?.uid && !previousUidSet.has(log.uid))
+      .map(log => log.uid)
+      .slice(-QUERY_ANIMATION_ROW_CAP)
+  } else {
+    candidates = nextLogs
+      .map(log => log?.uid)
+      .filter(Boolean)
+      .slice(-QUERY_ANIMATION_ROW_CAP)
+  }
+
+  const seen = new Set()
+  return candidates.filter(uid => {
+    if (seen.has(uid)) return false
+    seen.add(uid)
+    return true
+  })
+}
+
+const applyQueryEnterAnimation = (nextLogs, trigger, previousUidSet = new Set()) => {
+  const normalizedTrigger = normalizeQueryTrigger(trigger)
+  const animatedUids = collectAnimatedUidsForTrigger(nextLogs, normalizedTrigger, previousUidSet)
+  if (animatedUids.length === 0) {
+    clearQueryEnterAnimation()
+    return
+  }
+
+  const delayMap = {}
+  animatedUids.forEach((uid, index) => {
+    // 终端阅读顺序为“最新在下方”，入场顺序改为自下而上
+    delayMap[uid] = (animatedUids.length - 1 - index) * QUERY_ANIMATION_STAGGER_MS
+  })
+  animatedUidDelayMap.value = delayMap
+  lastAnimatedUidCount.value = animatedUids.length
+  currentAnimationMode.value = normalizedTrigger
+  if (normalizedTrigger === 'manual' || normalizedTrigger === 'filter') {
+    startListEnterAnimation()
+  } else {
+    clearListEnterAnimation()
+  }
+  scheduleQueryEnterAnimationCleanup(animatedUids.length)
+}
+
+const isLogQueryEntering = (log) => {
+  if (!log?.uid) return false
+  return Object.prototype.hasOwnProperty.call(animatedUidDelayMap.value, log.uid)
+}
+
+const getLogQueryEnterStyle = (log) => {
+  if (!isLogQueryEntering(log)) return null
+  return {
+    '--log-enter-delay': `${animatedUidDelayMap.value[log.uid]}ms`
+  }
+}
+
 const buildLogsRouteQuery = () => {
   const query = {}
   const sourceId = normalizeUuid(filter.value.sourceId)
@@ -260,13 +484,61 @@ const buildLogsRouteQuery = () => {
 const parsedInfoTableData = computed(() => {
   const data = []
   for (const key in parsedInfoFields.value) {
-    data.push({
-      key: key,
-      value: parsedInfoFields.value[key]
-    })
+    const value = parsedInfoFields.value[key]
+    if (isDisplayableFieldValue(value)) {
+      data.push({
+        key: key,
+        value: value
+      })
+    }
   }
-  return data
+  return data.sort((a, b) => {
+    const isMessageA = isLogMessageField(a.key)
+    const isMessageB = isLogMessageField(b.key)
+    if (isMessageA !== isMessageB) return isMessageA ? 1 : -1
+    const priorityA = getParsedFieldPriority(a.key)
+    const priorityB = getParsedFieldPriority(b.key)
+    if (priorityA !== priorityB) return priorityA - priorityB
+    return a.key.localeCompare(b.key)
+  })
 })
+
+const parsedFieldOrder = [
+  'timestamp',
+  'logLevel',
+  'level',
+  'logTime',
+  'thread',
+  'logger',
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'exceptionType',
+  'exceptionMessage',
+  'stackTrace',
+  'threadName',
+  'loggerName',
+  'className',
+  'methodName'
+]
+
+const isLogMessageField = (key) => {
+  const normalizedKey = String(key).toLowerCase()
+  return normalizedKey === 'message' || normalizedKey === 'logmessage' || normalizedKey.includes('content')
+}
+
+const getParsedFieldPriority = (key) => {
+  const index = parsedFieldOrder.findIndex(item => item.toLowerCase() === String(key).toLowerCase())
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index
+}
+
+const isDisplayableFieldValue = (value) => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value).length > 0
+  return true
+}
 
 // ES 搜索相关状态
 const esFilter = ref({
@@ -313,14 +585,18 @@ const availableLogFiles = computed(() => {
 })
 
 // ES 搜索方法
-const loadEsLogs = async () => {
+const loadEsLogs = async (trigger = 'silent') => {
+  const normalizedTrigger = normalizeQueryTrigger(trigger)
   const validSourceId = normalizeUuid(filter.value.sourceId)
   if (!validSourceId) {
     logs.value = []
     total.value = 0
+    clearQueryEnterAnimation()
     return
   }
 
+  const previousUidSet = new Set(logs.value.map(log => log?.uid).filter(Boolean))
+  const wasNearBottomBeforeQuery = normalizedTrigger === 'auto' ? isTerminalNearBottom() : false
   const querySeq = ++esQuerySeq
   try {
     loading.value = true
@@ -374,17 +650,20 @@ const loadEsLogs = async () => {
         })
       }
 
-      logs.value = hits.map(hit => ({
-        id: hit.id || hit.dbId,
-        dbId: hit.dbId,
-        rawContent: hit.rawContent,
-        filePath: hit.filePath,
-        lineNumber: hit.lineNumber,
-        logLevel: hit.logLevel,
-        collectionTime: hit.collectionTime,
-        originalLogTime: hit.originalLogTime,
-        parsedFields: hit.parsedFields || {}
-      }))
+      const mappedLogs = hits.map((hit, index) => normalizeLogItem(hit, index))
+      const canUseAutoAppend = normalizedTrigger === 'auto' && !currentHighlightId && !currentHighlightTime
+      let nextLogs = mappedLogs
+      if (canUseAutoAppend) {
+        const appendedLogs = mappedLogs.filter(log => !previousUidSet.has(log.uid))
+        if (appendedLogs.length > 0) {
+          nextLogs = [...logs.value, ...appendedLogs].slice(-AUTO_APPEND_LOG_CAP)
+        } else {
+          nextLogs = logs.value
+        }
+      }
+
+      applyQueryEnterAnimation(nextLogs, normalizedTrigger, previousUidSet)
+      logs.value = nextLogs
       total.value = hits.length
       currentLoadPage = 0
 
@@ -409,17 +688,7 @@ const loadEsLogs = async () => {
           try {
             const idRes = await rawLogApi.getById(currentHighlightId)
             if (idRes.data) {
-              logs.value.unshift({
-                id: idRes.data.id || idRes.data.dbId,
-                dbId: idRes.data.dbId,
-                rawContent: idRes.data.rawContent,
-                filePath: idRes.data.filePath,
-                lineNumber: idRes.data.lineNumber,
-                logLevel: idRes.data.logLevel,
-                collectionTime: idRes.data.collectionTime,
-                originalLogTime: idRes.data.originalLogTime,
-                parsedFields: idRes.data.parsedFields || {}
-              })
+              logs.value.unshift(normalizeLogItem(idRes.data, 'highlight'))
               foundIndex = 0
             }
           } catch (error) {
@@ -448,7 +717,13 @@ const loadEsLogs = async () => {
       } else {
         nextTick(() => {
           if (terminalRef.value) {
-            terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+            if (normalizedTrigger === 'auto') {
+              if (wasNearBottomBeforeQuery && lastAnimatedUidCount.value > 0) {
+                smoothScrollTerminalToBottom()
+              }
+            } else {
+              terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+            }
           }
           clearHighlight()
           if (route.query.highlightId || route.query.highlightTime) {
@@ -459,10 +734,12 @@ const loadEsLogs = async () => {
     } else {
       logs.value = []
       total.value = 0
+      clearQueryEnterAnimation()
     }
   } catch (error) {
     console.error('ES搜索失败:', error)
     ElMessage.error('ES搜索失败: ' + (error.message || '请检查ES连接'))
+    clearQueryEnterAnimation()
   } finally {
     if (querySeq === esQuerySeq) {
       loading.value = false
@@ -637,7 +914,7 @@ const loadLogs = async () => {
     // 初始化当前加载的页码
     currentLoadPage = 0
     
-    logs.value = allLogs
+    logs.value = allLogs.map((log, index) => normalizeLogItem(log, index))
 
     // 在反转后的日志列表中查找并高亮
     let foundIndex = -1
@@ -744,7 +1021,8 @@ const loadMoreLogsAtTop = async () => {
     
     if (newLogs.length > 0) {
       // 将新日志添加到数组开头（更早的日志在上方）
-      const combinedLogs = [...newLogs, ...oldLogs]
+      const normalizedNewLogs = newLogs.map((log, index) => normalizeLogItem(log, `more-${nextPage}-${index}`))
+      const combinedLogs = [...normalizedNewLogs, ...oldLogs]
       logs.value = combinedLogs.slice(0, 4000)
       currentLoadPage = nextPage
       
@@ -797,6 +1075,7 @@ const handleSourceChange = () => {
     nginxLogFiles.value = []
     logs.value = []
     total.value = 0
+    clearQueryEnterAnimation()
     stopRefresh()
     return
   }
@@ -810,14 +1089,14 @@ const handleLogFileChange = () => {
     localStorage.setItem(`logFiles_${validSourceId}`, JSON.stringify(filter.value.logFiles))
     filter.value.page = 1
     esFilter.value.page = 0
-    loadEsLogs()
+    loadEsLogs('filter')
   }
 }
 
 const handleSearch = () => {
   filter.value.page = 1
   esFilter.value.page = 0
-  loadEsLogs()
+  loadEsLogs('manual')
 }
 
 const handleReset = () => {
@@ -840,6 +1119,7 @@ const handleReset = () => {
     size: 100
   }
   logs.value = []
+  clearQueryEnterAnimation()
 }
 
 // 时间范围变化时自动搜索
@@ -849,21 +1129,21 @@ const handleDateRangeChange = () => {
     clearHighlight()
     filter.value.page = 1
     esFilter.value.page = 0
-    loadEsLogs()
+    loadEsLogs('filter')
   }
 }
 
 // 关键字输入时自动搜索
 const handleKeywordInput = () => {
   if (normalizeUuid(filter.value.sourceId)) {
-    loadEsLogs()
+    loadEsLogs('filter')
   }
 }
 
 // 日志级别变化时自动搜索
 const handleLogLevelsChange = () => {
   if (normalizeUuid(filter.value.sourceId)) {
-    loadEsLogs()
+    loadEsLogs('filter')
   }
 }
 
@@ -872,13 +1152,13 @@ const handleLogLevelsChange = () => {
 const handlePageChange = (page) => {
   filter.value.page = page
   esFilter.value.page = page - 1
-  loadEsLogs()
+  loadEsLogs('filter')
 }
 
 const handleSizeChange = (size) => {
   filter.value.pageSize = size
   esFilter.value.size = size
-  loadEsLogs()
+  loadEsLogs('filter')
 }
 
 const clearHighlight = () => {
@@ -956,7 +1236,7 @@ const highlightText = (text, keyword) => {
   const safeKeyword = escapeHtml(keywordText)
   const escapedKeywordPattern = safeKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const regex = new RegExp(`(${escapedKeywordPattern})`, 'gi')
-  return safeText.replace(regex, '<mark class="highlight-keyword">$1</mark>')
+  return safeText.replace(regex, '<span class="highlight-keyword">$1</span>')
 }
 
 const formatLogTimeDisplay = (log) => {
@@ -993,7 +1273,7 @@ const startRefresh = () => {
   stopRefresh()
   if (filter.value.refreshInterval > 0 && normalizeUuid(filter.value.sourceId)) {
     refreshTimer = setInterval(() => {
-      loadEsLogs()
+      loadEsLogs('auto')
     }, filter.value.refreshInterval)
   }
 }
@@ -1023,7 +1303,7 @@ const showParsedInfo = (log) => {
   const info = {}
 
   for (const key in parsedFields) {
-    if (parsedFields[key] !== null && parsedFields[key] !== undefined) {
+    if (isDisplayableFieldValue(parsedFields[key])) {
       info[key] = parsedFields[key]
     }
   }
@@ -1085,8 +1365,18 @@ const formatFieldKey = (key) => {
 
 const formatFieldValue = (value) => {
   if (value === null || value === undefined) return '-'
-  if (typeof value === 'object') return JSON.stringify(value)
+  if (typeof value === 'object') return JSON.stringify(value, null, 2)
   return String(value)
+}
+
+const getParsedFieldToneClass = (key) => {
+  const normalizedKey = String(key).toLowerCase()
+  if (normalizedKey.includes('exception') || normalizedKey.includes('stack') || normalizedKey.includes('error')) return 'is-danger'
+  if (normalizedKey.includes('trace') || normalizedKey.includes('span') || normalizedKey.includes('request')) return 'is-trace'
+  if (normalizedKey.includes('message') || normalizedKey.includes('content')) return 'is-message'
+  if (normalizedKey.includes('time') || normalizedKey.includes('duration')) return 'is-time'
+  if (normalizedKey.includes('level') || normalizedKey.includes('status')) return 'is-level'
+  return ''
 }
 
 // 打开链路追踪弹窗
@@ -1114,7 +1404,9 @@ watch(() => filter.value.refreshInterval, () => {
 watch(() => filter.value.sourceId, (newVal, oldVal) => {
   const validNewSourceId = normalizeUuid(newVal)
   if (validNewSourceId && newVal !== oldVal) {
-    loadEsLogs()
+    const routeSourceId = normalizeUuid(route.query.sourceId)
+    const shouldSilentLoad = !oldVal && routeSourceId === validNewSourceId
+    loadEsLogs(shouldSilentLoad ? 'silent' : 'filter')
     startRefresh()
   } else if (!validNewSourceId) {
     esQuerySeq++
@@ -1122,6 +1414,7 @@ watch(() => filter.value.sourceId, (newVal, oldVal) => {
     stopRefresh()
     logs.value = []
     total.value = 0
+    clearQueryEnterAnimation()
   }
 })
 
@@ -1173,6 +1466,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopRefresh()
+  clearQueryEnterAnimation()
+  clearListEnterAnimation()
 })
 </script>
 
