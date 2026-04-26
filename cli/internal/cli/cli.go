@@ -370,7 +370,7 @@ func (a *runtimeApp) printHelp() {
 	fmt.Fprintln(a.stdout, "  loganalysis auth set-admin --username <name>")
 	fmt.Fprintln(a.stdout, "  loganalysis auth passwd")
 	fmt.Fprintln(a.stdout, "  loganalysis auth show")
-	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major] [--auto-port] [--no-auto-port]")
+	fmt.Fprintln(a.stdout, "  loganalysis upgrade [--to vX.Y.Z] [--allow-major] [--force] [--auto-port] [--no-auto-port]")
 	fmt.Fprintln(a.stdout, "  loganalysis uninstall [--purge-data] [--keep-cli]")
 	fmt.Fprintln(a.stdout, "  loganalysis version")
 }
@@ -1176,6 +1176,7 @@ func (a *runtimeApp) cmdUpgrade(args []string) int {
 	fs.SetOutput(a.stderr)
 	to := fs.String("to", "latest", "target version tag")
 	allowMajor := fs.Bool("allow-major", false, "allow major version upgrade")
+	force := fs.Bool("force", false, "force pull and restart even when target matches current version")
 	autoPort := fs.Bool("auto-port", true, "auto-resolve host port conflicts")
 	noAutoPort := fs.Bool("no-auto-port", false, "disable auto-resolve host port conflicts")
 
@@ -1207,6 +1208,10 @@ func (a *runtimeApp) cmdUpgrade(args []string) int {
 	if majorChanged(old, target) && !*allowMajor {
 		fmt.Fprintf(a.stderr, "major upgrade blocked: %s -> %s, re-run with --allow-major to continue\n", old, target)
 		return 1
+	}
+	if sameVersionTag(old, target) && !*force {
+		fmt.Fprintf(a.stdout, "current version %s already matches target %s; use --force to pull again\n", old, target)
+		return 0
 	}
 
 	profile := a.state.CurrentProfile
@@ -1387,6 +1392,20 @@ func fetchLatestTag(repo string) (string, error) {
 		return "", errors.New("tag_name is empty")
 	}
 	return payload.TagName, nil
+}
+
+func sameVersionTag(current, target string) bool {
+	currentTag := strings.TrimSpace(current)
+	targetTag := strings.TrimSpace(target)
+	if currentTag == "" || targetTag == "" {
+		return false
+	}
+	if currentTag == targetTag {
+		return true
+	}
+	currentWithoutPrefix := strings.TrimPrefix(currentTag, "v")
+	targetWithoutPrefix := strings.TrimPrefix(targetTag, "v")
+	return currentWithoutPrefix != "" && currentWithoutPrefix == targetWithoutPrefix
 }
 
 func majorChanged(fromVersion, toVersion string) bool {

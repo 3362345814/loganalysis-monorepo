@@ -331,6 +331,7 @@ loganalysis auth passwd
 
 - `--to vX.Y.Z|latest`：目标版本（默认 `latest`）
 - `--allow-major`：允许跨主版本升级（例如 `v1.x -> v2.x`）
+- `--force`：当本地版本与目标版本一致时，仍强制拉取镜像并重启
 - `--auto-port`：兼容参数，行为同默认值（自动检测并避让端口冲突）
 - `--no-auto-port`：关闭升级过程中的自动端口避让
 
@@ -346,6 +347,9 @@ loganalysis upgrade --to v1.2.0
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
 
+# 同版本强制重拉并重启
+loganalysis upgrade --to latest --force
+
 # 若你希望严格按固定端口升级（不自动避让）
 loganalysis upgrade --to v1.2.0 --no-auto-port
 ```
@@ -353,6 +357,7 @@ loganalysis upgrade --to v1.2.0 --no-auto-port
 说明：
 
 - 默认会阻止主版本变更，避免误升级。
+- 当本地栈版本与目标版本一致时，默认跳过容器重拉并提示可使用 `--force`；若 CLI 二进制版本落后，仍会尝试自更新。
 - 升级失败会尝试回滚到旧版本。
 
 ### 9) `uninstall`

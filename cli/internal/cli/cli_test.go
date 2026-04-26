@@ -24,6 +24,28 @@ func TestMajorChanged(t *testing.T) {
 	}
 }
 
+func TestSameVersionTag(t *testing.T) {
+	tests := []struct {
+		current string
+		target  string
+		same    bool
+	}{
+		{"v1.2.0", "v1.2.0", true},
+		{"1.2.0", "v1.2.0", true},
+		{"v1.2.0", "1.2.0", true},
+		{"latest", "latest", true},
+		{"v1.2.0", "v1.2.1", false},
+		{"", "v1.2.0", false},
+		{"v1.2.0", "", false},
+	}
+
+	for _, tt := range tests {
+		if got := sameVersionTag(tt.current, tt.target); got != tt.same {
+			t.Fatalf("sameVersionTag(%q, %q) = %v, want %v", tt.current, tt.target, got, tt.same)
+		}
+	}
+}
+
 func TestSetPort(t *testing.T) {
 	var p int
 	if err := setPort(&p, "8080"); err != nil {

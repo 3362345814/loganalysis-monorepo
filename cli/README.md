@@ -21,6 +21,7 @@ go build ./cmd/loganalysis
 - `loganalysis auth passwd`
 - `loganalysis auth show`
 - `loganalysis upgrade --to v1.3.0`
+- `loganalysis upgrade --to latest --force`
 - `loganalysis uninstall`
 - `loganalysis uninstall --keep-cli`
 - `loganalysis uninstall --purge-data`
