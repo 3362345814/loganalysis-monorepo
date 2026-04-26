@@ -63,8 +63,8 @@
       </el-form>
     </el-card>
 
-      <!-- 日志终端和解析信息面板 -->
-    <div class="logs-content" :class="{ 'panel-hidden': !parsedInfoVisible }">
+      <!-- 日志终端 -->
+    <div class="logs-content">
       <el-card class="terminal-card">
         <div class="terminal-header">
           <div class="terminal-toolbar">
@@ -76,65 +76,76 @@
           <span class="log-count">{{ total }} logs</span>
         </div>
         <div class="terminal-content" :class="{ 'log-list-entering': isLogListEntering }" ref="terminalRef" @scroll="handleScroll">
-          <div
-            v-for="(log, index) in logs"
-            :key="log.uid"
-            class="log-line"
-            :class="[getLogLevelClass(log.parsedFields?.logLevel), {
-              'log-query-enter': isLogQueryEntering(log),
-              'log-highlight': highlightedIndex === index,
-              'log-selected': selectedLogIndex === index
-            }]"
-            :style="getLogQueryEnterStyle(log)"
-            @click="handleLogClick(log, index)"
-          >
-            <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
-            <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
-            <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
-              {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
-            </span>
-            <span class="log-message" v-html="highlightText(log.rawContent || log.parsedFields?.message, esFilter.keyword)"></span>
+          <div v-for="(log, index) in logs" :key="log.uid" class="log-line-group">
+            <div
+              class="log-line"
+              :class="[getLogLevelClass(log.parsedFields?.logLevel), {
+                'log-query-enter': isLogQueryEntering(log),
+                'log-highlight': highlightedIndex === index,
+                'log-selected': selectedLogUid === log.uid
+              }]"
+              :style="getLogQueryEnterStyle(log)"
+              @click="handleLogClick(log)"
+            >
+              <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="log-file-tag">{{ getFileName(log.filePath) }}</span>
+              <span class="log-time">{{ formatLogTimeDisplay(log) }}</span>
+              <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
+                {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
+              </span>
+              <span class="log-message" v-html="highlightText(log.rawContent || log.parsedFields?.message, esFilter.keyword)"></span>
+              <el-icon class="log-expand-icon" :class="{ 'is-expanded': selectedLogUid === log.uid }">
+                <ArrowDown />
+              </el-icon>
+            </div>
+            <Transition
+              @before-enter="beforeInlineDetailsEnter"
+              @enter="enterInlineDetails"
+              @after-enter="afterInlineDetailsEnter"
+              @before-leave="beforeInlineDetailsLeave"
+              @leave="leaveInlineDetails"
+              @after-leave="afterInlineDetailsLeave"
+            >
+              <div v-if="selectedLogUid === log.uid" class="inline-parsed-motion" @click.stop>
+                <div class="inline-parsed-panel">
+                  <div class="inline-parsed-header">
+                    <div class="inline-parsed-title-row">
+                      <span class="inline-parsed-title">$ parsed-fields</span>
+                      <span class="inline-parsed-count">{{ parsedInfoTableData.length }} items</span>
+                    </div>
+                    <button
+                      v-if="currentHoverTraceId"
+                      class="inline-parsed-trace-btn"
+                      @click.stop="openTraceTimeline"
+                    >
+                      <el-icon><Link /></el-icon>
+                      TRACE 追踪
+                    </button>
+                  </div>
+                  <div class="inline-parsed-content">
+                    <div class="inline-parsed-field-list">
+                      <div
+                        v-for="row in parsedInfoTableData"
+                        :key="row.key"
+                        class="inline-parsed-field-row"
+                        :class="getParsedFieldToneClass(row.key)"
+                      >
+                        <div class="inline-parsed-field-name">
+                          <span class="inline-parsed-field-label">{{ formatFieldKey(row.key) }}</span>
+                          <span v-if="formatFieldKey(row.key) !== row.key" class="inline-parsed-field-key">{{ row.key }}</span>
+                        </div>
+                        <pre class="inline-parsed-field-value">{{ formatFieldValue(row.value) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
           </div>
           <div v-if="logs.length === 0 && !loading" class="terminal-empty">
             暂无日志数据
           </div>
         </div>
       </el-card>
-
-      <!-- 解析信息面板 -->
-      <div class="parsed-info-sidebar">
-        <div class="parsed-info-header">
-          <div class="parsed-info-title-row">
-            <span class="parsed-info-title">解析信息</span>
-            <span class="parsed-info-count">{{ parsedInfoTableData.length }} 项</span>
-          </div>
-          <el-button type="primary" link @click="closeParsedInfo">
-            <el-icon><Close /></el-icon>
-          </el-button>
-        </div>
-        <div class="parsed-info-content">
-          <div class="parsed-info-field-list">
-            <div
-              v-for="row in parsedInfoTableData"
-              :key="row.key"
-              class="parsed-info-field-row"
-              :class="getParsedFieldToneClass(row.key)"
-            >
-              <div class="parsed-info-field-name">
-                <span class="parsed-info-field-label">{{ formatFieldKey(row.key) }}</span>
-                <span v-if="formatFieldKey(row.key) !== row.key" class="parsed-info-field-key">{{ row.key }}</span>
-              </div>
-              <pre class="parsed-info-field-value">{{ formatFieldValue(row.value) }}</pre>
-            </div>
-          </div>
-        </div>
-        <div v-if="currentHoverTraceId" class="parsed-info-footer">
-          <el-button type="primary" @click="openTraceTimeline">
-            <el-icon><Link /></el-icon>
-            链路追踪
-          </el-button>
-        </div>
-      </div>
     </div>
 
     <!-- 详情对话框 -->
@@ -211,7 +222,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Refresh, Link, Close, Loading, MagicStick } from '@element-plus/icons-vue'
+import { Search, Refresh, Link, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { logSourceApi, projectApi, rawLogApi, analysisApi, analysisConfigApi, esLogApi } from '@/api'
@@ -230,9 +241,8 @@ let currentLoadPage = 0
 const total = ref(0)
 const detailVisible = ref(false)
 const currentLog = ref(null)
-const parsedInfoVisible = ref(false)
 const parsedInfoFields = ref({})
-const selectedLogIndex = ref(-1)
+const selectedLogUid = ref('')
 
 // 链路追踪相关状态
 const currentHoverTraceId = ref('')
@@ -471,6 +481,75 @@ const getLogQueryEnterStyle = (log) => {
   }
 }
 
+const INLINE_DETAILS_TRANSITION_DURATION = 260
+const INLINE_DETAILS_TRANSITION_EASING = 'cubic-bezier(0.2, 0.65, 0.2, 1)'
+
+const clearInlineDetailsMotionStyles = (el) => {
+  el.style.height = ''
+  el.style.opacity = ''
+  el.style.transform = ''
+  el.style.overflow = ''
+  el.style.willChange = ''
+  el.style.transition = ''
+}
+
+const beforeInlineDetailsEnter = (el) => {
+  el.style.height = '0'
+  el.style.opacity = '0'
+  el.style.transform = 'translateY(-6px)'
+  el.style.overflow = 'hidden'
+  el.style.willChange = 'height, opacity, transform'
+}
+
+const enterInlineDetails = (el, done) => {
+  const targetHeight = `${el.scrollHeight}px`
+  el.style.transition = `height ${INLINE_DETAILS_TRANSITION_DURATION}ms ${INLINE_DETAILS_TRANSITION_EASING}, opacity 220ms ease, transform ${INLINE_DETAILS_TRANSITION_DURATION}ms ${INLINE_DETAILS_TRANSITION_EASING}`
+  requestAnimationFrame(() => {
+    el.style.height = targetHeight
+    el.style.opacity = '1'
+    el.style.transform = 'translateY(0)'
+  })
+  setTimeout(done, INLINE_DETAILS_TRANSITION_DURATION)
+}
+
+const afterInlineDetailsEnter = (el) => {
+  clearInlineDetailsMotionStyles(el)
+}
+
+const beforeInlineDetailsLeave = (el) => {
+  el.style.height = `${el.scrollHeight}px`
+  el.style.opacity = '1'
+  el.style.transform = 'translateY(0)'
+  el.style.overflow = 'hidden'
+  el.style.willChange = 'height, opacity, transform'
+}
+
+const leaveInlineDetails = (el, done) => {
+  // 强制回流，确保折叠动画稳定触发
+  void el.offsetHeight
+  el.style.transition = `height ${INLINE_DETAILS_TRANSITION_DURATION}ms ${INLINE_DETAILS_TRANSITION_EASING}, opacity 200ms ease, transform ${INLINE_DETAILS_TRANSITION_DURATION}ms ${INLINE_DETAILS_TRANSITION_EASING}`
+  requestAnimationFrame(() => {
+    el.style.height = '0'
+    el.style.opacity = '0'
+    el.style.transform = 'translateY(-6px)'
+  })
+  setTimeout(done, INLINE_DETAILS_TRANSITION_DURATION)
+}
+
+const afterInlineDetailsLeave = (el) => {
+  clearInlineDetailsMotionStyles(el)
+}
+
+const syncSelectedLogState = (nextLogs) => {
+  if (!selectedLogUid.value) return
+  const matchedLog = nextLogs.find(log => log.uid === selectedLogUid.value)
+  if (!matchedLog) {
+    closeParsedInfo()
+    return
+  }
+  showParsedInfo(matchedLog)
+}
+
 const buildLogsRouteQuery = () => {
   const query = {}
   const sourceId = normalizeUuid(filter.value.sourceId)
@@ -591,6 +670,7 @@ const loadEsLogs = async (trigger = 'silent') => {
   if (!validSourceId) {
     logs.value = []
     total.value = 0
+    closeParsedInfo()
     clearQueryEnterAnimation()
     return
   }
@@ -664,6 +744,7 @@ const loadEsLogs = async (trigger = 'silent') => {
 
       applyQueryEnterAnimation(nextLogs, normalizedTrigger, previousUidSet)
       logs.value = nextLogs
+      syncSelectedLogState(nextLogs)
       total.value = hits.length
       currentLoadPage = 0
 
@@ -734,6 +815,7 @@ const loadEsLogs = async (trigger = 'silent') => {
     } else {
       logs.value = []
       total.value = 0
+      closeParsedInfo()
       clearQueryEnterAnimation()
     }
   } catch (error) {
@@ -915,6 +997,7 @@ const loadLogs = async () => {
     currentLoadPage = 0
     
     logs.value = allLogs.map((log, index) => normalizeLogItem(log, index))
+    syncSelectedLogState(logs.value)
 
     // 在反转后的日志列表中查找并高亮
     let foundIndex = -1
@@ -1024,6 +1107,7 @@ const loadMoreLogsAtTop = async () => {
       const normalizedNewLogs = newLogs.map((log, index) => normalizeLogItem(log, `more-${nextPage}-${index}`))
       const combinedLogs = [...normalizedNewLogs, ...oldLogs]
       logs.value = combinedLogs.slice(0, 4000)
+      syncSelectedLogState(logs.value)
       currentLoadPage = nextPage
       
       
@@ -1075,6 +1159,7 @@ const handleSourceChange = () => {
     nginxLogFiles.value = []
     logs.value = []
     total.value = 0
+    closeParsedInfo()
     clearQueryEnterAnimation()
     stopRefresh()
     return
@@ -1119,6 +1204,7 @@ const handleReset = () => {
     size: 100
   }
   logs.value = []
+  closeParsedInfo()
   clearQueryEnterAnimation()
 }
 
@@ -1167,10 +1253,14 @@ const clearHighlight = () => {
   highlightedIndex.value = -1
 }
 
-const handleLogClick = (log, index) => {
+const handleLogClick = (log) => {
   // 清除高亮
   clearHighlight()
-  selectedLogIndex.value = index
+  if (selectedLogUid.value === log.uid) {
+    closeParsedInfo()
+    return
+  }
+  selectedLogUid.value = log.uid
   showParsedInfo(log)
 }
 
@@ -1319,13 +1409,12 @@ const showParsedInfo = (log) => {
 
   // 提取 traceId 用于链路追踪
   currentHoverTraceId.value = parsedFields.traceId || ''
-
-  parsedInfoVisible.value = true
 }
 
 const closeParsedInfo = () => {
-  parsedInfoVisible.value = false
-  selectedLogIndex.value = -1
+  parsedInfoFields.value = {}
+  currentHoverTraceId.value = ''
+  selectedLogUid.value = ''
 }
 
 const formatFieldKey = (key) => {
@@ -1414,6 +1503,7 @@ watch(() => filter.value.sourceId, (newVal, oldVal) => {
     stopRefresh()
     logs.value = []
     total.value = 0
+    closeParsedInfo()
     clearQueryEnterAnimation()
   }
 })
