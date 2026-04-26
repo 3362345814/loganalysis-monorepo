@@ -1,14 +1,12 @@
 {
-  "version": "v1.2.2",
+  "version": "v1.2.3",
   "releaseDate": "2026-04-26",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042602",
+    "buildNumber": "2026042603",
     "environment": "production"
   }, 
   "updateInfo": [
-    "日志查询页解析信息从右侧面板改为终端内联下拉，点击日志可在对应日志下方展开/收起解析字段，并保留链路追踪入口",
-    "优化了一些界面显示"
-
+    "优化了一些动画"
   ]
 }

@@ -75,7 +75,27 @@
           </div>
           <span class="log-count">{{ total }} logs</span>
         </div>
-        <div class="terminal-content" :class="{ 'log-list-entering': isLogListEntering }" ref="terminalRef" @scroll="handleScroll">
+        <div
+          class="terminal-content"
+          :class="{ 'is-query-loading': isQueryLoading, 'has-query-batch-glow': isQueryBatchGlowActive }"
+          ref="terminalRef"
+          @scroll="handleScroll"
+        >
+          <div v-if="isQueryLoading" class="terminal-query-loading">
+            <div class="terminal-query-skeleton">
+              <div
+                v-for="row in querySkeletonRows"
+                :key="row.id"
+                class="terminal-query-skeleton-row"
+                :style="{ '--query-skeleton-delay': `${row.glowDelayMs}ms` }"
+              >
+                <span v-if="isNginxSource && filter.logFiles && filter.logFiles.length > 1" class="terminal-query-skeleton-file"></span>
+                <span class="terminal-query-skeleton-time"></span>
+                <span class="terminal-query-skeleton-level"></span>
+                <span class="terminal-query-skeleton-message" :style="{ '--query-skeleton-msg-width': `${row.messageWidth}%` }"></span>
+              </div>
+            </div>
+          </div>
           <div v-for="(log, index) in logs" :key="log.uid" class="log-line-group">
             <div
               class="log-line"
@@ -92,7 +112,9 @@
               <span class="log-level" :class="getLogLevelClass(log.logLevel || log.parsedFields?.logLevel)">
                 {{ log.logLevel || log.parsedFields?.logLevel || 'INFO' }}
               </span>
-              <span class="log-message" v-html="highlightText(log.rawContent || log.parsedFields?.message, esFilter.keyword)"></span>
+              <span class="log-message-shell">
+                <span class="log-message" v-html="highlightText(log.rawContent || log.parsedFields?.message, esFilter.keyword)"></span>
+              </span>
               <el-icon class="log-expand-icon" :class="{ 'is-expanded': selectedLogUid === log.uid }">
                 <ArrowDown />
               </el-icon>
@@ -141,7 +163,7 @@
               </div>
             </Transition>
           </div>
-          <div v-if="logs.length === 0 && !loading" class="terminal-empty">
+          <div v-if="logs.length === 0 && !isQueryLoading" class="terminal-empty">
             暂无日志数据
           </div>
         </div>
@@ -235,6 +257,7 @@ const projects = ref([])
 const sources = ref([])
 const logs = ref([])
 const loading = ref(false)
+const isQueryLoading = ref(false)
 const terminalRef = ref(null)
 let refreshTimer = null
 let currentLoadPage = 0
@@ -266,11 +289,15 @@ const normalizeUuid = (value) => {
   return UUID_REGEX.test(trimmed) ? trimmed : null
 }
 
-const QUERY_ANIMATION_ROW_CAP = 30
-const QUERY_ANIMATION_STAGGER_MS = 14
-const QUERY_ANIMATION_DURATION_MS = 220
+const QUERY_ANIMATION_ROW_CAP = 60
+const QUERY_ANIMATION_STAGGER_MS = 32
+const QUERY_ANIMATION_DURATION_MS = 380
 const QUERY_ANIMATION_CLEANUP_BUFFER_MS = 180
-const QUERY_LIST_ENTER_DURATION_MS = 140
+const QUERY_ANIMATION_DELAY_CURVE_POWER = 1.72
+const QUERY_BATCH_GLOW_DURATION_MS = 760
+const QUERY_LOADING_MIN_VISIBLE_MS = 260
+const QUERY_SKELETON_ROW_COUNT = 20
+const QUERY_SKELETON_MESSAGE_WIDTH_PATTERN = [74, 66, 82, 58, 91, 69, 77, 63, 86, 56]
 const AUTO_SCROLL_DURATION_MS = 260
 const AUTO_SCROLL_NEAR_BOTTOM_THRESHOLD = 24
 const AUTO_APPEND_LOG_CAP = 4000
@@ -279,10 +306,10 @@ const QUERY_TRIGGER_TYPES = new Set(['manual', 'filter', 'auto', 'silent'])
 const animatedUidDelayMap = ref({})
 const lastAnimatedUidCount = ref(0)
 const currentAnimationMode = ref('none')
-const isLogListEntering = ref(false)
+const isQueryBatchGlowActive = ref(false)
 let queryAnimationCleanupTimer = null
-let listEnterCleanupTimer = null
-let listEnterRaf = null
+let queryBatchGlowTimer = null
+let queryBatchGlowRaf = null
 let autoScrollRaf = null
 
 const normalizeQueryTrigger = (trigger) => {
@@ -297,17 +324,45 @@ const clearQueryAnimationTimer = () => {
   }
 }
 
-const clearListEnterAnimation = () => {
-  if (listEnterCleanupTimer) {
-    clearTimeout(listEnterCleanupTimer)
-    listEnterCleanupTimer = null
+const clearQueryBatchGlowTimer = () => {
+  if (queryBatchGlowTimer) {
+    clearTimeout(queryBatchGlowTimer)
+    queryBatchGlowTimer = null
   }
-  if (listEnterRaf) {
-    cancelAnimationFrame(listEnterRaf)
-    listEnterRaf = null
-  }
-  isLogListEntering.value = false
 }
+
+const clearQueryBatchGlowRaf = () => {
+  if (queryBatchGlowRaf) {
+    cancelAnimationFrame(queryBatchGlowRaf)
+    queryBatchGlowRaf = null
+  }
+}
+
+const resetQueryBatchGlow = () => {
+  clearQueryBatchGlowTimer()
+  clearQueryBatchGlowRaf()
+  isQueryBatchGlowActive.value = false
+}
+
+const triggerQueryBatchGlow = () => {
+  resetQueryBatchGlow()
+  queryBatchGlowRaf = requestAnimationFrame(() => {
+    queryBatchGlowRaf = null
+    isQueryBatchGlowActive.value = true
+    queryBatchGlowTimer = setTimeout(() => {
+      isQueryBatchGlowActive.value = false
+      queryBatchGlowTimer = null
+    }, QUERY_BATCH_GLOW_DURATION_MS)
+  })
+}
+
+const querySkeletonRows = computed(() => {
+  return Array.from({ length: QUERY_SKELETON_ROW_COUNT }, (_, index) => ({
+    id: index,
+    messageWidth: QUERY_SKELETON_MESSAGE_WIDTH_PATTERN[index % QUERY_SKELETON_MESSAGE_WIDTH_PATTERN.length],
+    glowDelayMs: (QUERY_SKELETON_ROW_COUNT - 1 - index) * 42
+  }))
+})
 
 const stopAutoScrollToBottom = () => {
   if (autoScrollRaf) {
@@ -315,6 +370,14 @@ const stopAutoScrollToBottom = () => {
     autoScrollRaf = null
   }
 }
+
+const waitForPaintFrame = () => new Promise(resolve => {
+  requestAnimationFrame(() => resolve())
+})
+
+const sleep = (ms) => new Promise(resolve => {
+  setTimeout(resolve, ms)
+})
 
 const isTerminalNearBottom = () => {
   const terminalEl = terminalRef.value
@@ -350,24 +413,12 @@ const smoothScrollTerminalToBottom = (duration = AUTO_SCROLL_DURATION_MS) => {
   autoScrollRaf = requestAnimationFrame(step)
 }
 
-const startListEnterAnimation = () => {
-  clearListEnterAnimation()
-  listEnterRaf = requestAnimationFrame(() => {
-    isLogListEntering.value = true
-    listEnterCleanupTimer = setTimeout(() => {
-      isLogListEntering.value = false
-      listEnterCleanupTimer = null
-    }, QUERY_LIST_ENTER_DURATION_MS + 40)
-    listEnterRaf = null
-  })
-}
-
 const clearQueryEnterAnimation = () => {
   clearQueryAnimationTimer()
+  resetQueryBatchGlow()
   animatedUidDelayMap.value = {}
   lastAnimatedUidCount.value = 0
   currentAnimationMode.value = 'none'
-  clearListEnterAnimation()
   stopAutoScrollToBottom()
 }
 
@@ -454,18 +505,23 @@ const applyQueryEnterAnimation = (nextLogs, trigger, previousUidSet = new Set())
   }
 
   const delayMap = {}
+  const totalAnimatedCount = animatedUids.length
+  const maxDelay = (totalAnimatedCount - 1) * QUERY_ANIMATION_STAGGER_MS
   animatedUids.forEach((uid, index) => {
-    // 终端阅读顺序为“最新在下方”，入场顺序改为自下而上
-    delayMap[uid] = (animatedUids.length - 1 - index) * QUERY_ANIMATION_STAGGER_MS
+    // 终端阅读顺序为“最新在下方”，入场顺序保持自下而上。
+    // 延迟采用“前快后慢”的曲线，让首屏几行更快出现，尾部更柔和收束。
+    const positionFromBottom = totalAnimatedCount - 1 - index
+    if (maxDelay <= 0) {
+      delayMap[uid] = 0
+      return
+    }
+    const normalizedProgress = positionFromBottom / (totalAnimatedCount - 1)
+    delayMap[uid] = Math.round(Math.pow(normalizedProgress, QUERY_ANIMATION_DELAY_CURVE_POWER) * maxDelay)
   })
   animatedUidDelayMap.value = delayMap
   lastAnimatedUidCount.value = animatedUids.length
   currentAnimationMode.value = normalizedTrigger
-  if (normalizedTrigger === 'manual' || normalizedTrigger === 'filter') {
-    startListEnterAnimation()
-  } else {
-    clearListEnterAnimation()
-  }
+  triggerQueryBatchGlow()
   scheduleQueryEnterAnimationCleanup(animatedUids.length)
 }
 
@@ -508,6 +564,7 @@ const enterInlineDetails = (el, done) => {
     el.style.height = targetHeight
     el.style.opacity = '1'
     el.style.transform = 'translateY(0)'
+    el.style.margin=''
   })
   setTimeout(done, INLINE_DETAILS_TRANSITION_DURATION)
 }
@@ -532,7 +589,9 @@ const leaveInlineDetails = (el, done) => {
     el.style.height = '0'
     el.style.opacity = '0'
     el.style.transform = 'translateY(-6px)'
+    el.style.margin = '0'
   })
+
   setTimeout(done, INLINE_DETAILS_TRANSITION_DURATION)
 }
 
@@ -663,23 +722,51 @@ const availableLogFiles = computed(() => {
   return nginxLogFiles.value
 })
 
+const hasActiveSearchConstraints = computed(() => {
+  const keyword = String(esFilter.value.keyword || '').trim()
+  const regex = String(esFilter.value.regex || '').trim()
+  const hasDateRange = Array.isArray(esFilter.value.dateRange) && esFilter.value.dateRange.length === 2
+  const hasLogLevels = Array.isArray(esFilter.value.logLevels) && esFilter.value.logLevels.length > 0
+  const hasLogFiles = Array.isArray(filter.value.logFiles) && filter.value.logFiles.length > 0
+  return Boolean(keyword || regex || hasDateRange || hasLogLevels || hasLogFiles)
+})
+
+const canLoadMoreAtTop = computed(() => {
+  return !hasActiveSearchConstraints.value
+})
+
 // ES 搜索方法
 const loadEsLogs = async (trigger = 'silent') => {
   const normalizedTrigger = normalizeQueryTrigger(trigger)
+  const shouldBlockRender = normalizedTrigger !== 'auto'
+  let loadingStartTime = 0
   const validSourceId = normalizeUuid(filter.value.sourceId)
   if (!validSourceId) {
     logs.value = []
     total.value = 0
     closeParsedInfo()
     clearQueryEnterAnimation()
+    isQueryLoading.value = false
     return
   }
 
-  const previousUidSet = new Set(logs.value.map(log => log?.uid).filter(Boolean))
+  const previousUidSet = shouldBlockRender
+    ? new Set()
+    : new Set(logs.value.map(log => log?.uid).filter(Boolean))
   const wasNearBottomBeforeQuery = normalizedTrigger === 'auto' ? isTerminalNearBottom() : false
   const querySeq = ++esQuerySeq
   try {
     loading.value = true
+    if (shouldBlockRender) {
+      clearQueryEnterAnimation()
+      closeParsedInfo()
+      logs.value = []
+      total.value = 0
+      isQueryLoading.value = true
+      loadingStartTime = performance.now()
+      await nextTick()
+      await waitForPaintFrame()
+    }
 
     const currentHighlightTime = highlightTime.value
     const currentHighlightId = highlightId.value
@@ -733,6 +820,7 @@ const loadEsLogs = async (trigger = 'silent') => {
       const mappedLogs = hits.map((hit, index) => normalizeLogItem(hit, index))
       const canUseAutoAppend = normalizedTrigger === 'auto' && !currentHighlightId && !currentHighlightTime
       let nextLogs = mappedLogs
+      let nextTotal = hits.length
       if (canUseAutoAppend) {
         const appendedLogs = mappedLogs.filter(log => !previousUidSet.has(log.uid))
         if (appendedLogs.length > 0) {
@@ -742,12 +830,6 @@ const loadEsLogs = async (trigger = 'silent') => {
         }
       }
 
-      applyQueryEnterAnimation(nextLogs, normalizedTrigger, previousUidSet)
-      logs.value = nextLogs
-      syncSelectedLogState(nextLogs)
-      total.value = hits.length
-      currentLoadPage = 0
-
       // 使用 count API 获取准确总数；失败时不影响本次结果展示
       try {
         const countParams = { ...params }
@@ -755,7 +837,7 @@ const loadEsLogs = async (trigger = 'silent') => {
         delete countParams.size
         const countRes = await esLogApi.count(countParams)
         if (querySeq !== esQuerySeq) return
-        total.value = countRes.data?.count ?? hits.length
+        nextTotal = countRes.data?.count ?? hits.length
       } catch (countError) {
         console.warn('获取日志总数失败，使用当前结果条数兜底:', countError)
       }
@@ -763,13 +845,14 @@ const loadEsLogs = async (trigger = 'silent') => {
       let foundIndex = -1
 
       if (currentHighlightId) {
-        foundIndex = logs.value.findIndex(log => log.id === currentHighlightId)
+        foundIndex = nextLogs.findIndex(log => log.id === currentHighlightId)
         
         if (foundIndex === -1) {
           try {
             const idRes = await rawLogApi.getById(currentHighlightId)
+            if (querySeq !== esQuerySeq) return
             if (idRes.data) {
-              logs.value.unshift(normalizeLogItem(idRes.data, 'highlight'))
+              nextLogs = [normalizeLogItem(idRes.data, 'highlight'), ...nextLogs]
               foundIndex = 0
             }
           } catch (error) {
@@ -778,11 +861,17 @@ const loadEsLogs = async (trigger = 'silent') => {
         }
       } else if (currentHighlightTime) {
         const targetTime = new Date(currentHighlightTime).getTime()
-        foundIndex = logs.value.findIndex(log => {
+        foundIndex = nextLogs.findIndex(log => {
           const logTime = getLogTimestamp(log)
           return logTime && Math.abs(logTime - targetTime) < 5000
         })
       }
+
+      applyQueryEnterAnimation(nextLogs, normalizedTrigger, previousUidSet)
+      logs.value = nextLogs
+      syncSelectedLogState(nextLogs)
+      total.value = nextTotal
+      currentLoadPage = 0
 
       if (foundIndex !== -1) {
         highlightedIndex.value = foundIndex
@@ -825,6 +914,15 @@ const loadEsLogs = async (trigger = 'silent') => {
   } finally {
     if (querySeq === esQuerySeq) {
       loading.value = false
+      if (shouldBlockRender) {
+        const elapsed = performance.now() - loadingStartTime
+        const remaining = QUERY_LOADING_MIN_VISIBLE_MS - elapsed
+        if (remaining > 0) {
+          await sleep(remaining)
+        }
+        if (querySeq !== esQuerySeq) return
+      }
+      isQueryLoading.value = false
     }
   }
 }
@@ -1054,14 +1152,21 @@ const handleScroll = (e) => {
   const target = e.target
   lastScrollHeight = target.scrollHeight - target.clientHeight
 
-  if (target.scrollTop === 0 && !loading.value && normalizeUuid(filter.value.sourceId) && filter.value.refreshInterval === 0) {
+  if (
+    target.scrollTop <= 0 &&
+    !loading.value &&
+    !isQueryLoading.value &&
+    normalizeUuid(filter.value.sourceId) &&
+    filter.value.refreshInterval === 0 &&
+    canLoadMoreAtTop.value
+  ) {
     loadMoreLogsAtTop()
   }
 }
 
 const loadMoreLogsAtTop = async () => {
   const validSourceId = normalizeUuid(filter.value.sourceId)
-  if (!validSourceId || loading.value) return
+  if (!validSourceId || loading.value || !canLoadMoreAtTop.value) return
 
   
   try {
@@ -1254,6 +1359,8 @@ const clearHighlight = () => {
 }
 
 const handleLogClick = (log) => {
+  // 用户开始交互时，立即结束查询入场动画，避免首击触发位移动画重置
+  clearQueryEnterAnimation()
   // 清除高亮
   clearHighlight()
   if (selectedLogUid.value === log.uid) {
@@ -1557,7 +1664,6 @@ onMounted(() => {
 onUnmounted(() => {
   stopRefresh()
   clearQueryEnterAnimation()
-  clearListEnterAnimation()
 })
 </script>
 
