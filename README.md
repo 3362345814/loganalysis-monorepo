@@ -7,7 +7,7 @@
 - 前端控制台（Vue 3 + Element Plus）
 - 跨平台运维 CLI（Go，基于 Docker Compose 一键部署）
 
-当前文档对应版本：`v1.2.0`（发布于 `2026-04-25`）
+当前文档对应版本：`v1.2.1`（发布于 `2026-04-26`）
 
 ## 系统功能全景
 
@@ -111,13 +111,13 @@ docker compose version
 #### macOS / Linux
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v1.2.0/scripts/install.sh" | sh
+curl -fsSL "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v1.2.1/scripts/install.sh" | sh
 ```
 
 #### Windows PowerShell
 
 ```powershell
-irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v1.2.0/scripts/install.ps1" | iex
+irm "https://raw.githubusercontent.com/3362345814/loganalysis-monorepo/v1.2.1/scripts/install.ps1" | iex
 ```
 
 安装后验证：
@@ -138,7 +138,7 @@ loganalysis version
 
 ```powershell
 $bin = "$env:TEMP\loganalysis-windows-amd64.exe"
-curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v1.2.0/loganalysis-windows-amd64.exe"
+curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/releases/download/v1.2.1/loganalysis-windows-amd64.exe"
 & $bin version
 & $bin doctor
 ```
@@ -146,7 +146,7 @@ curl.exe -L --fail -o $bin "https://github.com/3362345814/loganalysis-monorepo/r
 示例（Linux/macOS）：
 
 ```bash
-curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v1.2.0/loganalysis-linux-amd64"
+curl -fL -o /tmp/loganalysis "https://github.com/3362345814/loganalysis-monorepo/releases/download/v1.2.1/loganalysis-linux-amd64"
 chmod +x /tmp/loganalysis
 /tmp/loganalysis version
 /tmp/loganalysis doctor
@@ -157,7 +157,7 @@ chmod +x /tmp/loganalysis
 ```bash
 loganalysis doctor
 loganalysis auth set-admin --username admin
-loganalysis up --version v1.2.0
+loganalysis up --version v1.2.1
 loganalysis status
 ```
 
@@ -165,7 +165,7 @@ loganalysis status
 
 ```bash
 loganalysis config set auth.enabled false
-loganalysis up --version v1.2.0
+loganalysis up --version v1.2.1
 ```
 
 默认访问地址：
@@ -194,7 +194,7 @@ loganalysis up --version v1.2.0
 loganalysis up 
 
 # 指定版本（默认也会自动避让端口）
-loganalysis up --version v1.2.0
+loganalysis up --version v1.2.1
 
 # 显式关闭自动避让
 loganalysis up --no-auto-port
@@ -342,7 +342,7 @@ loganalysis auth passwd
 loganalysis upgrade --to latest
 
 # 升级到指定版本
-loganalysis upgrade --to v1.2.0
+loganalysis upgrade --to v1.2.1
 
 # 允许主版本升级
 loganalysis upgrade --to v2.0.0 --allow-major
@@ -351,7 +351,7 @@ loganalysis upgrade --to v2.0.0 --allow-major
 loganalysis upgrade --to latest --force
 
 # 若你希望严格按固定端口升级（不自动避让）
-loganalysis upgrade --to v1.2.0 --no-auto-port
+loganalysis upgrade --to v1.2.1 --no-auto-port
 ```
 
 说明：
@@ -473,7 +473,7 @@ AUTH_JWT_TTL_HOURS=24
 ### 场景 1：本机已有 3000/8080，被占用
 
 ```bash
-loganalysis up --version v1.2.0
+loganalysis up --version v1.2.1
 loganalysis status
 loganalysis config get ports.frontend
 loganalysis config get ports.backend
@@ -490,7 +490,7 @@ loganalysis logs backend -f
 ### 场景 3：升级并验证
 
 ```bash
-loganalysis upgrade --to v1.2.0
+loganalysis upgrade --to v1.2.1
 loganalysis status
 loganalysis version
 ```
