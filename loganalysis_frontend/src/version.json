@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.3",
-  "releaseDate": "2026-04-26",
+  "version": "v1.2.4",
+  "releaseDate": "2026-04-27",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042603",
+    "buildNumber": "2026042701",
     "environment": "production"
   }, 
   "updateInfo": [
-    "优化了一些动画"
+    "优化日志自动刷新的动画"
   ]
 }

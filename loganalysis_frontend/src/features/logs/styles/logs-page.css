@@ -231,6 +231,12 @@
   will-change: opacity;
 }
 
+.log-line.log-query-enter-auto {
+  animation: log-query-auto-enter 320ms cubic-bezier(0.24, 0.72, 0.2, 1) both;
+  animation-delay: var(--log-enter-delay, 0ms);
+  will-change: transform;
+}
+
 .log-file-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -671,6 +677,15 @@
   }
 }
 
+@keyframes log-query-auto-enter {
+  0% {
+    transform: translateY(10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 @keyframes row-select-sweep {
   0% {
     opacity: 0;
@@ -737,6 +752,12 @@
   .log-line.log-query-enter {
     animation: none !important;
     opacity: 1;
+    will-change: auto;
+  }
+
+  .log-line.log-query-enter-auto {
+    animation: none !important;
+    transform: none;
     will-change: auto;
   }
 }

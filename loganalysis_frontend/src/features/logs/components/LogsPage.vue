@@ -100,7 +100,8 @@
             <div
               class="log-line"
               :class="[getLogLevelClass(log.parsedFields?.logLevel), {
-                'log-query-enter': isLogQueryEntering(log),
+                'log-query-enter': isLogQueryEntering(log) && !isAutoRefreshQueryEntering(log),
+                'log-query-enter-auto': isAutoRefreshQueryEntering(log),
                 'log-highlight': highlightedIndex === index,
                 'log-selected': selectedLogUid === log.uid
               }]"
@@ -521,13 +522,19 @@ const applyQueryEnterAnimation = (nextLogs, trigger, previousUidSet = new Set())
   animatedUidDelayMap.value = delayMap
   lastAnimatedUidCount.value = animatedUids.length
   currentAnimationMode.value = normalizedTrigger
-  triggerQueryBatchGlow()
+  if (normalizedTrigger !== 'auto') {
+    triggerQueryBatchGlow()
+  }
   scheduleQueryEnterAnimationCleanup(animatedUids.length)
 }
 
 const isLogQueryEntering = (log) => {
   if (!log?.uid) return false
   return Object.prototype.hasOwnProperty.call(animatedUidDelayMap.value, log.uid)
+}
+
+const isAutoRefreshQueryEntering = (log) => {
+  return currentAnimationMode.value === 'auto' && isLogQueryEntering(log)
 }
 
 const getLogQueryEnterStyle = (log) => {
