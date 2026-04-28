@@ -1,12 +1,15 @@
 {
-  "version": "v1.2.4",
-  "releaseDate": "2026-04-27",
+  "version": "v1.2.5",
+  "releaseDate": "2026-04-28",
   "description": "LogAnalysis 日志智能工作台",
   "buildInfo": {
-    "buildNumber": "2026042701",
+    "buildNumber": "2026042801",
     "environment": "production"
-  }, 
+  },
   "updateInfo": [
-    "优化日志自动刷新的动画"
+    "统一手动与自动 AI 根因分析入参，补充 traceId 链路日志与 stackTrace，并增加长度限制",
+    "LLM 配置新增思考模式开关与思考强度参数，后端支持不兼容场景自动降级",
+    "告警管理筛选优化：告警状态仅保留待处理/已解决，状态、级别、时间范围变更自动触发搜索",
+    "统一告警列表排序规则（待处理优先，其次按触发时间升序），修复项目筛选场景下排序与 SQL 异常问题"
   ]
 }

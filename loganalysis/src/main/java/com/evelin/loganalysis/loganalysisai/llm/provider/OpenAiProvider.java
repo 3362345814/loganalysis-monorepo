@@ -87,6 +87,7 @@ public class OpenAiProvider implements LlmProvider {
             if (supportsReasoningEffort) {
                 requestBody.put("reasoning_effort", requestedReasoningEffort);
             }
+            applyResponseFormat(requestBody, safeRequest);
             
             // 构建消息列表
             List<Map<String, String>> messages = new ArrayList<>();
@@ -254,6 +255,34 @@ public class OpenAiProvider implements LlmProvider {
                 || lower.contains("not support")
                 || lower.contains("invalid parameter")
                 || lower.contains("unknown parameter");
+    }
+
+    private void applyResponseFormat(Map<String, Object> requestBody, LlmRequest request) {
+        if (request == null) {
+            return;
+        }
+        String formatType = request.getResponseFormatType();
+        if (formatType == null || formatType.isBlank()) {
+            return;
+        }
+        String normalizedType = formatType.trim().toLowerCase(Locale.ROOT);
+        if ("json_object".equals(normalizedType)) {
+            requestBody.put("response_format", Map.of("type", "json_object"));
+            return;
+        }
+        if ("json_schema".equals(normalizedType)) {
+            Map<String, Object> schema = request.getResponseFormatSchema();
+            String schemaName = request.getResponseFormatSchemaName();
+            if (schema != null && !schema.isEmpty() && schemaName != null && !schemaName.isBlank()) {
+                Map<String, Object> jsonSchema = new HashMap<>();
+                jsonSchema.put("name", schemaName);
+                jsonSchema.put("schema", schema);
+                jsonSchema.put("strict", true);
+                requestBody.put("response_format", Map.of("type", "json_schema", "json_schema", jsonSchema));
+            } else {
+                requestBody.put("response_format", Map.of("type", "json_object"));
+            }
+        }
     }
 
     private String resolveChatCompletionPath(String baseUrl) {

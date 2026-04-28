@@ -28,6 +28,7 @@ public class RootCauseAnalyzer {
     private final PromptTemplateManager promptTemplateManager;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final int MAX_PARSE_RETRIES = 2;
     
     /**
      * 分析日志异常，返回根因分析结果
@@ -46,6 +47,9 @@ public class RootCauseAnalyzer {
         LlmRequest request = new LlmRequest();
         request.setPrompt(prompt);
         request.setSystemPrompt(promptTemplateManager.getSystemPrompt());
+        request.setResponseFormatType("json_schema");
+        request.setResponseFormatSchemaName("root_cause_analysis_response");
+        request.setResponseFormatSchema(buildRootCauseResponseSchema());
         
         LlmResponse response = invokeLlm(request);
         
@@ -184,12 +188,8 @@ public class RootCauseAnalyzer {
         
         if (response.isSuccess()) {
             try {
-                // 解析 JSON 响应
-                String content = response.getContent();
-                // 清理可能存在的 markdown 代码块标记
-                content = content.replaceAll("```json", "").replaceAll("```", "").trim();
-                
-                JsonNode jsonNode = objectMapper.readTree(content);
+                JsonNode jsonNode = parseAndRepairJson(response, aggregationData);
+                validateAnalysisJson(jsonNode);
                 
                 result.setRootCause(getTextValue(jsonNode, "root_cause"));
                 result.setRootCauseCategory(getTextValue(jsonNode, "root_cause_category"));
@@ -216,6 +216,134 @@ public class RootCauseAnalyzer {
         result.setResponseTokens(response.getCompletionTokens());
         
         return result;
+    }
+
+    private JsonNode parseAndRepairJson(LlmResponse response, Map<String, Object> aggregationData) throws Exception {
+        Exception lastError = null;
+        String content = response.getContent();
+
+        for (int attempt = 0; attempt <= MAX_PARSE_RETRIES; attempt++) {
+            try {
+                String cleaned = cleanupJsonContent(content);
+                JsonNode jsonNode = objectMapper.readTree(cleaned);
+                if (jsonNode == null || !jsonNode.isObject()) {
+                    throw new IllegalArgumentException("响应不是合法 JSON 对象");
+                }
+                return jsonNode;
+            } catch (Exception ex) {
+                lastError = ex;
+                if (attempt >= MAX_PARSE_RETRIES) {
+                    break;
+                }
+                log.warn("第 {} 次解析 AI JSON 失败，尝试自动修复重试: {}", attempt + 1, ex.getMessage());
+                LlmResponse repaired = requestJsonRepair(content, aggregationData, attempt + 1);
+                if (repaired == null || !repaired.isSuccess() || repaired.getContent() == null || repaired.getContent().isBlank()) {
+                    throw new IllegalStateException("JSON 修复请求失败: " + (repaired != null ? repaired.getErrorMessage() : "empty response"));
+                }
+                content = repaired.getContent();
+            }
+        }
+        throw new IllegalStateException("LLM 返回内容无法解析为合法 JSON: " + (lastError != null ? lastError.getMessage() : "unknown"));
+    }
+
+    private LlmResponse requestJsonRepair(String invalidContent, Map<String, Object> aggregationData, int round) {
+        LlmRequest repairRequest = new LlmRequest();
+        repairRequest.setSystemPrompt("你是一个严格的 JSON 修复器。你只能输出合法 JSON，不允许输出任何解释或 markdown。");
+        repairRequest.setPrompt("""
+                请将下面内容修复为合法 JSON，并严格符合指定字段要求。
+                只返回 JSON 对象本身，不要返回其他任何内容。
+
+                字段要求：
+                - root_cause: string, 非空
+                - root_cause_category: string, 只能是 DATABASE/NETWORK/MEMORY/CODE/CONFIG/UNKNOWN
+                - confidence: number, 范围 [0,1]
+                - analysis_detail: string, 非空
+                - impact_scope: string, 非空
+                - impact_severity: string, 只能是 HIGH/MEDIUM/LOW
+
+                原始内容：
+                %s
+                """.formatted(invalidContent != null ? invalidContent : ""));
+        repairRequest.setResponseFormatType("json_schema");
+        repairRequest.setResponseFormatSchemaName("root_cause_analysis_response_repair_" + round);
+        repairRequest.setResponseFormatSchema(buildRootCauseResponseSchema());
+        return invokeLlm(repairRequest);
+    }
+
+    private String cleanupJsonContent(String content) {
+        if (content == null) {
+            return "";
+        }
+        return content.replaceAll("```json", "").replaceAll("```", "").trim();
+    }
+
+    private void validateAnalysisJson(JsonNode jsonNode) {
+        ensureTextField(jsonNode, "root_cause");
+        String category = ensureTextField(jsonNode, "root_cause_category").toUpperCase(Locale.ROOT);
+        if (!Set.of("DATABASE", "NETWORK", "MEMORY", "CODE", "CONFIG", "UNKNOWN").contains(category)) {
+            throw new IllegalArgumentException("root_cause_category 不在允许枚举内: " + category);
+        }
+        JsonNode confidenceNode = jsonNode.get("confidence");
+        if (confidenceNode == null || !confidenceNode.isNumber()) {
+            throw new IllegalArgumentException("confidence 缺失或不是数字");
+        }
+        double confidence = confidenceNode.asDouble();
+        if (confidence < 0 || confidence > 1) {
+            throw new IllegalArgumentException("confidence 超出范围[0,1]: " + confidence);
+        }
+        ensureTextField(jsonNode, "analysis_detail");
+        ensureTextField(jsonNode, "impact_scope");
+        String impactSeverity = ensureTextField(jsonNode, "impact_severity").toUpperCase(Locale.ROOT);
+        if (!Set.of("HIGH", "MEDIUM", "LOW").contains(impactSeverity)) {
+            throw new IllegalArgumentException("impact_severity 不在允许枚举内: " + impactSeverity);
+        }
+    }
+
+    private String ensureTextField(JsonNode node, String fieldName) {
+        JsonNode fieldNode = node.get(fieldName);
+        if (fieldNode == null || !fieldNode.isTextual()) {
+            throw new IllegalArgumentException(fieldName + " 缺失或不是字符串");
+        }
+        String text = fieldNode.asText();
+        if (text == null || text.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " 为空");
+        }
+        return text.trim();
+    }
+
+    private Map<String, Object> buildRootCauseResponseSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        Map<String, Object> properties = new LinkedHashMap<>();
+
+        properties.put("root_cause", Map.of("type", "string"));
+        properties.put("root_cause_category", Map.of(
+                "type", "string",
+                "enum", List.of("DATABASE", "NETWORK", "MEMORY", "CODE", "CONFIG", "UNKNOWN")
+        ));
+        properties.put("confidence", Map.of(
+                "type", "number",
+                "minimum", 0,
+                "maximum", 1
+        ));
+        properties.put("analysis_detail", Map.of("type", "string"));
+        properties.put("impact_scope", Map.of("type", "string"));
+        properties.put("impact_severity", Map.of(
+                "type", "string",
+                "enum", List.of("HIGH", "MEDIUM", "LOW")
+        ));
+
+        schema.put("properties", properties);
+        schema.put("required", List.of(
+                "root_cause",
+                "root_cause_category",
+                "confidence",
+                "analysis_detail",
+                "impact_scope",
+                "impact_severity"
+        ));
+        schema.put("additionalProperties", false);
+        return schema;
     }
     
     /**

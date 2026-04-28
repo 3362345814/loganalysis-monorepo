@@ -39,6 +39,22 @@ public class LlmRequest {
      * 历史消息
      */
     private java.util.List<ChatMessage> messages;
+
+    /**
+     * 响应格式类型：
+     * json_schema / json_object / text
+     */
+    private String responseFormatType;
+
+    /**
+     * JSON Schema 名称（responseFormatType=json_schema 时使用）
+     */
+    private String responseFormatSchemaName;
+
+    /**
+     * JSON Schema（responseFormatType=json_schema 时使用）
+     */
+    private java.util.Map<String, Object> responseFormatSchema;
     
     @Data
     public static class ChatMessage {
