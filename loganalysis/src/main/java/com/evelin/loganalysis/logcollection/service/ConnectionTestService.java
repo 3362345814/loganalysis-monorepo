@@ -2,6 +2,9 @@ package com.evelin.loganalysis.logcollection.service;
 
 import com.evelin.loganalysis.logcollection.dto.ConnectionTestRequest;
 import com.evelin.loganalysis.logcollection.dto.ConnectionTestResponse;
+import com.evelin.loganalysis.logcollection.enums.LogSourceType;
+import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
+import com.evelin.loganalysis.logcommon.model.Project;
 import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.ChannelSftp;
@@ -21,13 +24,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @Service
+@lombok.RequiredArgsConstructor
 public class ConnectionTestService {
 
     private static final int DEFAULT_SSH_PORT = 22;
     private static final int CONNECTION_TIMEOUT = 10000;
+    private final ProjectRepository projectRepository;
 
     public ConnectionTestResponse testSshConnection(ConnectionTestRequest request) {
         String host = request.getHost();
@@ -98,8 +104,18 @@ public class ConnectionTestService {
     }
 
     public ConnectionTestResponse testPathExists(ConnectionTestRequest request) {
-        String sourceType = request.getSourceType();
-        List<String> paths = request.getPaths();
+        ConnectionTestRequest effectiveRequest;
+        try {
+            effectiveRequest = resolveEffectivePathTestRequest(request);
+        } catch (Exception e) {
+            log.warn("解析路径验证请求失败: {}", e.getMessage());
+            return ConnectionTestResponse.builder()
+                    .success(false)
+                    .message(e.getMessage())
+                    .build();
+        }
+        String sourceType = effectiveRequest.getSourceType();
+        List<String> paths = effectiveRequest.getPaths();
 
         if (paths == null || paths.isEmpty()) {
             return ConnectionTestResponse.builder()
@@ -114,7 +130,7 @@ public class ConnectionTestService {
 
         try {
             if ("SSH".equalsIgnoreCase(sourceType)) {
-                return testSshPath(request, responseBuilder);
+                return testSshPath(effectiveRequest, responseBuilder);
             } else {
                 return testLocalPath(paths, responseBuilder);
             }
@@ -125,6 +141,42 @@ public class ConnectionTestService {
                     .message("路径验证失败: " + e.getMessage())
                     .build();
         }
+    }
+
+    private ConnectionTestRequest resolveEffectivePathTestRequest(ConnectionTestRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("请求不能为空");
+        }
+        if (!Boolean.TRUE.equals(request.getUseProjectConnectionConfig())) {
+            return request;
+        }
+        if (request.getProjectId() == null) {
+            throw new IllegalArgumentException("沿用项目配置时必须选择项目");
+        }
+
+        Project project = projectRepository.findById(request.getProjectId())
+                .orElseThrow(() -> new IllegalArgumentException("项目不存在: " + request.getProjectId()));
+        if (project.getCollectionSourceType() == null) {
+            throw new IllegalArgumentException("当前项目未配置采集连接信息");
+        }
+
+        ConnectionTestRequest effectiveRequest = new ConnectionTestRequest();
+        effectiveRequest.setProjectId(project.getId());
+        effectiveRequest.setUseProjectConnectionConfig(true);
+        effectiveRequest.setPaths(request.getPaths());
+        effectiveRequest.setSourceType(project.getCollectionSourceType().name());
+
+        if (project.getCollectionSourceType() == LogSourceType.SSH) {
+            if (isBlank(project.getSshHost()) || isBlank(project.getSshUsername()) || isBlank(project.getSshPassword())) {
+                throw new IllegalArgumentException("当前项目 SSH 配置不完整");
+            }
+            effectiveRequest.setHost(project.getSshHost());
+            effectiveRequest.setPort(Objects.requireNonNullElse(project.getSshPort(), DEFAULT_SSH_PORT));
+            effectiveRequest.setUsername(project.getSshUsername());
+            effectiveRequest.setPassword(project.getSshPassword());
+        }
+
+        return effectiveRequest;
     }
 
     private ConnectionTestResponse testSshPath(ConnectionTestRequest request,
@@ -324,5 +376,9 @@ public class ConnectionTestService {
                 .missingCount(missingPaths.size())
                 .missingPaths(missingPaths)
                 .build();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

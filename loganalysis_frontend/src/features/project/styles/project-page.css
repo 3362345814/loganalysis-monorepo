@@ -10,3 +10,16 @@
 .toolbar-right {
   text-align: right;
 }
+
+.test-result {
+  margin-left: var(--space-12);
+  font-size: 13px;
+}
+
+.test-result.success {
+  color: var(--color-success, #67c23a);
+}
+
+.test-result.error {
+  color: var(--color-danger, #f56c6c);
+}

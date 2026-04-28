@@ -21,6 +21,7 @@
 
     <!-- 新建/编辑对话框 -->
     <el-dialog 
+      class="source-create-dialog"
       v-model="dialogVisible" 
       :title="isEdit ? '编辑采集源' : '新建采集源'" 
       width="700px"
@@ -377,6 +378,19 @@
               :placeholder="isProjectEdit && projectForm.sshPasswordConfigured ? '已配置（留空则保留原密码）' : 'SSH密码'"
             />
           </el-form-item>
+          <el-form-item>
+            <el-button
+              type="info"
+              :icon="Connection"
+              :loading="testingProjectSsh"
+              @click="handleTestProjectSsh()"
+            >
+              测试SSH连接
+            </el-button>
+            <span v-if="projectSshTestResult !== null" class="test-result" :class="projectSshTestResult ? 'success' : 'error'">
+              {{ projectSshTestResult ? '连接成功' : '连接失败' }}
+            </span>
+          </el-form-item>
         </template>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="projectForm.enabled" />
@@ -542,6 +556,8 @@ const projectSelectDialogVisible = ref(false)
 const projectSearchText = ref('')
 const testingSsh = ref(false)
 const sshTestResult = ref(null)
+const testingProjectSsh = ref(false)
+const projectSshTestResult = ref(null)
 const sshPasswordConfigured = ref(false)
 const testingPath = ref(false)
 const pathTestResult = ref(null)
@@ -931,6 +947,7 @@ const refreshCurrentProject = async () => {
 const handleCreateProject = () => {
   isProjectEdit.value = false
   Object.assign(projectForm, createEmptyProjectForm())
+  projectSshTestResult.value = null
   projectSelectDialogVisible.value = false
   projectDialogVisible.value = true
 }
@@ -951,6 +968,7 @@ const handleEditProject = (project) => {
     sshPasswordConfigured: project.sshPasswordConfigured === true,
     enabled: project.enabled !== false
   })
+  projectSshTestResult.value = null
   projectSelectDialogVisible.value = false
   projectDialogVisible.value = true
 }
@@ -971,6 +989,7 @@ const createEmptyProjectForm = () => ({
 })
 
 const handleProjectSourceTypeChange = (value) => {
+  projectSshTestResult.value = null
   if (value !== 'SSH') {
     projectForm.sshHost = ''
     projectForm.sshPort = 22
@@ -979,8 +998,65 @@ const handleProjectSourceTypeChange = (value) => {
   }
 }
 
+const buildProjectSshTestPayload = () => ({
+  host: projectForm.sshHost?.trim(),
+  port: projectForm.sshPort || 22,
+  username: projectForm.sshUsername?.trim(),
+  password: projectForm.sshPassword
+})
+
+const handleTestProjectSsh = async ({ silent = false } = {}) => {
+  const payload = buildProjectSshTestPayload()
+  if (!payload.host) {
+    if (!silent) ElMessage.warning('请输入SSH主机地址')
+    return false
+  }
+  if (!payload.username) {
+    if (!silent) ElMessage.warning('请输入SSH用户名')
+    return false
+  }
+  if (!payload.password?.trim()) {
+    if (isProjectEdit.value && projectForm.sshPasswordConfigured) {
+      if (!silent) ElMessage.warning('当前为保留旧密码模式，如需前端立即测试请输入新密码；保存时后端会用已保存密码校验')
+      projectSshTestResult.value = null
+      return true
+    }
+    if (!silent) ElMessage.warning('请输入SSH密码')
+    return false
+  }
+
+  testingProjectSsh.value = true
+  projectSshTestResult.value = null
+  try {
+    const res = await logSourceApi.testSshConnection(payload)
+    const ok = res?.data?.success === true
+    projectSshTestResult.value = ok
+    if (!silent) {
+      if (ok) {
+        ElMessage.success(res.data.message || 'SSH连接成功')
+      } else {
+        ElMessage.error(res.data.message || 'SSH连接失败')
+      }
+    }
+    return ok
+  } catch (error) {
+    projectSshTestResult.value = false
+    if (!silent) ElMessage.error(error?.message || 'SSH连接测试失败')
+    return false
+  } finally {
+    testingProjectSsh.value = false
+  }
+}
+
 const handleProjectSubmit = async () => {
   await projectFormRef.value.validate()
+  if (projectForm.collectionSourceType === 'SSH') {
+    const ok = await handleTestProjectSsh({ silent: true })
+    if (!ok) {
+      ElMessage.error('SSH连接测试失败，无法保存项目配置')
+      return
+    }
+  }
   projectSubmitting.value = true
   try {
     if (isProjectEdit.value) {
@@ -1159,6 +1235,84 @@ const validateSourceFields = async (fields) => {
   }
 }
 
+const buildPathValidationConfig = (paths) => {
+  if (!paths?.length) return null
+
+  if (form.value.useProjectConnectionConfig) {
+    if (!currentProject.value?.id || !currentProjectConnectionConfigured.value) {
+      return { skip: true }
+    }
+    return {
+      useProjectConnectionConfig: true,
+      projectId: currentProject.value.id,
+      sourceType: currentProject.value.collectionSourceType,
+      paths
+    }
+  }
+
+  if (form.value.sourceType !== 'SSH') {
+    return {
+      sourceType: form.value.sourceType,
+      paths
+    }
+  }
+
+  if (!form.value.host || !form.value.username) {
+    return { skip: true }
+  }
+
+  const hasInputPassword = !!form.value.password?.trim()
+  const keepExistingPassword = isEdit.value && sshPasswordConfigured.value && !hasInputPassword
+  if (keepExistingPassword || !hasInputPassword) {
+    return { skip: true }
+  }
+
+  return {
+    sourceType: 'SSH',
+    paths,
+    host: form.value.host,
+    port: form.value.port || 22,
+    username: form.value.username,
+    password: form.value.password
+  }
+}
+
+const validatePathsBeforeProceed = async () => {
+  const paths = form.value.paths?.map(p => (p || '').trim()).filter(Boolean) || []
+  if (paths.length === 0) return false
+
+  const config = buildPathValidationConfig(paths)
+  if (!config) return false
+  if (config.skip) {
+    if (form.value.useProjectConnectionConfig) {
+      ElMessage.error('请先完成项目连接配置，再验证路径')
+      return false
+    }
+    return true
+  }
+
+  testingPath.value = true
+  pathTestResult.value = null
+  pathTestMessage.value = ''
+  try {
+    const res = await logSourceApi.testPathExists(config)
+    const ok = res?.data?.success === true
+    pathTestResult.value = ok
+    pathTestMessage.value = res.data?.message || (ok ? '路径存在' : '路径不存在')
+    if (!ok) {
+      ElMessage.error('路径验证失败: ' + (pathTestMessage.value || '路径不存在'))
+    }
+    return ok
+  } catch (error) {
+    pathTestResult.value = false
+    pathTestMessage.value = error?.message || '验证失败'
+    ElMessage.error('路径验证失败: ' + pathTestMessage.value)
+    return false
+  } finally {
+    testingPath.value = false
+  }
+}
+
 const handleNextStep = async () => {
   if (activeTab.value === 'basic') {
     if (form.value.useProjectConnectionConfig && !currentProjectConnectionConfigured.value) {
@@ -1179,6 +1333,8 @@ const handleNextStep = async () => {
   if (activeTab.value === 'log-config') {
     const valid = await validateSourceFields(['paths', 'logFormatPattern', 'traceFieldName'])
     if (!valid) return
+    const pathValid = await validatePathsBeforeProceed()
+    if (!pathValid) return
   }
 
   if (currentStepIndex.value >= stepOrder.length - 1) return
@@ -1259,30 +1415,15 @@ const handleAutoTestPath = async () => {
   if (paths.length === 0) {
     return
   }
-
-  if (form.value.useProjectConnectionConfig) {
+  const config = buildPathValidationConfig(paths)
+  if (!config || config.skip) {
     return
-  }
-
-  // 如果是 SSH 类型但没有配置 SSH，则跳过
-  if (form.value.sourceType === 'SSH') {
-    if (!form.value.host || !form.value.username || !form.value.password) {
-      return
-    }
   }
 
   testingPath.value = true
   pathTestResult.value = null
   pathTestMessage.value = ''
   try {
-    const config = {
-      sourceType: form.value.sourceType,
-      paths: paths,
-      host: form.value.host,
-      port: form.value.port || 22,
-      username: form.value.username,
-      password: form.value.password
-    }
     const res = await logSourceApi.testPathExists(config)
     pathTestResult.value = res.data.success
     pathTestMessage.value = res.data.message || (res.data.success ? '路径存在' : '路径不存在')
@@ -1301,6 +1442,11 @@ const handleSubmit = async () => {
   if (form.value.useProjectConnectionConfig && !currentProjectConnectionConfigured.value) {
     ElMessage.warning('当前项目未配置采集连接信息')
     return
+  }
+
+  if (form.value.useProjectConnectionConfig) {
+    const pathOk = await validatePathsBeforeProceed()
+    if (!pathOk) return
   }
 
   // SSH 类型：点击确定时先执行连接和路径测试

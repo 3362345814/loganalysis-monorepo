@@ -190,7 +190,9 @@ public class AggregationGroupService {
      * 按可选条件分页查询聚合组
      */
     public Page<AggregationGroupEntity> findByFilters(String analysisStatus, String severity, String sourceId, Pageable pageable) {
-        return aggregationGroupRepository.findByFilters(analysisStatus, severity, sourceId, pageable);
+        Page<AggregationGroupEntity> page = aggregationGroupRepository.findByFilters(analysisStatus, severity, sourceId, pageable);
+        syncAnalyzedFlags(page.getContent());
+        return page;
     }
 
     /**
@@ -224,6 +226,46 @@ public class AggregationGroupService {
             group.setStatus("ANALYZED");
             aggregationGroupRepository.save(group);
         });
+    }
+
+    @Transactional
+    protected void syncAnalyzedFlags(List<AggregationGroupEntity> groups) {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+
+        List<String> groupIds = groups.stream()
+                .map(AggregationGroupEntity::getGroupId)
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+        if (groupIds.isEmpty()) {
+            return;
+        }
+
+        Set<String> analyzedGroupIds = new HashSet<>(analysisResultRepository.findDistinctAggregationIdsIn(groupIds));
+        List<AggregationGroupEntity> dirtyGroups = new ArrayList<>();
+
+        for (AggregationGroupEntity group : groups) {
+            String groupId = group.getGroupId();
+            if (groupId == null || groupId.isBlank()) {
+                continue;
+            }
+            boolean shouldBeAnalyzed = analyzedGroupIds.contains(groupId);
+            boolean isAnalyzed = Boolean.TRUE.equals(group.getIsAnalyzed());
+            if (shouldBeAnalyzed == isAnalyzed) {
+                continue;
+            }
+            group.setIsAnalyzed(shouldBeAnalyzed);
+            if (shouldBeAnalyzed) {
+                group.setStatus("ANALYZED");
+            }
+            dirtyGroups.add(group);
+        }
+
+        if (!dirtyGroups.isEmpty()) {
+            aggregationGroupRepository.saveAll(dirtyGroups);
+        }
     }
 
     /**

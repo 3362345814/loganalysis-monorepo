@@ -165,6 +165,9 @@ public class AnalysisService {
         // 保存结果
             result.setId(analysisId);
             saveAnalysisResult(result);
+            if (isAnalyzedStatus(result.getStatus())) {
+                aggregationGroupService.markAsAnalyzed(aggregationId);
+            }
 
         log.info("聚合组 {} 分析完成，状态: {}", aggregationId, result.getStatus());
         return result;
@@ -206,6 +209,7 @@ public class AnalysisService {
         entity.setStatusMessage(limitLength(message != null ? message : "分析执行失败", 500));
         entity.setCompletedAt(LocalDateTime.now());
         analysisResultRepository.save(entity);
+        aggregationGroupService.markAsAnalyzed(aggregationId);
     }
 
     private boolean isRunningStatus(String status) {

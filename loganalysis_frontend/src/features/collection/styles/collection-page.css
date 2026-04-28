@@ -20,6 +20,10 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
+.source-create-dialog .el-dialog__body {
+  padding-top: 0;
+}
+
 .source-create-steps {
   width: 560px;
   max-width: 100%;

@@ -85,6 +85,19 @@
               :placeholder="isEdit && form.sshPasswordConfigured ? '已配置（留空则保留原密码）' : 'SSH密码'"
             />
           </el-form-item>
+          <el-form-item>
+            <el-button
+              type="info"
+              :icon="Connection"
+              :loading="testingProjectSsh"
+              @click="handleTestProjectSsh()"
+            >
+              测试SSH连接
+            </el-button>
+            <span v-if="projectSshTestResult !== null" class="test-result" :class="projectSshTestResult ? 'success' : 'error'">
+              {{ projectSshTestResult ? '连接成功' : '连接失败' }}
+            </span>
+          </el-form-item>
         </template>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="form.enabled" />
@@ -101,8 +114,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
-import { projectApi } from '@/api'
+import { Plus, Edit, Delete, Refresh, Connection } from '@element-plus/icons-vue'
+import { projectApi, logSourceApi } from '@/api'
 
 const projects = ref([])
 const loading = ref(false)
@@ -110,6 +123,8 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
 const formRef = ref(null)
+const testingProjectSsh = ref(false)
+const projectSshTestResult = ref(null)
 
 const form = reactive({
   name: '',
@@ -170,6 +185,7 @@ const loadProjects = async () => {
 const handleCreate = () => {
   isEdit.value = false
   Object.assign(form, createEmptyProjectForm())
+  projectSshTestResult.value = null
   dialogVisible.value = true
 }
 
@@ -181,6 +197,7 @@ const handleEdit = (row) => {
     sshPasswordConfigured: row.sshPasswordConfigured === true,
     sshPort: row.sshPort || 22
   })
+  projectSshTestResult.value = null
   dialogVisible.value = true
 }
 
@@ -201,11 +218,62 @@ const createEmptyProjectForm = () => ({
 })
 
 const handleProjectSourceTypeChange = (value) => {
+  projectSshTestResult.value = null
   if (value !== 'SSH') {
     form.sshHost = ''
     form.sshPort = 22
     form.sshUsername = ''
     form.sshPassword = ''
+  }
+}
+
+const buildSshTestPayload = () => ({
+  host: form.sshHost?.trim(),
+  port: form.sshPort || 22,
+  username: form.sshUsername?.trim(),
+  password: form.sshPassword
+})
+
+const handleTestProjectSsh = async ({ silent = false } = {}) => {
+  const payload = buildSshTestPayload()
+  if (!payload.host) {
+    if (!silent) ElMessage.warning('请输入SSH主机地址')
+    return false
+  }
+  if (!payload.username) {
+    if (!silent) ElMessage.warning('请输入SSH用户名')
+    return false
+  }
+  if (!payload.password?.trim()) {
+    if (isEdit.value && form.sshPasswordConfigured) {
+      if (!silent) ElMessage.warning('当前为保留旧密码模式，如需前端立即测试请输入新密码；保存时后端会用已保存密码校验')
+      projectSshTestResult.value = null
+      return true
+    }
+    if (!silent) ElMessage.warning('请输入SSH密码')
+    return false
+  }
+
+  testingProjectSsh.value = true
+  projectSshTestResult.value = null
+  try {
+    const res = await logSourceApi.testSshConnection(payload)
+    const ok = res?.data?.success === true
+    projectSshTestResult.value = ok
+    if (!silent) {
+      if (ok) {
+        ElMessage.success(res.data.message || 'SSH连接成功')
+      } else {
+        ElMessage.error(res.data.message || 'SSH连接失败')
+      }
+    }
+    return ok
+  } catch (error) {
+    projectSshTestResult.value = false
+    if (!silent) ElMessage.error(error?.message || 'SSH连接测试失败')
+    return false
+  } finally {
+    testingProjectSsh.value = false
   }
 }
 
@@ -219,6 +287,13 @@ const formatSourceType = (sourceType) => {
 
 const handleSubmit = async () => {
   await formRef.value.validate()
+  if (form.collectionSourceType === 'SSH') {
+    const ok = await handleTestProjectSsh({ silent: true })
+    if (!ok) {
+      ElMessage.error('SSH连接测试失败，无法保存项目配置')
+      return
+    }
+  }
   submitting.value = true
   try {
     if (isEdit.value) {

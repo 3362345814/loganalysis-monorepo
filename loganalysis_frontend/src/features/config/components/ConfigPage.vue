@@ -93,18 +93,8 @@
       </el-form>
       <template #footer>
         <el-button @click="llmDialogVisible = false">取消</el-button>
-        <el-button
-          v-if="isEditLlm"
-          type="success"
-          plain
-          @click="handleTestLlmConnection"
-          :loading="testingLlmConnection"
-          :disabled="submittingLlm"
-        >
-          保存并测试
-        </el-button>
-        <el-button type="primary" @click="handleSubmitLlm" :loading="submittingLlm">
-          {{ isEditLlm ? '更新' : '创建' }}
+        <el-button type="primary" @click="handleTestLlmConnection" :loading="testingLlmConnection">
+          {{ isEditLlm ? '测试并更新' : '测试并创建' }}
         </el-button>
       </template>
     </el-dialog>
@@ -139,7 +129,6 @@ const analysisConfigForm = ref({
 })
 
 const loadingLlm = ref(false)
-const submittingLlm = ref(false)
 const testingLlmConnection = ref(false)
 const llmConfigList = ref([])
 const llmDialogVisible = ref(false)
@@ -340,47 +329,44 @@ const handleEditLlm = (row) => {
   llmDialogVisible.value = true
 }
 
-const handleSubmitLlm = async () => {
-  const valid = await llmFormRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  submittingLlm.value = true
-  try {
-    if (isEditLlm.value) {
-      await llmConfigApi.update(llmForm.value.id, llmForm.value)
-      ElMessage.success('更新成功')
-    } else {
-      await llmConfigApi.create(llmForm.value)
-      ElMessage.success('创建成功')
-    }
-    llmDialogVisible.value = false
-    await loadLlmConfigs()
-  } catch (error) {
-    console.error('保存 LLM 配置失败:', error)
-    ElMessage.error('保存失败')
-  } finally {
-    submittingLlm.value = false
-  }
-}
-
 const handleTestLlmConnection = async () => {
-  if (!isEditLlm.value || !llmForm.value.id) {
-    ElMessage.warning('请先保存配置后再测试连接')
-    return
-  }
-
   const valid = await llmFormRef.value.validate().catch(() => false)
   if (!valid) return
 
   testingLlmConnection.value = true
   try {
-    await llmConfigApi.update(llmForm.value.id, llmForm.value)
-    const res = await llmConfigApi.validate(llmForm.value.id)
+    const editing = isEditLlm.value
+    let configId = llmForm.value.id
+
+    if (editing && configId) {
+      await llmConfigApi.update(configId, llmForm.value)
+    } else {
+      const createRes = await llmConfigApi.create(llmForm.value)
+      configId = createRes?.data?.id
+      if (!configId) {
+        await loadLlmConfigs()
+        const matched = llmConfigList.value.find(item =>
+          item.name === llmForm.value.name &&
+          item.model === llmForm.value.model &&
+          item.endpoint === llmForm.value.endpoint
+        )
+        configId = matched?.id
+      }
+      if (!configId) {
+        throw new Error('创建成功但未获取到配置ID，无法执行连接测试')
+      }
+      llmForm.value = { ...llmForm.value, id: configId }
+      isEditLlm.value = true
+    }
+
+    const res = await llmConfigApi.validate(configId)
     if (res.data === true) {
-      ElMessage.success('连接测试成功')
+      ElMessage.success(editing ? '测试并更新成功' : '测试并创建成功')
+      llmDialogVisible.value = false
     } else {
       ElMessage.error('连接测试失败，请检查 API Key、模型和端点配置')
     }
+    await loadLlmConfigs()
   } catch (error) {
     console.error('LLM 连接测试失败:', error)
     ElMessage.error('测试连接失败: ' + (error.message || '未知错误'))

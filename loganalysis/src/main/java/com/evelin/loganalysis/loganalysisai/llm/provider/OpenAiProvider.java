@@ -113,9 +113,6 @@ public class OpenAiProvider implements LlmProvider {
             
             requestBody.put("messages", messages);
             
-            // 发送请求
-            String requestJson = objectMapper.writeValueAsString(requestBody);
-            
             // 根据提供商确定基础 URL
             String baseUrl = getBaseUrl(provider, endpoint);
             String apiPath = resolveChatCompletionPath(baseUrl);
@@ -123,43 +120,16 @@ public class OpenAiProvider implements LlmProvider {
             
             log.info("调用 LLM API, 提供商: {}, 模型: {}", provider, model);
 
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(fullUrl))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .timeout(Duration.ofSeconds(timeout))
-                    .POST(HttpRequest.BodyPublishers.ofString(requestJson))
-                    .build();
-            
-            HttpResponse<String> response = httpClient.send(httpRequest,
-                    HttpResponse.BodyHandlers.ofString());
-            
-            long responseTime = System.currentTimeMillis() - startTime;
-
-            String body = response.body();
-            
-            // 解析响应
-            if (response.statusCode() == 200) {
-                return parseSuccessResponse(response.body(), model, responseTime);
-            } else {
-                if (supportsReasoningEffort && isReasoningEffortUnsupported(response.statusCode(), body)) {
-                    String fallbackEffort = fallbackReasoningEffort(requestedReasoningEffort);
-                    if (fallbackEffort != null && !Objects.equals(fallbackEffort, requestedReasoningEffort)) {
-                        log.warn("当前模型/提供商不支持 reasoning_effort='{}'，自动降级为 '{}'",
-                                requestedReasoningEffort, fallbackEffort);
-                        requestBody.put("reasoning_effort", fallbackEffort);
-                        return retryWithRequestBody(requestBody, fullUrl, apiKey, timeout, model, startTime);
-                    }
-                }
-                LlmResponse error = parseErrorResponse(response.body(), responseTime);
-                // 补充 statusCode，避免日志里只看到 "HTTP "
-                if (error.getErrorMessage() == null || error.getErrorMessage().isBlank()) {
-                    error.setErrorMessage("HTTP " + response.statusCode());
-                } else if (!error.getErrorMessage().startsWith("HTTP")) {
-                    error.setErrorMessage("HTTP " + response.statusCode() + " - " + error.getErrorMessage());
-                }
-                return error;
-            }
+            return executeWithFallbacks(
+                    requestBody,
+                    fullUrl,
+                    apiKey,
+                    timeout,
+                    model,
+                    startTime,
+                    supportsReasoningEffort,
+                    requestedReasoningEffort
+            );
             
         } catch (Exception e) {
             log.error("OpenAI API 调用失败: {}", e.getMessage(), e);
@@ -171,32 +141,73 @@ public class OpenAiProvider implements LlmProvider {
         }
     }
 
-    private LlmResponse retryWithRequestBody(Map<String, Object> requestBody,
+    private LlmResponse executeWithFallbacks(Map<String, Object> requestBody,
                                              String fullUrl,
                                              String apiKey,
                                              int timeout,
                                              String model,
-                                             long startTime) throws Exception {
-        String retryJson = objectMapper.writeValueAsString(requestBody);
-        HttpRequest retryRequest = HttpRequest.newBuilder()
+                                             long startTime,
+                                             boolean supportsReasoningEffort,
+                                             String requestedReasoningEffort) throws Exception {
+        String currentReasoningEffort = requestedReasoningEffort;
+        int attempts = 0;
+        while (attempts < 4) {
+            attempts++;
+            HttpResponse<String> response = sendRequest(requestBody, fullUrl, apiKey, timeout);
+            long responseTime = System.currentTimeMillis() - startTime;
+            String body = response.body();
+            int statusCode = response.statusCode();
+
+            if (statusCode == 200) {
+                return parseSuccessResponse(body, model, responseTime);
+            }
+
+            if (supportsReasoningEffort && isReasoningEffortUnsupported(statusCode, body)) {
+                String fallbackEffort = fallbackReasoningEffort(currentReasoningEffort);
+                if (fallbackEffort != null && !Objects.equals(fallbackEffort, currentReasoningEffort)) {
+                    log.warn("当前模型/提供商不支持 reasoning_effort='{}'，自动降级为 '{}'",
+                            currentReasoningEffort, fallbackEffort);
+                    currentReasoningEffort = fallbackEffort;
+                    requestBody.put("reasoning_effort", fallbackEffort);
+                    continue;
+                }
+            }
+
+            if (isResponseFormatUnsupported(statusCode, body) && downgradeResponseFormat(requestBody)) {
+                continue;
+            }
+
+            LlmResponse error = parseErrorResponse(body, responseTime);
+            // 补充 statusCode，避免日志里只看到 "HTTP "
+            if (error.getErrorMessage() == null || error.getErrorMessage().isBlank()) {
+                error.setErrorMessage("HTTP " + statusCode);
+            } else if (!error.getErrorMessage().startsWith("HTTP")) {
+                error.setErrorMessage("HTTP " + statusCode + " - " + error.getErrorMessage());
+            }
+            return error;
+        }
+
+        long responseTime = System.currentTimeMillis() - startTime;
+        LlmResponse error = new LlmResponse();
+        error.setStatus("error");
+        error.setResponseTimeMs(responseTime);
+        error.setErrorMessage("自动降级重试后仍调用失败");
+        return error;
+    }
+
+    private HttpResponse<String> sendRequest(Map<String, Object> requestBody,
+                                             String fullUrl,
+                                             String apiKey,
+                                             int timeout) throws Exception {
+        String requestJson = objectMapper.writeValueAsString(requestBody);
+        HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(fullUrl))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .timeout(Duration.ofSeconds(timeout))
-                .POST(HttpRequest.BodyPublishers.ofString(retryJson))
+                .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                 .build();
-        HttpResponse<String> retryResponse = httpClient.send(retryRequest, HttpResponse.BodyHandlers.ofString());
-        long responseTime = System.currentTimeMillis() - startTime;
-        if (retryResponse.statusCode() == 200) {
-            return parseSuccessResponse(retryResponse.body(), model, responseTime);
-        }
-        LlmResponse error = parseErrorResponse(retryResponse.body(), responseTime);
-        if (error.getErrorMessage() == null || error.getErrorMessage().isBlank()) {
-            error.setErrorMessage("HTTP " + retryResponse.statusCode());
-        } else if (!error.getErrorMessage().startsWith("HTTP")) {
-            error.setErrorMessage("HTTP " + retryResponse.statusCode() + " - " + error.getErrorMessage());
-        }
-        return error;
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private boolean supportsReasoningEffort(String provider, String model) {
@@ -250,11 +261,53 @@ public class OpenAiProvider implements LlmProvider {
             return false;
         }
         String lower = body.toLowerCase();
-        return lower.contains("reasoning_effort")
-                || lower.contains("unsupported")
+        if (!lower.contains("reasoning_effort") && !lower.contains("reasoning effort")) {
+            return false;
+        }
+        return lower.contains("unsupported")
                 || lower.contains("not support")
                 || lower.contains("invalid parameter")
                 || lower.contains("unknown parameter");
+    }
+
+    private boolean isResponseFormatUnsupported(int statusCode, String body) {
+        if (statusCode < 400 || body == null) {
+            return false;
+        }
+        String lower = body.toLowerCase(Locale.ROOT);
+        if (!lower.contains("response_format")) {
+            return false;
+        }
+        return lower.contains("json_schema")
+                || lower.contains("json_object")
+                || lower.contains("not supported")
+                || lower.contains("unsupported")
+                || lower.contains("invalid");
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean downgradeResponseFormat(Map<String, Object> requestBody) {
+        Object rawResponseFormat = requestBody.get("response_format");
+        if (!(rawResponseFormat instanceof Map<?, ?>)) {
+            return false;
+        }
+        Map<String, Object> responseFormat = (Map<String, Object>) rawResponseFormat;
+        Object typeObj = responseFormat.get("type");
+        String type = typeObj == null ? "" : String.valueOf(typeObj).trim().toLowerCase(Locale.ROOT);
+
+        if ("json_schema".equals(type)) {
+            log.warn("当前模型/提供商不支持 response_format=json_schema，自动降级为 json_object");
+            requestBody.put("response_format", Map.of("type", "json_object"));
+            return true;
+        }
+        if ("json_object".equals(type)) {
+            log.warn("当前模型/提供商不支持 response_format=json_object，自动移除 response_format，仅保留提示词约束");
+            requestBody.remove("response_format");
+            return true;
+        }
+        requestBody.remove("response_format");
+        log.warn("当前模型/提供商不支持 response_format，已自动移除该参数");
+        return true;
     }
 
     private void applyResponseFormat(Map<String, Object> requestBody, LlmRequest request) {

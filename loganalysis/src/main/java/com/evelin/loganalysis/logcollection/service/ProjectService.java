@@ -2,6 +2,8 @@ package com.evelin.loganalysis.logcollection.service;
 
 import com.evelin.loganalysis.logcollection.dto.ProjectCreateRequest;
 import com.evelin.loganalysis.logcollection.dto.ProjectResponse;
+import com.evelin.loganalysis.logcollection.dto.ConnectionTestRequest;
+import com.evelin.loganalysis.logcollection.dto.ConnectionTestResponse;
 import com.evelin.loganalysis.logcollection.enums.LogSourceType;
 import com.evelin.loganalysis.logcollection.repository.ProjectRepository;
 import com.evelin.loganalysis.logcommon.exception.BusinessException;
@@ -30,6 +32,7 @@ public class ProjectService {
     private static final String MASK_PREFIX = "******";
 
     private final ProjectRepository projectRepository;
+    private final ConnectionTestService connectionTestService;
 
     /**
      * 创建项目
@@ -43,6 +46,8 @@ public class ProjectService {
         if (projectRepository.existsByName(request.getName())) {
             throw new BusinessException(ResultCode.DATA_ALREADY_EXISTS, "项目名称已存在: " + request.getName());
         }
+
+        validateSshConnectionForSave(request, null);
 
         // 自动生成项目代码
         String code = generateProjectCode(request.getName());
@@ -105,6 +110,8 @@ public class ProjectService {
     public Optional<ProjectResponse> update(UUID id, ProjectCreateRequest request) {
         return projectRepository.findById(id)
                 .map(project -> {
+                    validateSshConnectionForSave(request, project);
+
                     // 检查名称是否与其他项目重复
                     if (request.getName() != null && !request.getName().equals(project.getName())) {
                         if (projectRepository.existsByName(request.getName())) {
@@ -246,5 +253,46 @@ public class ProjectService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void validateSshConnectionForSave(ProjectCreateRequest request, Project existingProject) {
+        LogSourceType sourceType = parseSourceType(request.getCollectionSourceType());
+        if (sourceType != LogSourceType.SSH) {
+            return;
+        }
+
+        String host = trimToNull(request.getSshHost());
+        String username = trimToNull(request.getSshUsername());
+        Integer port = request.getSshPort();
+        String password = resolvePasswordForValidation(request.getSshPassword(), existingProject);
+
+        if (host == null) {
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "请输入SSH主机地址");
+        }
+        if (username == null) {
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "请输入SSH用户名");
+        }
+        if (password == null || password.isBlank()) {
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "请输入SSH密码");
+        }
+
+        ConnectionTestRequest connectionTestRequest = new ConnectionTestRequest();
+        connectionTestRequest.setHost(host);
+        connectionTestRequest.setPort(port);
+        connectionTestRequest.setUsername(username);
+        connectionTestRequest.setPassword(password);
+
+        ConnectionTestResponse response = connectionTestService.testSshConnection(connectionTestRequest);
+        if (response == null || !response.isSuccess()) {
+            String message = response != null ? response.getMessage() : "SSH连接测试失败";
+            throw new BusinessException(ResultCode.RULE_VALIDATION_ERROR, "项目 SSH 连接测试失败: " + message);
+        }
+    }
+
+    private String resolvePasswordForValidation(String submittedPassword, Project existingProject) {
+        if (shouldUpdateSecret(submittedPassword)) {
+            return submittedPassword;
+        }
+        return existingProject != null ? existingProject.getSshPassword() : null;
     }
 }

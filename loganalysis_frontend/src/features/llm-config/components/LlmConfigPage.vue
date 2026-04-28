@@ -142,18 +142,8 @@
       
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button
-          v-if="isEdit"
-          type="success"
-          plain
-          @click="handleTestConnection"
-          :loading="testLoading"
-          :disabled="submitLoading"
-        >
-          保存并测试
-        </el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
-          {{ isEdit ? '更新' : '创建' }}
+        <el-button type="primary" @click="handleTestConnection" :loading="testLoading">
+          {{ isEdit ? '测试并更新' : '测试并创建' }}
         </el-button>
       </template>
     </el-dialog>
@@ -168,7 +158,6 @@ import { llmConfigApi } from '@/api'
 
 // 状态
 const loading = ref(false)
-const submitLoading = ref(false)
 const testLoading = ref(false)
 const configList = ref([])
 const dialogVisible = ref(false)
@@ -303,58 +292,51 @@ const handleDelete = async (row) => {
   }
 }
 
-// 测试连接（仅支持已保存配置）
+// 测试并保存配置（新增时先创建，编辑时先更新）
 const handleTestConnection = async () => {
-  if (!isEdit.value || !form.value.id) {
-    ElMessage.warning('请先保存配置后再测试连接')
-    return
-  }
-
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   testLoading.value = true
   try {
-    await llmConfigApi.update(form.value.id, form.value)
-    const res = await llmConfigApi.validate(form.value.id)
+    const editing = isEdit.value
+    let configId = form.value.id
+
+    if (editing && configId) {
+      await llmConfigApi.update(configId, form.value)
+    } else {
+      const createRes = await llmConfigApi.create(form.value)
+      configId = createRes?.data?.id
+      if (!configId) {
+        await loadData()
+        const matched = configList.value.find(item =>
+          item.name === form.value.name &&
+          item.model === form.value.model &&
+          item.endpoint === form.value.endpoint
+        )
+        configId = matched?.id
+      }
+      if (!configId) {
+        throw new Error('创建成功但未获取到配置ID，无法执行连接测试')
+      }
+      form.value = { ...form.value, id: configId }
+      isEdit.value = true
+    }
+
+    const res = await llmConfigApi.validate(configId)
     if (res.data === true) {
-      ElMessage.success('连接测试成功')
+      ElMessage.success(editing ? '测试并更新成功' : '测试并创建成功')
+      dialogVisible.value = false
     } else {
       ElMessage.error('连接测试失败，请检查 API Key、模型和端点配置')
     }
+    await loadData()
   } catch (error) {
     console.error('测试连接失败:', error)
     ElMessage.error('测试连接失败: ' + (error.message || '未知错误'))
   } finally {
     testLoading.value = false
   }
-}
-
-// 提交表单
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    submitLoading.value = true
-    try {
-      if (isEdit.value) {
-        await llmConfigApi.update(form.value.id, form.value)
-        ElMessage.success('更新成功')
-      } else {
-        await llmConfigApi.create(form.value)
-        ElMessage.success('创建成功')
-      }
-      dialogVisible.value = false
-      loadData()
-    } catch (error) {
-      console.error('保存失败:', error)
-      ElMessage.error('保存失败: ' + (error.message || '未知错误'))
-    } finally {
-      submitLoading.value = false
-    }
-  })
 }
 
 // 初始化
