@@ -34,6 +34,17 @@ public class DynamicLlmConfig {
      * 超时（秒）
      */
     private int timeout = 30;
+
+    /**
+     * 是否开启思考模式
+     */
+    private boolean thinkingEnabled = true;
+
+    /**
+     * 思考强度
+     * 可选值：none/minimal/low/medium/high/xhigh
+     */
+    private String reasoningEffort = "medium";
     
     /**
      * API 端点（必填）

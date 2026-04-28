@@ -53,6 +53,19 @@ public class LlmConfigEntity {
      */
     @Column(name = "timeout")
     private Integer timeout;
+
+    /**
+     * 是否开启思考模式
+     */
+    @Column(name = "thinking_enabled")
+    private Boolean thinkingEnabled = true;
+
+    /**
+     * 思考强度
+     * 可选值：none/minimal/low/medium/high/xhigh
+     */
+    @Column(name = "reasoning_effort", length = 20)
+    private String reasoningEffort = "medium";
     
     /**
      * API 端点（可选，用于代理或自定义）
@@ -103,6 +116,12 @@ public class LlmConfigEntity {
         }
         if (isDefault == null) {
             isDefault = false;
+        }
+        if (thinkingEnabled == null) {
+            thinkingEnabled = true;
+        }
+        if (reasoningEffort == null || reasoningEffort.isBlank()) {
+            reasoningEffort = "medium";
         }
     }
     

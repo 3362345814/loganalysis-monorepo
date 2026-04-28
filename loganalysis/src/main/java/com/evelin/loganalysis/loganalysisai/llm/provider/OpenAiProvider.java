@@ -74,6 +74,7 @@ public class OpenAiProvider implements LlmProvider {
         String endpoint = dynamicConfig.getEndpoint();
         
         String provider = inferProviderFromEndpoint(endpoint);
+        boolean supportsReasoningEffort = supportsReasoningEffort(provider, model);
         
         try {
             // 构建请求体
@@ -81,6 +82,11 @@ public class OpenAiProvider implements LlmProvider {
             requestBody.put("model", model);
             requestBody.put("temperature", temperature);
             requestBody.put("max_tokens", maxTokens);
+            String requestedReasoningEffort = normalizeReasoningEffort(
+                    dynamicConfig.isThinkingEnabled() ? dynamicConfig.getReasoningEffort() : "none");
+            if (supportsReasoningEffort) {
+                requestBody.put("reasoning_effort", requestedReasoningEffort);
+            }
             
             // 构建消息列表
             List<Map<String, String>> messages = new ArrayList<>();
@@ -124,7 +130,7 @@ public class OpenAiProvider implements LlmProvider {
                     .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                     .build();
             
-            HttpResponse<String> response = httpClient.send(httpRequest, 
+            HttpResponse<String> response = httpClient.send(httpRequest,
                     HttpResponse.BodyHandlers.ofString());
             
             long responseTime = System.currentTimeMillis() - startTime;
@@ -135,6 +141,15 @@ public class OpenAiProvider implements LlmProvider {
             if (response.statusCode() == 200) {
                 return parseSuccessResponse(response.body(), model, responseTime);
             } else {
+                if (supportsReasoningEffort && isReasoningEffortUnsupported(response.statusCode(), body)) {
+                    String fallbackEffort = fallbackReasoningEffort(requestedReasoningEffort);
+                    if (fallbackEffort != null && !Objects.equals(fallbackEffort, requestedReasoningEffort)) {
+                        log.warn("当前模型/提供商不支持 reasoning_effort='{}'，自动降级为 '{}'",
+                                requestedReasoningEffort, fallbackEffort);
+                        requestBody.put("reasoning_effort", fallbackEffort);
+                        return retryWithRequestBody(requestBody, fullUrl, apiKey, timeout, model, startTime);
+                    }
+                }
                 LlmResponse error = parseErrorResponse(response.body(), responseTime);
                 // 补充 statusCode，避免日志里只看到 "HTTP "
                 if (error.getErrorMessage() == null || error.getErrorMessage().isBlank()) {
@@ -153,6 +168,92 @@ public class OpenAiProvider implements LlmProvider {
             errorResponse.setResponseTimeMs(System.currentTimeMillis() - startTime);
             return errorResponse;
         }
+    }
+
+    private LlmResponse retryWithRequestBody(Map<String, Object> requestBody,
+                                             String fullUrl,
+                                             String apiKey,
+                                             int timeout,
+                                             String model,
+                                             long startTime) throws Exception {
+        String retryJson = objectMapper.writeValueAsString(requestBody);
+        HttpRequest retryRequest = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .timeout(Duration.ofSeconds(timeout))
+                .POST(HttpRequest.BodyPublishers.ofString(retryJson))
+                .build();
+        HttpResponse<String> retryResponse = httpClient.send(retryRequest, HttpResponse.BodyHandlers.ofString());
+        long responseTime = System.currentTimeMillis() - startTime;
+        if (retryResponse.statusCode() == 200) {
+            return parseSuccessResponse(retryResponse.body(), model, responseTime);
+        }
+        LlmResponse error = parseErrorResponse(retryResponse.body(), responseTime);
+        if (error.getErrorMessage() == null || error.getErrorMessage().isBlank()) {
+            error.setErrorMessage("HTTP " + retryResponse.statusCode());
+        } else if (!error.getErrorMessage().startsWith("HTTP")) {
+            error.setErrorMessage("HTTP " + retryResponse.statusCode() + " - " + error.getErrorMessage());
+        }
+        return error;
+    }
+
+    private boolean supportsReasoningEffort(String provider, String model) {
+        if (provider == null) {
+            return false;
+        }
+        String normalizedProvider = provider.toLowerCase();
+        String normalizedModel = model != null ? model.toLowerCase() : "";
+        if ("openai".equals(normalizedProvider)) {
+            return normalizedModel.contains("o1")
+                    || normalizedModel.contains("o3")
+                    || normalizedModel.contains("o4")
+                    || normalizedModel.contains("gpt-5");
+        }
+        if ("deepseek".equals(normalizedProvider)) {
+            return true;
+        }
+        if ("doubao".equals(normalizedProvider) || "ark".equals(normalizedProvider)) {
+            return true;
+        }
+        return normalizedModel.contains("reason");
+    }
+
+    private String normalizeReasoningEffort(String effort) {
+        if (effort == null || effort.isBlank()) {
+            return "medium";
+        }
+        String normalized = effort.trim().toLowerCase();
+        return switch (normalized) {
+            case "none", "minimal", "low", "medium", "high", "xhigh" -> normalized;
+            default -> "medium";
+        };
+    }
+
+    private String fallbackReasoningEffort(String requested) {
+        if (requested == null) {
+            return "minimal";
+        }
+        return switch (requested) {
+            case "none" -> "minimal";
+            case "xhigh" -> "high";
+            case "high" -> "medium";
+            case "medium" -> "low";
+            case "low" -> "minimal";
+            default -> "minimal";
+        };
+    }
+
+    private boolean isReasoningEffortUnsupported(int statusCode, String body) {
+        if (statusCode < 400 || body == null) {
+            return false;
+        }
+        String lower = body.toLowerCase();
+        return lower.contains("reasoning_effort")
+                || lower.contains("unsupported")
+                || lower.contains("not support")
+                || lower.contains("invalid parameter")
+                || lower.contains("unknown parameter");
     }
 
     private String resolveChatCompletionPath(String baseUrl) {
@@ -240,7 +341,7 @@ public class OpenAiProvider implements LlmProvider {
     /**
      * 解析成功响应
      */
-    private LlmResponse parseSuccessResponse(String responseBody, String model, long responseTime) 
+    private LlmResponse parseSuccessResponse(String responseBody, String requestedModel, long responseTime)
             throws IOException {
         JsonNode rootNode = objectMapper.readTree(responseBody);
         JsonNode choicesNode = rootNode.get("choices");
@@ -265,7 +366,13 @@ public class OpenAiProvider implements LlmProvider {
             response.setTokensUsed(response.getPromptTokens() + response.getCompletionTokens());
         }
         
-        response.setModel(model != null ? model : "gpt-3.5-turbo");
+        String actualModel = rootNode.has("model") ? rootNode.get("model").asText(null) : null;
+        response.setModel(actualModel != null ? actualModel : (requestedModel != null ? requestedModel : "gpt-3.5-turbo"));
+
+        if (requestedModel != null && actualModel != null && !requestedModel.equalsIgnoreCase(actualModel)) {
+            log.warn("LLM 返回模型与请求模型不一致，requestedModel={}, actualModel={}。可能存在网关模型重写或兼容层映射。",
+                    requestedModel, actualModel);
+        }
         
         return response;
     }

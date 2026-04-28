@@ -65,15 +65,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="告警状态">
-          <el-select v-model="filterForm.status" placeholder="请选择" clearable style="width: 120px">
+          <el-select v-model="filterForm.status" placeholder="请选择" clearable style="width: 120px" @change="handleSearch">
             <el-option label="待处理" value="PENDING" />
-            <el-option label="已确认" value="ACKNOWLEDGED" />
             <el-option label="已解决" value="RESOLVED" />
-            <el-option label="已忽略" value="IGNORED" />
           </el-select>
         </el-form-item>
         <el-form-item label="告警级别">
-          <el-select v-model="filterForm.level" placeholder="请选择" clearable style="width: 120px">
+          <el-select v-model="filterForm.level" placeholder="请选择" clearable style="width: 120px" @change="handleSearch">
             <el-option label="严重" value="CRITICAL" />
             <el-option label="高" value="HIGH" />
             <el-option label="中" value="MEDIUM" />
@@ -89,6 +87,7 @@
             start-placeholder="开始日期"
             end-placeholder="结束日期"
             value-format="YYYY-MM-DD"
+            @change="handleSearch"
           />
         </el-form-item>
         <el-form-item>

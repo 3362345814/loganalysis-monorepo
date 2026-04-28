@@ -91,11 +91,21 @@ public class RootCauseAnalyzer {
         // 上下文信息
         List<Map<String, Object>> contextBefore = (List<Map<String, Object>>) aggregationData.get("contextBefore");
         List<Map<String, Object>> contextAfter = (List<Map<String, Object>>) aggregationData.get("contextAfter");
-        
+        List<Map<String, Object>> traceChainLogs = (List<Map<String, Object>>) aggregationData.get("traceChainLogs");
+
         params.put("before_count", contextBefore != null ? contextBefore.size() : 0);
         params.put("context_before", formatContextLogs(contextBefore));
         params.put("after_count", contextAfter != null ? contextAfter.size() : 0);
         params.put("context_after", formatContextLogs(contextAfter));
+
+        params.put("trace_id", aggregationData.getOrDefault("traceId", "无"));
+        if (traceChainLogs != null) {
+            params.put("trace_log_count", traceChainLogs.size());
+            params.put("trace_chain_logs", formatRelatedLogs(traceChainLogs));
+        } else {
+            params.put("trace_log_count", 0);
+            params.put("trace_chain_logs", "无");
+        }
         
         // 堆栈信息
         params.put("stack_trace", aggregationData.getOrDefault("stackTrace", "无"));

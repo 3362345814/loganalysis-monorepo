@@ -68,6 +68,19 @@
         <el-form-item label="超时时间(秒)">
           <el-input-number v-model="llmForm.timeout" :min="10" :max="120" :step="5" />
         </el-form-item>
+        <el-form-item label="开启思考">
+          <el-switch v-model="llmForm.thinkingEnabled" />
+        </el-form-item>
+        <el-form-item label="思考强度">
+          <el-select v-model="llmForm.reasoningEffort" style="width: 100%">
+            <el-option label="最弱 (minimal)" value="minimal" />
+            <el-option label="低 (low)" value="low" />
+            <el-option label="中 (medium)" value="medium" />
+            <el-option label="高 (high)" value="high" />
+            <el-option label="最高 (xhigh)" value="xhigh" />
+            <el-option label="关闭 (none)" value="none" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="设为默认">
           <el-switch v-model="llmForm.isDefault" />
         </el-form-item>
@@ -141,6 +154,8 @@ const llmForm = ref({
   maxTokens: 2000,
   temperature: 0.3,
   timeout: 30,
+  thinkingEnabled: true,
+  reasoningEffort: 'medium',
   endpoint: '',
   isDefault: false,
   enabled: true,
@@ -302,6 +317,8 @@ const handleAddLlm = () => {
     maxTokens: 2000,
     temperature: 0.3,
     timeout: 30,
+    thinkingEnabled: true,
+    reasoningEffort: 'medium',
     endpoint: '',
     isDefault: false,
     enabled: true,
@@ -316,7 +333,9 @@ const handleEditLlm = (row) => {
   // 用户不改则保留原值，后端 apiKey 为空时不更新
   llmForm.value = {
     ...row,
-    apiKey: row.maskedApiKey || ''
+    apiKey: row.maskedApiKey || '',
+    thinkingEnabled: row.thinkingEnabled !== false,
+    reasoningEffort: row.reasoningEffort || 'medium'
   }
   llmDialogVisible.value = true
 }

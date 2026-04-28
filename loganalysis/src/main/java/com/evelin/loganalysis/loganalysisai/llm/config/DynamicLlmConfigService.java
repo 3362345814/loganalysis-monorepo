@@ -69,6 +69,10 @@ public class DynamicLlmConfigService {
         config.setMaxTokens(entity.getMaxTokens() != null ? entity.getMaxTokens() : 2000);
         config.setTemperature(entity.getTemperature() != null ? entity.getTemperature() : 0.3);
         config.setTimeout(entity.getTimeout() != null ? entity.getTimeout() : 30);
+        config.setThinkingEnabled(entity.getThinkingEnabled() == null || entity.getThinkingEnabled());
+        config.setReasoningEffort(entity.getReasoningEffort() != null && !entity.getReasoningEffort().isBlank()
+                ? entity.getReasoningEffort()
+                : "medium");
         config.setEndpoint(entity.getEndpoint());
         return config;
     }

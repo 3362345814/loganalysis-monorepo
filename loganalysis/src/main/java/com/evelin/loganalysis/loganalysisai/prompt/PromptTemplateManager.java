@@ -56,7 +56,10 @@ public class PromptTemplateManager {
             
             #### 后置日志（后 {after_count} 条）
             {context_after}
-            
+
+            ### Trace 链路日志（traceId: {trace_id}，共 {trace_log_count} 条）
+            {trace_chain_logs}
+
             ### 堆栈信息
             {stack_trace}
             
@@ -206,6 +209,9 @@ public class PromptTemplateManager {
                 .replace("{context_before}", getOrDefault(params, "context_before", "无"))
                 .replace("{after_count}", getOrDefault(params, "after_count", "0"))
                 .replace("{context_after}", getOrDefault(params, "context_after", "无"))
+                .replace("{trace_id}", getOrDefault(params, "trace_id", "无"))
+                .replace("{trace_log_count}", getOrDefault(params, "trace_log_count", "0"))
+                .replace("{trace_chain_logs}", getOrDefault(params, "trace_chain_logs", "无"))
                 .replace("{stack_trace}", getOrDefault(params, "stack_trace", "无"));
     }
     

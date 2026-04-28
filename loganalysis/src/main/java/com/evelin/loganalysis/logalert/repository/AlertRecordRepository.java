@@ -124,7 +124,8 @@ public interface AlertRecordRepository extends JpaRepository<AlertRecord, UUID> 
            "(COALESCE(:alertLevel, '') = '' OR ar.alert_level = :alertLevel) AND " +
            "(COALESCE(:ruleId, '') = '' OR ar.rule_id = CAST(:ruleId AS uuid)) AND " +
            "(CAST(:startTime AS timestamp) IS NULL OR ar.triggered_at >= :startTime) AND " +
-           "(CAST(:endTime AS timestamp) IS NULL OR ar.triggered_at <= :endTime)",
+           "(CAST(:endTime AS timestamp) IS NULL OR ar.triggered_at <= :endTime) " +
+           "ORDER BY CASE WHEN ar.status = 'PENDING' THEN 0 ELSE 1 END, ar.triggered_at ASC, ar.id ASC",
            countQuery = "SELECT COUNT(*) FROM alert_records ar WHERE " +
            "(COALESCE(:status, '') = '' OR ar.status = :status) AND " +
            "(COALESCE(:alertLevel, '') = '' OR ar.alert_level = :alertLevel) AND " +
@@ -143,15 +144,15 @@ public interface AlertRecordRepository extends JpaRepository<AlertRecord, UUID> 
     /**
      * 根据项目ID查询告警（通过关联的日志源）
      */
-    @Query(value = "SELECT DISTINCT ar.* FROM alert_records ar " +
+    @Query(value = "SELECT ar.* FROM alert_records ar " +
            "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
            "WHERE arule.project_id = :projectId " +
            "AND (COALESCE(:status, '') = '' OR ar.status = :status) " +
            "AND (COALESCE(:alertLevel, '') = '' OR ar.alert_level = :alertLevel) " +
            "AND (CAST(:startTime AS timestamp) IS NULL OR ar.triggered_at >= :startTime) " +
            "AND (CAST(:endTime AS timestamp) IS NULL OR ar.triggered_at <= :endTime) " +
-           "ORDER BY ar.triggered_at DESC",
-           countQuery = "SELECT COUNT(DISTINCT ar.id) FROM alert_records ar " +
+           "ORDER BY CASE WHEN ar.status = 'PENDING' THEN 0 ELSE 1 END, ar.triggered_at ASC, ar.id ASC",
+           countQuery = "SELECT COUNT(ar.id) FROM alert_records ar " +
            "INNER JOIN alert_rules arule ON ar.rule_id = arule.id " +
            "WHERE arule.project_id = :projectId " +
            "AND (COALESCE(:status, '') = '' OR ar.status = :status) " +

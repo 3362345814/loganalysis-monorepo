@@ -41,7 +41,7 @@
         <el-table-column label="参数" width="200">
           <template #default="{ row }">
             <span class="param-text">
-              MaxTokens: {{ row.maxTokens }} | Temp: {{ row.temperature }}
+              Max: {{ row.maxTokens }} | Temp: {{ row.temperature }} | 思考: {{ row.thinkingEnabled === false ? '关' : '开' }}
             </span>
           </template>
         </el-table-column>
@@ -111,6 +111,21 @@
         <el-form-item label="超时时间(秒)">
           <el-input-number v-model="form.timeout" :min="10" :max="120" :step="5" />
         </el-form-item>
+
+        <el-form-item label="开启思考">
+          <el-switch v-model="form.thinkingEnabled" />
+        </el-form-item>
+
+        <el-form-item label="思考强度">
+          <el-select v-model="form.reasoningEffort" style="width: 100%">
+            <el-option label="最弱 (minimal)" value="minimal" />
+            <el-option label="低 (low)" value="low" />
+            <el-option label="中 (medium)" value="medium" />
+            <el-option label="高 (high)" value="high" />
+            <el-option label="最高 (xhigh)" value="xhigh" />
+            <el-option label="关闭 (none)" value="none" />
+          </el-select>
+        </el-form-item>
         
         <el-form-item label="设为默认">
           <el-switch v-model="form.isDefault" />
@@ -168,6 +183,8 @@ const form = ref({
   maxTokens: 2000,
   temperature: 0.3,
   timeout: 30,
+  thinkingEnabled: true,
+  reasoningEffort: 'medium',
   endpoint: '',
   isDefault: false,
   enabled: true,
@@ -219,6 +236,8 @@ const handleAdd = () => {
     maxTokens: 2000,
     temperature: 0.3,
     timeout: 30,
+    thinkingEnabled: true,
+    reasoningEffort: 'medium',
     endpoint: '',
     isDefault: configList.value.length === 0,
     enabled: true,
@@ -240,6 +259,8 @@ const handleEdit = (row) => {
     maxTokens: row.maxTokens,
     temperature: row.temperature,
     timeout: row.timeout,
+    thinkingEnabled: row.thinkingEnabled !== false,
+    reasoningEffort: row.reasoningEffort || 'medium',
     endpoint: row.endpoint,
     isDefault: row.isDefault,
     enabled: row.enabled,

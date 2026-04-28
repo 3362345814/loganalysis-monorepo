@@ -41,6 +41,17 @@ public class LlmConfigDTO {
      * 请求超时时间（秒）
      */
     private Integer timeout;
+
+    /**
+     * 是否开启思考模式
+     */
+    private Boolean thinkingEnabled;
+
+    /**
+     * 思考强度
+     * 可选值：none/minimal/low/medium/high/xhigh
+     */
+    private String reasoningEffort;
     
     /**
      * API 端点

@@ -123,6 +123,8 @@ public class LlmConfigService {
         existing.setMaxTokens(dto.getMaxTokens());
         existing.setTemperature(dto.getTemperature());
         existing.setTimeout(dto.getTimeout());
+        existing.setThinkingEnabled(dto.getThinkingEnabled());
+        existing.setReasoningEffort(dto.getReasoningEffort());
         existing.setEndpoint(dto.getEndpoint());
         existing.setEnabled(dto.getEnabled());
         existing.setIsDefault(dto.getIsDefault());
@@ -180,6 +182,10 @@ public class LlmConfigService {
         dto.setMaxTokens(entity.getMaxTokens());
         dto.setTemperature(entity.getTemperature());
         dto.setTimeout(entity.getTimeout());
+        dto.setThinkingEnabled(entity.getThinkingEnabled() == null || entity.getThinkingEnabled());
+        dto.setReasoningEffort(entity.getReasoningEffort() != null && !entity.getReasoningEffort().isBlank()
+                ? entity.getReasoningEffort()
+                : "medium");
         dto.setEndpoint(entity.getEndpoint());
         dto.setEnabled(entity.getEnabled());
         dto.setIsDefault(entity.getIsDefault());
@@ -207,6 +213,10 @@ public class LlmConfigService {
         entity.setMaxTokens(dto.getMaxTokens());
         entity.setTemperature(dto.getTemperature());
         entity.setTimeout(dto.getTimeout());
+        entity.setThinkingEnabled(dto.getThinkingEnabled() == null || dto.getThinkingEnabled());
+        entity.setReasoningEffort(dto.getReasoningEffort() != null && !dto.getReasoningEffort().isBlank()
+                ? dto.getReasoningEffort()
+                : "medium");
         entity.setEndpoint(dto.getEndpoint());
         entity.setEnabled(dto.getEnabled());
         entity.setIsDefault(dto.getIsDefault());
@@ -222,6 +232,10 @@ public class LlmConfigService {
         config.setMaxTokens(entity.getMaxTokens() != null ? entity.getMaxTokens() : 2000);
         config.setTemperature(entity.getTemperature() != null ? entity.getTemperature() : 0.3);
         config.setTimeout(entity.getTimeout() != null ? entity.getTimeout() : 30);
+        config.setThinkingEnabled(entity.getThinkingEnabled() == null || entity.getThinkingEnabled());
+        config.setReasoningEffort(entity.getReasoningEffort() != null && !entity.getReasoningEffort().isBlank()
+                ? entity.getReasoningEffort()
+                : "medium");
         config.setEndpoint(entity.getEndpoint());
         return config;
     }

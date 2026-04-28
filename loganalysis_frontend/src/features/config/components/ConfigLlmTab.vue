@@ -26,7 +26,7 @@
       <el-table-column label="参数" width="200">
         <template #default="{ row }">
           <span class="param-text">
-            MaxTokens: {{ row.maxTokens }} | Temp: {{ row.temperature }}
+            Max: {{ row.maxTokens }} | Temp: {{ row.temperature }} | 思考: {{ row.thinkingEnabled === false ? '关' : '开' }}
           </span>
         </template>
       </el-table-column>
