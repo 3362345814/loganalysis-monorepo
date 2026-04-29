@@ -134,7 +134,45 @@
         <article class="chart-panel">
           <div class="chart-panel-top">
             <h3>链路追踪分布</h3>
-            <span class="level-hint">按所选范围分位</span>
+            <div class="chart-top-controls">
+              <span class="level-hint">{{ traceThresholdLabel }}</span>
+              <el-popover
+                v-model:visible="traceThresholdPopoverVisible"
+                placement="bottom-end"
+                :width="280"
+                trigger="click"
+                @show="openTraceThresholdConfig"
+              >
+                <template #reference>
+                  <el-button class="trace-config-btn" size="small" text>
+                    <el-icon><Setting /></el-icon>
+                  </el-button>
+                </template>
+                <div class="trace-config-panel">
+                  <div class="trace-config-title">链路耗时过滤上限（秒）</div>
+                  <el-input-number
+                    v-model="traceThresholdDraft"
+                    :min="TRACE_THRESHOLD_MIN_SEC"
+                    :max="TRACE_THRESHOLD_MAX_SEC"
+                    :step="10"
+                    :controls="false"
+                    class="trace-config-input"
+                  />
+                  <p class="trace-config-tip">
+                    仅统计 0~{{ TRACE_THRESHOLD_MAX_SEC.toLocaleString('zh-CN') }} 秒内的链路。
+                  </p>
+                  <div class="trace-config-title">坐标轴模式</div>
+                  <el-radio-group v-model="traceAxisScaleDraft" size="small" class="trace-axis-toggle">
+                    <el-radio-button label="对数轴" value="log" />
+                    <el-radio-button label="线性轴" value="linear" />
+                  </el-radio-group>
+                  <div class="trace-config-actions">
+                    <el-button size="small" @click="traceThresholdPopoverVisible = false">取消</el-button>
+                    <el-button size="small" type="primary" :loading="isSavingTraceThreshold" @click="saveTraceThreshold">保存</el-button>
+                  </div>
+                </div>
+              </el-popover>
+            </div>
           </div>
           <div class="chart-container" v-loading="traceLoading">
             <v-chart :option="traceDistributionOption" autoresize />
@@ -147,7 +185,8 @@
 
 <script setup>
 import { computed, shallowRef } from 'vue'
-import { ArrowRight, Bell, Collection, Document, Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ArrowRight, Bell, Collection, Document, Loading, Setting } from '@element-plus/icons-vue'
 import { useHomeDashboard } from '@/composables/useHomeDashboard'
 
 const {
@@ -172,6 +211,11 @@ const {
   sourceQualityScatterOption,
   traceLoading,
   traceDistributionOption,
+  traceMaxDurationSec,
+  traceAxisScale,
+  saveTraceDurationThreshold,
+  saveTraceAxisScale,
+  reloadTraceDistribution,
   handleTrendRangeChange,
   handleProjectChange
 } = useHomeDashboard()
@@ -199,6 +243,50 @@ const sourcePanelOption = computed(() => (
 const sourcePanelHint = computed(() => (
   sourcePanelMode.value === SOURCE_PANEL_HEALTH ? '综合异常率、时效、日志量' : '按异常率降序（%）'
 ))
+
+const traceThresholdPopoverVisible = shallowRef(false)
+const traceThresholdDraft = shallowRef(traceMaxDurationSec.value)
+const traceAxisScaleDraft = shallowRef(traceAxisScale.value)
+const isSavingTraceThreshold = shallowRef(false)
+const TRACE_THRESHOLD_MIN_SEC = 10
+const TRACE_THRESHOLD_MAX_SEC = 86400
+
+const traceThresholdLabel = computed(() => `过滤上限 ${Number(traceMaxDurationSec.value).toLocaleString('zh-CN')} 秒`)
+
+const openTraceThresholdConfig = () => {
+  traceThresholdDraft.value = traceMaxDurationSec.value
+  traceAxisScaleDraft.value = traceAxisScale.value
+}
+
+const saveTraceThreshold = async () => {
+  if (isSavingTraceThreshold.value) {
+    return
+  }
+  const numeric = Number(traceThresholdDraft.value)
+  if (!Number.isFinite(numeric)) {
+    ElMessage.warning('请输入有效的秒数')
+    return
+  }
+
+  const normalized = Math.max(TRACE_THRESHOLD_MIN_SEC, Math.min(TRACE_THRESHOLD_MAX_SEC, Math.round(numeric)))
+  if (normalized !== numeric) {
+    traceThresholdDraft.value = normalized
+  }
+
+  isSavingTraceThreshold.value = true
+  try {
+    saveTraceDurationThreshold(normalized)
+    saveTraceAxisScale(traceAxisScaleDraft.value)
+    await reloadTraceDistribution()
+    traceThresholdPopoverVisible.value = false
+    ElMessage.success('链路追踪过滤阈值已更新')
+  } catch (error) {
+    console.error('更新链路追踪过滤阈值失败:', error)
+    ElMessage.error('更新失败，请稍后重试')
+  } finally {
+    isSavingTraceThreshold.value = false
+  }
+}
 
 const metricCards = computed(() => [
   {

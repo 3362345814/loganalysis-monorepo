@@ -164,6 +164,13 @@ const TRACE_DISTRIBUTION_DAYS = 30
 const RANGE_24H = '24h'
 const RANGE_30D = '30d'
 const TRACE_LOG_AXIS_MIN = 0.001
+const TRACE_DURATION_THRESHOLD_STORAGE_KEY = 'home.trace.maxDurationSec'
+const TRACE_DURATION_THRESHOLD_DEFAULT_SEC = 3600
+const TRACE_DURATION_THRESHOLD_MIN_SEC = 10
+const TRACE_DURATION_THRESHOLD_MAX_SEC = 86400
+const TRACE_AXIS_SCALE_STORAGE_KEY = 'home.trace.axisScale'
+const TRACE_AXIS_SCALE_LOG = 'log'
+const TRACE_AXIS_SCALE_LINEAR = 'linear'
 const toNullableNumber = (value) => {
   if (value === null || value === undefined || value === '') {
     return null
@@ -193,6 +200,15 @@ const formatTraceLogTick = (value) => {
     return numeric.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
   }
   return numeric.toLocaleString('zh-CN', { maximumFractionDigits: 3 })
+}
+
+const getPercentile = (values, percentile) => {
+  if (!Array.isArray(values) || values.length === 0) {
+    return null
+  }
+  const sorted = [...values].sort((a, b) => a - b)
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * percentile)))
+  return sorted[index]
 }
 
 const getConfinedTooltipPosition = (point, _params, dom, _rect, size) => {
@@ -363,6 +379,58 @@ export const useHomeDashboard = () => {
   const traceP75 = shallowRef([])
   const traceMax = shallowRef([])
   const traceSampleCount = shallowRef([])
+  const traceMaxDurationSec = shallowRef(TRACE_DURATION_THRESHOLD_DEFAULT_SEC)
+  const traceAxisScale = shallowRef(TRACE_AXIS_SCALE_LOG)
+
+  const normalizeTraceDurationThreshold = (value) => {
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) {
+      return TRACE_DURATION_THRESHOLD_DEFAULT_SEC
+    }
+    return Math.max(
+      TRACE_DURATION_THRESHOLD_MIN_SEC,
+      Math.min(TRACE_DURATION_THRESHOLD_MAX_SEC, Math.round(numeric))
+    )
+  }
+
+  const loadTraceDurationThreshold = () => {
+    if (typeof window === 'undefined') {
+      traceMaxDurationSec.value = TRACE_DURATION_THRESHOLD_DEFAULT_SEC
+      return
+    }
+
+    const raw = window.localStorage.getItem(TRACE_DURATION_THRESHOLD_STORAGE_KEY)
+    traceMaxDurationSec.value = normalizeTraceDurationThreshold(raw)
+  }
+
+  const saveTraceDurationThreshold = (nextValue) => {
+    const normalized = normalizeTraceDurationThreshold(nextValue)
+    traceMaxDurationSec.value = normalized
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TRACE_DURATION_THRESHOLD_STORAGE_KEY, String(normalized))
+    }
+  }
+
+  const normalizeTraceAxisScale = (value) => {
+    return value === TRACE_AXIS_SCALE_LINEAR ? TRACE_AXIS_SCALE_LINEAR : TRACE_AXIS_SCALE_LOG
+  }
+
+  const loadTraceAxisScale = () => {
+    if (typeof window === 'undefined') {
+      traceAxisScale.value = TRACE_AXIS_SCALE_LOG
+      return
+    }
+    const raw = window.localStorage.getItem(TRACE_AXIS_SCALE_STORAGE_KEY)
+    traceAxisScale.value = normalizeTraceAxisScale(raw)
+  }
+
+  const saveTraceAxisScale = (nextValue) => {
+    const normalized = normalizeTraceAxisScale(nextValue)
+    traceAxisScale.value = normalized
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TRACE_AXIS_SCALE_STORAGE_KEY, normalized)
+    }
+  }
 
   const traceDisplayUnit = computed(() => {
     const values = [
@@ -403,6 +471,30 @@ export const useHomeDashboard = () => {
     const numeric = toNullableNumber(item)
     return numeric === null ? null : Number((numeric * traceUnitFactor.value).toFixed(3))
   }))
+  const traceLogAxisMin = computed(() => {
+    const minValues = traceMinDisplay.value
+      .map((item) => toNullableNumber(item))
+      .filter((item) => item !== null && item > 0)
+
+    if (!minValues.length) {
+      return TRACE_LOG_AXIS_MIN
+    }
+
+    const globalMin = Math.min(...minValues)
+    const q1Values = traceP25Display.value
+      .map((item) => toNullableNumber(item))
+      .filter((item) => item !== null && item > 0)
+
+    const p10Q1 = getPercentile(q1Values, 0.1)
+    if (p10Q1 === null) {
+      return normalizeTraceForLogAxis(globalMin * 0.95)
+    }
+
+    // 期望下界由分位估算；但不能高于真实最小值附近，否则箱线最小须会被裁切。
+    const estimatedMin = normalizeTraceForLogAxis(Math.max(p10Q1 * 0.5, TRACE_LOG_AXIS_MIN))
+    const safeMin = normalizeTraceForLogAxis(globalMin * 0.95)
+    return Math.min(estimatedMin, safeMin)
+  })
   const traceBoxplotTooltipData = computed(() => traceLabels.value.map((_, index) => {
     const min = traceMinDisplay.value[index]
     const p25 = traceP25Display.value[index]
@@ -870,10 +962,10 @@ export const useHomeDashboard = () => {
     },
     yAxis: [
       {
-        type: 'log',
-        logBase: 10,
+        type: traceAxisScale.value === TRACE_AXIS_SCALE_LINEAR ? 'value' : 'log',
+        logBase: 2,
         name: traceDisplayUnit.value === 'ms' ? '毫秒' : '秒',
-        min: TRACE_LOG_AXIS_MIN,
+        min: traceAxisScale.value === TRACE_AXIS_SCALE_LINEAR ? 0 : traceLogAxisMin.value,
         axisLabel: {
           formatter: (value) => formatTraceLogTick(value)
         },
@@ -1235,7 +1327,8 @@ export const useHomeDashboard = () => {
       const window = operationalWindow.value
       const params = {
         days: selectedTrendRange.value === RANGE_30D ? TRACE_DISTRIBUTION_DAYS : 1,
-        interval: selectedTrendRange.value === RANGE_30D ? 'DAY' : 'HALF_HOUR'
+        interval: selectedTrendRange.value === RANGE_30D ? 'DAY' : 'HALF_HOUR',
+        maxDurationSec: traceMaxDurationSec.value
       }
       if (selectedProjectId.value) {
         params.projectId = selectedProjectId.value
@@ -1326,6 +1419,8 @@ export const useHomeDashboard = () => {
   }
 
   onMounted(async () => {
+    loadTraceDurationThreshold()
+    loadTraceAxisScale()
     await Promise.all([loadProjects(), refreshDashboard()])
   })
 
@@ -1351,6 +1446,11 @@ export const useHomeDashboard = () => {
     sourceQualityScatterOption,
     traceLoading,
     traceDistributionOption,
+    traceMaxDurationSec,
+    traceAxisScale,
+    saveTraceDurationThreshold,
+    saveTraceAxisScale,
+    reloadTraceDistribution: loadTraceDistribution,
     handleTrendRangeChange,
     handleProjectChange
   }

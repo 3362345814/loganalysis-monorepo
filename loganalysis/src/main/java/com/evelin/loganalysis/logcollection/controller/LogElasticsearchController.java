@@ -205,9 +205,10 @@ public class LogElasticsearchController {
     public Result<TraceDistributionResponse> getTraceDistribution(
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false, defaultValue = "30") Integer days,
-            @RequestParam(required = false, defaultValue = "DAY") String interval
+            @RequestParam(required = false, defaultValue = "DAY") String interval,
+            @RequestParam(required = false) Double maxDurationSec
     ) {
-        return Result.success(esService.getTraceDistribution(projectId, days, interval));
+        return Result.success(esService.getTraceDistribution(projectId, days, interval, maxDurationSec));
     }
 
     private LocalDateTime parseQueryDateTime(String value) {

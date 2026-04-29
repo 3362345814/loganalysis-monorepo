@@ -265,6 +265,57 @@
   font-size: 12px;
 }
 
+.trace-config-btn {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+}
+
+.trace-config-btn:hover {
+  color: var(--color-accent);
+}
+
+.trace-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.trace-config-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.trace-config-input {
+  width: 100%;
+}
+
+.trace-config-tip {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.trace-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.trace-axis-toggle {
+  width: 100%;
+}
+
+.trace-axis-toggle :deep(.el-radio-button) {
+  flex: 1;
+}
+
+.trace-axis-toggle :deep(.el-radio-button__inner) {
+  width: 100%;
+  text-align: center;
+}
+
 .chart-hint {
   margin: var(--space-8) 0 0;
   font-size: 12px;

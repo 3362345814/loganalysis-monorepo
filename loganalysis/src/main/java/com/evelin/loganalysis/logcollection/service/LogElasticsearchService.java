@@ -48,6 +48,8 @@ public class LogElasticsearchService {
 
     private static final String ES_SYNC_CURSOR_KEY = "loganalysis:es:sync:last-synced-id";
     private static final double TRACE_MAX_DURATION_SEC = 3600D;
+    private static final double TRACE_MAX_DURATION_SEC_MIN = 10D;
+    private static final double TRACE_MAX_DURATION_SEC_MAX = 86400D;
 
     /**
      * 记录上次同步完成的最后一个日志 ID，用于增量同步
@@ -419,7 +421,8 @@ public class LogElasticsearchService {
     /**
      * 获取链路追踪耗时分布（min/p25/p50/p75/max）
      */
-    public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days, String interval) {
+    public TraceDistributionResponse getTraceDistribution(UUID projectId, Integer days, String interval, Double maxDurationSec) {
+        double safeMaxDurationSec = normalizeTraceMaxDurationSec(maxDurationSec);
         boolean halfHourInterval = "HALF_HOUR".equalsIgnoreCase(interval) || "30M".equalsIgnoreCase(interval);
 
         if (halfHourInterval) {
@@ -434,8 +437,8 @@ public class LogElasticsearchService {
             Map<LocalDateTime, Long> sampleCountByBucket = new HashMap<>();
             try {
                 List<Object[]> rows = projectId == null
-                        ? rawLogEventRepository.findTraceDurationPercentilesByHalfHour(startTime, endTime, TRACE_MAX_DURATION_SEC)
-                        : rawLogEventRepository.findTraceDurationPercentilesByHalfHourAndProject(startTime, endTime, projectId, TRACE_MAX_DURATION_SEC);
+                        ? rawLogEventRepository.findTraceDurationPercentilesByHalfHour(startTime, endTime, safeMaxDurationSec)
+                        : rawLogEventRepository.findTraceDurationPercentilesByHalfHourAndProject(startTime, endTime, projectId, safeMaxDurationSec);
                 for (Object[] row : rows) {
                     LocalDateTime bucket = toLocalDateTime(row[0]);
                     if (bucket == null) {
@@ -496,8 +499,8 @@ public class LogElasticsearchService {
         Map<LocalDate, Long> sampleCountByDay = new HashMap<>();
         try {
             List<Object[]> rows = projectId == null
-                    ? rawLogEventRepository.findTraceDurationPercentilesByDay(startTime, endTime, TRACE_MAX_DURATION_SEC)
-                    : rawLogEventRepository.findTraceDurationPercentilesByDayAndProject(startTime, endTime, projectId, TRACE_MAX_DURATION_SEC);
+                    ? rawLogEventRepository.findTraceDurationPercentilesByDay(startTime, endTime, safeMaxDurationSec)
+                    : rawLogEventRepository.findTraceDurationPercentilesByDayAndProject(startTime, endTime, projectId, safeMaxDurationSec);
             for (Object[] row : rows) {
                 LocalDate day = toLocalDate(row[0]);
                 if (day == null) {
@@ -546,6 +549,13 @@ public class LogElasticsearchService {
                 .max(max)
                 .sampleCount(sampleCount)
                 .build();
+    }
+
+    private double normalizeTraceMaxDurationSec(Double maxDurationSec) {
+        if (maxDurationSec == null || !Double.isFinite(maxDurationSec)) {
+            return TRACE_MAX_DURATION_SEC;
+        }
+        return Math.max(TRACE_MAX_DURATION_SEC_MIN, Math.min(maxDurationSec, TRACE_MAX_DURATION_SEC_MAX));
     }
 
     private static LocalDate toLocalDate(Object value) {
