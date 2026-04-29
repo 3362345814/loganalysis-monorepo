@@ -274,6 +274,24 @@ const buildScatterPlotData = (rows) => {
     return []
   }
 
+  const sizeMin = 8
+  const sizeMax = 26
+  const safeTotals = rows.map((item) => Math.max(0, Number(item.total ?? 0)))
+  const scaledTotals = safeTotals.map((total) => Math.sqrt(total + 1))
+  const scaledMin = Math.min(...scaledTotals)
+  const scaledMax = Math.max(...scaledTotals)
+
+  const mapSymbolSize = (total) => {
+    const scaled = Math.sqrt(Math.max(0, total) + 1)
+    if (!Number.isFinite(scaled) || !Number.isFinite(scaledMin) || !Number.isFinite(scaledMax)) {
+      return sizeMin
+    }
+    if (Math.abs(scaledMax - scaledMin) < 1e-9) {
+      return (sizeMin + sizeMax) / 2
+    }
+    return sizeMin + ((scaled - scaledMin) / (scaledMax - scaledMin)) * (sizeMax - sizeMin)
+  }
+
   const xValues = rows.map((item) => Number(item.freshnessSeconds ?? 0))
   const yValues = rows.map((item) => Number(item.qualityScore ?? 0))
   const xMin = Math.min(...xValues)
@@ -287,18 +305,21 @@ const buildScatterPlotData = (rows) => {
   const points = rows.map((item, index) => {
     const x = Number(item.freshnessSeconds ?? 0)
     const y = Number(item.qualityScore ?? 0)
-    const key = `${x.toFixed(3)}|${y.toFixed(3)}`
+    const total = Math.max(0, Number(item.total ?? 0))
+    const key = `${Math.round(x)}|${(Math.round(y * 2) / 2).toFixed(1)}`
     const indices = duplicateGroups.get(key) ?? []
     indices.push(index)
     duplicateGroups.set(key, indices)
 
     return {
-      value: [x, Number(y.toFixed(1)), item.total],
+      value: [x, Number(y.toFixed(1)), total],
       name: item.name,
-      symbolSize: clamp(Math.sqrt(item.total + 1) * 1.8, 8, 26),
+      symbolSize: mapSymbolSize(total),
       itemStyle: {
         color: item.qualityScore >= 80 ? '#1f8a65' : item.qualityScore >= 60 ? '#b87a2e' : '#b53333',
-        opacity: 0.82
+        opacity: 0.82,
+        borderColor: 'rgba(255, 255, 255, 0.92)',
+        borderWidth: 1.2
       }
     }
   })
@@ -308,12 +329,12 @@ const buildScatterPlotData = (rows) => {
       return
     }
 
-    // 对完全重合点做轻微偏移，避免 tooltip 无法命中被覆盖的点
-    const baseRadius = Math.min(0.028, 0.008 * Math.sqrt(indices.length))
+    // 对重叠点做偏移，按同心圆展开，减少被大点完全遮挡。
+    const baseRadius = Math.min(0.07, 0.018 * Math.sqrt(indices.length))
     indices.forEach((pointIndex, idx) => {
       const angle = (2 * Math.PI * idx) / indices.length
       const round = Math.floor(idx / 8)
-      const radius = baseRadius * (1 + round * 0.65)
+      const radius = baseRadius * (1 + round * 1.15)
       const xOffset = xSpan * radius * Math.cos(angle)
       const yOffset = ySpan * radius * Math.sin(angle)
       const point = points[pointIndex]
