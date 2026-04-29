@@ -247,7 +247,8 @@ const formatLatencyRange = (min, max, unit) => {
 }
 
 const buildChartTooltip = (overrides = {}) => ({
-  appendToBody: true,
+  appendToBody: false,
+  appendTo: (chartContainer) => chartContainer,
   extraCssText: 'z-index: 10010;',
   ...overrides
 })
@@ -820,7 +821,6 @@ export const useHomeDashboard = () => {
     tooltip: buildChartTooltip({
       trigger: 'axis',
       confine: true,
-      appendToBody: true,
       position: getConfinedTooltipPosition,
       extraCssText: 'z-index: 10010; max-width: 320px; white-space: normal; word-break: break-word; overflow-wrap: anywhere;',
       formatter: (params) => {
