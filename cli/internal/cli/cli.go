@@ -91,6 +91,8 @@ type runtimeApp struct {
 }
 
 func Execute(args []string, build BuildInfo, stdout, stderr io.Writer) int {
+	applyPendingWindowsUpdate(stdout, stderr)
+
 	app, err := newRuntime(build, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "init failed: %v\n", err)
@@ -1326,7 +1328,11 @@ func (a *runtimeApp) selfUpdate(target string) error {
 			_ = os.Remove(tmp)
 			return fmt.Errorf("stage windows update: %w", err)
 		}
-		fmt.Fprintf(a.stdout, "new CLI binary staged at %s (replace executable after process exits)\n", pending)
+		if err := scheduleWindowsBinaryReplace(exePath, pending, os.Getpid()); err != nil {
+			fmt.Fprintf(a.stdout, "new CLI binary staged at %s (auto-replace schedule failed: %v)\n", pending, err)
+		} else {
+			fmt.Fprintf(a.stdout, "new CLI binary staged at %s (replacement scheduled after process exits)\n", pending)
+		}
 		return nil
 	}
 
@@ -1343,6 +1349,46 @@ func (a *runtimeApp) selfUpdate(target string) error {
 	}
 	_ = os.Remove(backup)
 	fmt.Fprintln(a.stdout, "CLI binary updated successfully")
+	return nil
+}
+
+func applyPendingWindowsUpdate(stdout, stderr io.Writer) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	pending := exePath + ".new"
+	if _, err := os.Stat(pending); err != nil {
+		return
+	}
+	if err := scheduleWindowsBinaryReplace(exePath, pending, os.Getpid()); err != nil {
+		fmt.Fprintf(stderr, "warning: detected pending CLI update but failed to schedule replacement: %v\n", err)
+		return
+	}
+	fmt.Fprintln(stdout, "detected pending CLI update; replacement scheduled after this command exits")
+}
+
+func scheduleWindowsBinaryReplace(exePath, pendingPath string, waitPID int) error {
+	ps := fmt.Sprintf(
+		"$pidToWait = %d; "+
+			"for ($i = 0; $i -lt 300; $i++) { "+
+			"if (-not (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue)) { break }; "+
+			"Start-Sleep -Milliseconds 100 }; "+
+			"for ($j = 0; $j -lt 100; $j++) { "+
+			"try { Move-Item -LiteralPath %s -Destination %s -Force -ErrorAction Stop; exit 0 } "+
+			"catch { Start-Sleep -Milliseconds 100 } }; "+
+			"exit 1",
+		waitPID,
+		powershellSingleQuoted(pendingPath),
+		powershellSingleQuoted(exePath),
+	)
+	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("schedule windows self replace: %w", err)
+	}
 	return nil
 }
 
