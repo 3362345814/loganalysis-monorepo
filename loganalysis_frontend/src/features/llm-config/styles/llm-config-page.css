@@ -47,3 +47,17 @@
   font-size: 12px;
   color: var(--text-tertiary);
 }
+
+.table-card :deep(.llm-model-cell .cell) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.llm-action-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: var(--space-6);
+}

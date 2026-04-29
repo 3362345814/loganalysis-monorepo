@@ -21,7 +21,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="model" label="模型" min-width="150" />
+      <el-table-column prop="model" label="模型" min-width="150" class-name="llm-model-cell" show-overflow-tooltip />
       <el-table-column prop="endpoint" label="API 端点" min-width="200" show-overflow-tooltip />
       <el-table-column label="参数" width="200">
         <template #default="{ row }">
@@ -38,22 +38,24 @@
         </template>
       </el-table-column>
       <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" :icon="Edit" @click="emit('edit-llm', row)">编辑</el-button>
-          <el-button type="success" link size="small" :icon="Star" @click="emit('set-default-llm', row)" :disabled="row.isDefault">
-            设为默认
-          </el-button>
-          <el-button
-            type="danger"
-            link
-            size="small"
-            :icon="Delete"
-            @click="emit('delete-llm', row)"
-            :disabled="llmConfigList.length <= 1"
-          >
-            删除
-          </el-button>
+          <div class="llm-action-buttons">
+            <el-button type="primary" link size="small" :icon="Edit" @click="emit('edit-llm', row)">编辑</el-button>
+            <el-button type="success" link size="small" :icon="Star" @click="emit('set-default-llm', row)" :disabled="row.isDefault">
+              设为默认
+            </el-button>
+            <el-button
+              type="danger"
+              link
+              size="small"
+              :icon="Delete"
+              @click="emit('delete-llm', row)"
+              :disabled="llmConfigList.length <= 1"
+            >
+              删除
+            </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

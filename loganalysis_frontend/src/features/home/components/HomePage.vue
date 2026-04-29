@@ -242,8 +242,8 @@ const metricCards = computed(() => [
 ])
 
 const quickActions = Object.freeze([
-  { label: '进入日志采集', to: '/collection' },
   { label: '进入日志查询', to: '/logs' },
+  { label: '进入日志聚合', to: '/processing' },
   { label: '进入智能分析', to: '/analysis' }
 ])
 </script>

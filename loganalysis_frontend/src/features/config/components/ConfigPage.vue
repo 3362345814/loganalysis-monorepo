@@ -199,6 +199,10 @@ const fetchConfigs = async () => {
       const existing = configs.find(c => c.channel === channel)
       if (existing) {
         existing.configParams = existing.configParams ? JSON.parse(existing.configParams) : {}
+        if (channel === 'EMAIL') {
+          // 兼容历史配置：优先展示 username；若缺失则回退到 from
+          existing.configParams.username = existing.configParams.username || existing.configParams.from || ''
+        }
         return existing
       }
       return { channel, enabled: false, configParams: {}, description: '' }
@@ -213,10 +217,20 @@ const fetchConfigs = async () => {
 const handleSaveChannels = async () => {
   saving.value = true
   try {
-    const data = channelList.value.map(item => ({
-      ...item,
-      configParams: item.configParams ? JSON.stringify(item.configParams) : null
-    }))
+    const data = channelList.value.map(item => {
+      const params = item.configParams ? { ...item.configParams } : {}
+      if (item.channel === 'EMAIL') {
+        // UI 合并为一个字段：发件邮箱（登录账号）同时作为 SMTP 用户名和发件人
+        if (params.username) {
+          params.from = params.username
+        }
+      }
+
+      return {
+        ...item,
+        configParams: params ? JSON.stringify(params) : null
+      }
+    })
     await notificationChannelApi.batchUpsert(data)
     ElMessage.success('保存成功')
   } catch (error) {
