@@ -12,7 +12,7 @@
       </div>
     </template>
 
-    <el-table :data="llmConfigList" v-loading="loadingLlm" class="llm-table">
+    <el-table :data="llmConfigList" v-loading="loadingLlm" class="llm-table" :tooltip-options="tableTooltipOptions">
       <el-table-column prop="name" label="配置名称" width="150">
         <template #default="{ row }">
           <div class="config-name">
@@ -40,14 +40,15 @@
       <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="emit('edit-llm', row)">编辑</el-button>
-          <el-button type="success" link size="small" @click="emit('set-default-llm', row)" :disabled="row.isDefault">
+          <el-button type="primary" link size="small" :icon="Edit" @click="emit('edit-llm', row)">编辑</el-button>
+          <el-button type="success" link size="small" :icon="Star" @click="emit('set-default-llm', row)" :disabled="row.isDefault">
             设为默认
           </el-button>
           <el-button
             type="danger"
             link
             size="small"
+            :icon="Delete"
             @click="emit('delete-llm', row)"
             :disabled="llmConfigList.length <= 1"
           >
@@ -60,7 +61,7 @@
 </template>
 
 <script setup>
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Star, Delete } from '@element-plus/icons-vue'
 import '../styles/config-llm-tab.css'
 
 defineProps({
@@ -79,4 +80,8 @@ defineProps({
 })
 
 const emit = defineEmits(['add-llm', 'edit-llm', 'set-default-llm', 'delete-llm'])
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 </script>

@@ -105,17 +105,25 @@
         </el-table-column>
         <el-table-column prop="rootCauseCategory" label="问题分类" width="120">
           <template #default="{ row }">
-            <el-tag :type="getCategoryType(row.rootCauseCategory)" size="small">
+            <el-tag
+              :type="getCategoryType(row.rootCauseCategory)"
+              :class="['category-tag', getCategoryTagClass(row.rootCauseCategory)]"
+              effect="light"
+              size="small"
+            >
               {{ row.rootCauseCategory || '-' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="confidence" label="置信度" width="100">
+        <el-table-column prop="confidence" label="置信度" width="120">
           <template #default="{ row }">
             <el-progress 
-              :percentage="Math.round((row.confidence || 0) * 100)" 
+              type="dashboard"
+              :percentage="getConfidencePercentage(row.confidence)"
               :color="getConfidenceColor(row.confidence)"
-              :stroke-width="10"
+              :width="56"
+              :stroke-width="8"
+              :format="formatConfidencePercentage"
               class="confidence-progress"
             />
           </template>
@@ -144,21 +152,29 @@
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="90" fixed="right" align="center" header-align="center">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleViewDetail(row)">
-              查看详情
-            </el-button>
             <el-button
               v-if="row.status === 'FAILED'"
               type="warning"
               link
               size="small"
+              :icon="RefreshRight"
               :loading="retryingId === row.aggregationId"
               :disabled="isAnalysisRunning(row.status)"
               @click="retryAnalysis(row)"
             >
               重试
+            </el-button>
+            <el-button
+              v-else
+              type="primary"
+              link
+              size="small"
+              :icon="View"
+              @click="handleViewDetail(row)"
+            >
+              详情
             </el-button>
           </template>
         </el-table-column>
@@ -196,7 +212,11 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="问题分类">
-            <el-tag :type="getCategoryType(currentDetail.rootCauseCategory)">
+            <el-tag
+              :type="getCategoryType(currentDetail.rootCauseCategory)"
+              :class="['category-tag', getCategoryTagClass(currentDetail.rootCauseCategory)]"
+              effect="light"
+            >
               {{ currentDetail.rootCauseCategory || '-' }}
             </el-tag>
           </el-descriptions-item>
@@ -242,7 +262,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DataAnalysis, CircleCheck, Warning, Timer, Refresh, Search } from '@element-plus/icons-vue'
+import { DataAnalysis, CircleCheck, Warning, Timer, Refresh, Search, View, RefreshRight } from '@element-plus/icons-vue'
 import { aggregationApi, analysisApi, projectApi } from '@/api'
 
 const router = useRouter()
@@ -306,15 +326,26 @@ const paginatedList = computed(() => {
   return list.slice(start, end)
 })
 
-// 获取分类标签类型
+const getCategoryTagClass = (category) => {
+  const classMap = {
+    DATABASE: 'category-database',
+    NETWORK: 'category-network',
+    MEMORY: 'category-memory',
+    CODE: 'category-code',
+    CONFIG: 'category-config',
+    UNKNOWN: 'category-unknown'
+  }
+  return classMap[category] || 'category-unknown'
+}
+
 const getCategoryType = (category) => {
   const typeMap = {
-    'DATABASE': 'danger',
-    'NETWORK': 'warning',
-    'MEMORY': 'danger',
-    'CODE': 'info',
-    'CONFIG': 'warning',
-    'UNKNOWN': 'info'
+    DATABASE: 'danger',
+    NETWORK: 'warning',
+    MEMORY: 'danger',
+    CODE: 'primary',
+    CONFIG: 'success',
+    UNKNOWN: 'info'
   }
   return typeMap[category] || 'info'
 }
@@ -362,6 +393,12 @@ const getConfidenceColor = (confidence) => {
   if (confidence >= 0.7) return 'var(--color-gold)'
   return 'var(--color-error)'
 }
+
+const getConfidencePercentage = (confidence) => {
+  return Math.round((confidence || 0) * 100)
+}
+
+const formatConfidencePercentage = (percentage) => `${percentage}%`
 
 // 格式化时间
 const formatTime = (time) => {

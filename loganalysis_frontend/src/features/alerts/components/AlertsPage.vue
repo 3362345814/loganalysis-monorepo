@@ -112,7 +112,7 @@
         </div>
       </template>
 
-      <el-table :data="alertList" v-loading="loading" style="width: 100%">
+      <el-table :data="alertList" v-loading="loading" style="width: 100%" :tooltip-options="tableTooltipOptions">
         <el-table-column prop="alertId" label="告警编号" width="180" />
         <el-table-column prop="projectName" label="项目" width="150">
           <template #default="{ row }">
@@ -141,11 +141,13 @@
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleView(row)">查看</el-button>
+            <el-button link type="primary" size="small" :icon="View" @click="handleView(row)">查看</el-button>
             <el-button
               link
               type="warning"
               size="small"
+              :icon="CircleCheck"
+              :disabled="row.status === 'RESOLVED'"
               @click="handleResolve(row)"
             >解决</el-button>
           </template>
@@ -201,6 +203,7 @@
               v-if="currentAlert?.aggregationId"
               type="primary"
               plain
+              :icon="View"
               @click="jumpToAggregation"
             >
               查看聚合组
@@ -209,6 +212,7 @@
               v-if="currentAlert?.logId"
               type="primary"
               plain
+              :icon="View"
               @click="showLogDetail"
             >
               查看日志详情
@@ -217,6 +221,7 @@
               v-if="currentAlert?.traceId"
               type="primary"
               plain
+              :icon="TraceIcon"
               @click="openTraceTimeline"
             >
               链路追踪
@@ -227,6 +232,7 @@
             <el-button
               v-if="currentAlert?.status !== 'RESOLVED'"
               type="success"
+              :icon="CircleCheck"
               @click="handleResolve(currentAlert)"
             >解决告警</el-button>
           </div>
@@ -289,7 +295,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting, MagicStick, Link as TraceIcon, Loading } from '@element-plus/icons-vue'
+import { Warning, WarningFilled, Clock, Calendar, Search, Refresh, Setting, MagicStick, Link as TraceIcon, Loading, View, CircleCheck } from '@element-plus/icons-vue'
 import { alertRecordApi, alertStatisticsApi } from '@/api/alertApi'
 import { logSourceApi, projectApi, analysisApi, rawLogApi } from '@/api'
 import TraceTimeline from '@/components/TraceTimeline.vue'
@@ -313,6 +319,10 @@ const filterForm = reactive({
 // 告警列表
 const alertList = ref([])
 const loading = ref(false)
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 // 分页
 const pagination = reactive({

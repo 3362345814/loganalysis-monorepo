@@ -32,7 +32,7 @@
         </div>
       </template>
 
-      <el-table :data="ruleList" v-loading="loading">
+      <el-table :data="ruleList" v-loading="loading" :tooltip-options="tableTooltipOptions">
         <el-table-column prop="name" label="规则名称" min-width="150" />
         <el-table-column prop="projectId" label="项目" width="150">
           <template #default="{ row }">
@@ -78,8 +78,8 @@
         <el-table-column prop="triggerCountToday" label="今日触发" width="90" />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -174,7 +174,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { alertRuleApi, notificationChannelApi } from '@/api/alertApi'
 import { projectApi } from '@/api'
 
@@ -185,6 +185,10 @@ const selectedProjectId = ref('')
 // 规则列表
 const ruleList = ref([])
 const loading = ref(false)
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 // 已启用的通知渠道
 const enabledChannels = ref([])

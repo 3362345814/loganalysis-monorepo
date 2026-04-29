@@ -11,11 +11,6 @@
   flex-wrap: nowrap;
 }
 
-.action-buttons .el-button {
-  padding: 5px 8px;
-  font-size: 12px;
-}
-
 .collector-error {
   display: inline-flex;
   align-items: center;

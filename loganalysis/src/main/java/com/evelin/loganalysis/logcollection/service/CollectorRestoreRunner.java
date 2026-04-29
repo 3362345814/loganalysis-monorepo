@@ -3,6 +3,7 @@ package com.evelin.loganalysis.logcollection.service;
 import com.evelin.loganalysis.logcollection.collector.CollectorFactory;
 import com.evelin.loganalysis.logcollection.collector.LogCollector;
 import com.evelin.loganalysis.logcollection.enums.CollectionStatus;
+import com.evelin.loganalysis.logcollection.model.CollectionState;
 import com.evelin.loganalysis.logcollection.model.LogSource;
 import com.evelin.loganalysis.logprocessing.service.AggregationGroupService;
 import lombok.RequiredArgsConstructor;
@@ -55,12 +56,24 @@ public class CollectorRestoreRunner implements ApplicationRunner {
                     continue;
                 }
 
+                // 补齐沿用项目连接配置时的有效连接参数（host/username/password 等）
+                LogSource effectiveSource = logSourceService.getEffectiveEntityById(source.getId())
+                        .orElse(source);
+
                 // 创建并启动采集器（工厂内部按 sourceId 串行化）
-                LogCollector collector = collectorFactory.createAndStart(source);
+                LogCollector collector = collectorFactory.createAndStart(effectiveSource);
+
+                // 同步恢复后的状态，避免“恢复失败但数据库仍是 RUNNING”
+                if (collector.getState() == CollectionState.ERROR) {
+                    logSourceService.updateStatus(source.getId(), CollectionStatus.ERROR);
+                } else {
+                    logSourceService.updateStatus(source.getId(), CollectionStatus.RUNNING);
+                }
 
                 log.info("Successfully restored collector: {} - {}", source.getId(), source.getName());
 
             } catch (Exception e) {
+                logSourceService.updateStatus(source.getId(), CollectionStatus.ERROR);
                 log.error("Failed to restore collector: {} - {}", source.getId(), source.getName(), e);
             }
         }

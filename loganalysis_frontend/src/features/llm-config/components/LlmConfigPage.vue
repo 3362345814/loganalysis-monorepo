@@ -27,7 +27,7 @@
 
     <!-- 配置列表 -->
     <el-card class="table-card">
-      <el-table :data="configList" v-loading="loading">
+      <el-table :data="configList" v-loading="loading" :tooltip-options="tableTooltipOptions">
         <el-table-column prop="name" label="配置名称" width="150">
           <template #default="{ row }">
             <div class="config-name">
@@ -55,14 +55,14 @@
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">
+            <el-button type="primary" link size="small" :icon="Edit" @click="handleEdit(row)">
               编辑
             </el-button>
-            <el-button type="success" link size="small" @click="handleSetDefault(row)" 
+            <el-button type="success" link size="small" :icon="Star" @click="handleSetDefault(row)" 
               :disabled="row.isDefault">
               设为默认
             </el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)"
+            <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(row)"
               :disabled="configList.length <= 1">
               删除
             </el-button>
@@ -153,7 +153,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, Edit, Star, Delete } from '@element-plus/icons-vue'
 import { llmConfigApi } from '@/api'
 
 // 状态
@@ -163,6 +163,10 @@ const configList = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 // 表单数据
 const form = ref({

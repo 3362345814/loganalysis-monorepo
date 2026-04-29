@@ -986,6 +986,29 @@ a {
   outline: none;
 }
 
+/* 统一限制所有悬浮提示的可视区域，避免超长日志占满屏幕 */
+.el-popper.el-tooltip,
+.el-tooltip__popper,
+.el-popper.is-tooltip,
+.el-table__tooltip {
+  max-width: min(72vw, 880px) !important;
+  max-height: 60vh !important;
+  overflow: auto !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  line-height: 1.5;
+}
+
+/* 表格 show-overflow-tooltip 显式指定 popperClass 的兜底限制 */
+.limited-table-tooltip {
+  max-width: min(72vw, 880px) !important;
+  max-height: 60vh !important;
+  overflow: auto !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  line-height: 1.5;
+}
+
 /* Popover 组件 */
 .el-popover.el-popper {
   background: var(--color-white) !important;

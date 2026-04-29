@@ -293,7 +293,7 @@
                   </el-table-column>
                   <el-table-column label="操作" width="80">
                     <template #default="{ $index }">
-                      <el-button type="danger" size="small" text @click="removeCustomRule($index)">
+                      <el-button type="danger" size="small" text :icon="Delete" @click="removeCustomRule($index)">
                         删除
                       </el-button>
                     </template>
@@ -428,8 +428,8 @@
               <div class="project-item-code">{{ project.code }}</div>
             </div>
             <div class="project-item-actions">
-              <el-button link type="primary" @click.stop="handleEditProject(project)">编辑</el-button>
-              <el-button link type="danger" @click.stop="handleDeleteProject(project)">删除</el-button>
+              <el-button link type="primary" :icon="Edit" @click.stop="handleEditProject(project)">编辑</el-button>
+              <el-button link type="danger" :icon="Delete" @click.stop="handleDeleteProject(project)">删除</el-button>
             </div>
             <div class="project-item-check" v-if="currentProject?.id === project.id">
               <el-icon><Check /></el-icon>
@@ -525,7 +525,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
-import { Plus, Search, Folder, Check, Connection, WarningFilled } from '@element-plus/icons-vue'
+import { Plus, Search, Folder, Check, Connection, WarningFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logSourceApi, projectApi } from '@/api'
 import CollectionToolbar from './CollectionToolbar.vue'

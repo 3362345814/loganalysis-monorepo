@@ -81,7 +81,48 @@
 }
 
 .confidence-progress {
-  width: 80px;
+  display: inline-flex;
+}
+
+.confidence-progress :deep(.el-progress__text) {
+  font-size: 11px !important;
+  color: var(--text-secondary);
+}
+
+:deep(.category-tag.category-database) {
+  color: #b63a54 !important;
+  background-color: rgba(182, 58, 84, 0.14) !important;
+  border-color: rgba(182, 58, 84, 0.28) !important;
+}
+
+:deep(.category-tag.category-network) {
+  color: #c98527 !important;
+  background-color: rgba(201, 133, 39, 0.14) !important;
+  border-color: rgba(201, 133, 39, 0.3) !important;
+}
+
+:deep(.category-tag.category-memory) {
+  color: #7e4cc9 !important;
+  background-color: rgba(126, 76, 201, 0.14) !important;
+  border-color: rgba(126, 76, 201, 0.28) !important;
+}
+
+:deep(.category-tag.category-code) {
+  color: #2f7ab8 !important;
+  background-color: rgba(47, 122, 184, 0.14) !important;
+  border-color: rgba(47, 122, 184, 0.28) !important;
+}
+
+:deep(.category-tag.category-config) {
+  color: #2f8a67 !important;
+  background-color: rgba(47, 138, 103, 0.14) !important;
+  border-color: rgba(47, 138, 103, 0.28) !important;
+}
+
+:deep(.category-tag.category-unknown) {
+  color: #657184 !important;
+  background-color: rgba(101, 113, 132, 0.14) !important;
+  border-color: rgba(101, 113, 132, 0.28) !important;
 }
 
 .table-card {

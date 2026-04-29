@@ -36,6 +36,13 @@
   justify-content: flex-end;
 }
 
+.agg-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: nowrap;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;

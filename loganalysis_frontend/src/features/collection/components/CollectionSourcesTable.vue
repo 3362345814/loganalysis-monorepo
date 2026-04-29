@@ -1,15 +1,10 @@
 <template>
   <el-card class="table-card">
-    <el-table :data="sources" v-loading="loading">
+    <el-table :data="sources" v-loading="loading" :tooltip-options="tableTooltipOptions">
       <el-table-column prop="name" label="名称" min-width="120" />
-      <el-table-column prop="projectName" label="所属项目" width="120">
-        <template #default="{ row }">
-          <el-tag type="info">{{ row.projectName || '-' }}</el-tag>
-        </template>
-      </el-table-column>
       <el-table-column prop="sourceType" label="类型" width="140">
         <template #default="{ row }">
-          <el-tag type="info">{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
+          <el-tag :type="getSourceTypeTagType(row.sourceType)">{{ row.sourceType || 'LOCAL_FILE' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="路径" min-width="180" show-overflow-tooltip>
@@ -19,13 +14,13 @@
       </el-table-column>
       <el-table-column prop="logFormat" label="格式" width="100">
         <template #default="{ row }">
-          <el-tag type="info">{{ getLogFormatText(row.logFormat) }}</el-tag>
+          <el-tag :type="getLogFormatTagType(row.logFormat)">{{ getLogFormatText(row.logFormat) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column prop="desensitizationEnabled" label="脱敏" width="100">
         <template #default="{ row }">
-          <el-tag :type="getStatusType(row.status)">
-            {{ getStatusText(row.status) }}
+          <el-tag :type="row.desensitizationEnabled ? 'success' : 'info'">
+            {{ row.desensitizationEnabled ? '已启用' : '未启用' }}
           </el-tag>
         </template>
       </el-table-column>
@@ -37,12 +32,20 @@
           <el-tag v-else type="info">全部</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="280" fixed="right">
+      <el-table-column prop="status" label="状态" width="100">
+        <template #default="{ row }">
+          <el-tag :type="getStatusType(row.status)">
+            {{ getStatusText(row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <div class="action-buttons">
             <el-button
               v-if="row.status !== 'RUNNING'"
               type="primary"
+              link
               size="small"
               :icon="VideoPlay"
               @click="emit('start', row)"
@@ -52,14 +55,15 @@
             <el-button
               v-else
               type="warning"
+              link
               size="small"
               :icon="VideoPause"
               @click="emit('stop', row)"
             >
               停止
             </el-button>
-            <el-button size="small" :icon="Edit" @click="emit('edit', row)">编辑</el-button>
-            <el-button size="small" type="danger" :icon="Delete" @click="emit('delete', row)">删除</el-button>
+            <el-button link type="primary" size="small" :icon="Edit" @click="emit('edit', row)">编辑</el-button>
+            <el-button link type="danger" size="small" :icon="Delete" @click="emit('delete', row)">删除</el-button>
           </div>
         </template>
       </el-table-column>
@@ -68,7 +72,7 @@
 </template>
 
 <script setup>
-import { Delete, Edit, VideoPause, VideoPlay } from '@element-plus/icons-vue'
+import { Delete, Edit, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import '../styles/collection-sources-table.css'
 
 defineProps({
@@ -83,6 +87,10 @@ defineProps({
 })
 
 const emit = defineEmits(['start', 'stop', 'edit', 'delete'])
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 const getStatusType = (status) => {
   const map = {
@@ -101,6 +109,23 @@ const getLogFormatText = (format) => {
     JSON: 'JSON'
   }
   return map[format] || 'Log4j'
+}
+
+const getSourceTypeTagType = (sourceType) => {
+  const map = {
+    LOCAL_FILE: 'success',
+    SSH: 'warning'
+  }
+  return map[sourceType] || 'info'
+}
+
+const getLogFormatTagType = (format) => {
+  const map = {
+    LOG4J: 'primary',
+    NGINX: 'warning',
+    JSON: 'success'
+  }
+  return map[format] || 'info'
 }
 
 const getStatusText = (status) => {

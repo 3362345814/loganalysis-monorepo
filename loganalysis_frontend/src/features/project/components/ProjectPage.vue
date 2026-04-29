@@ -15,7 +15,7 @@
 
     <!-- 项目列表 -->
     <el-card class="table-card">
-      <el-table :data="projects" v-loading="loading">
+      <el-table :data="projects" v-loading="loading" :tooltip-options="tableTooltipOptions">
         <el-table-column prop="name" label="项目名称" min-width="150" />
         <el-table-column prop="code" label="项目代码" width="120" />
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
@@ -125,6 +125,10 @@ const submitting = ref(false)
 const formRef = ref(null)
 const testingProjectSsh = ref(false)
 const projectSshTestResult = ref(null)
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 const form = reactive({
   name: '',

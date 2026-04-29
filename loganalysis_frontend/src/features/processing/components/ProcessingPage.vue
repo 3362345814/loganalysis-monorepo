@@ -119,7 +119,7 @@
           </el-form>
 
           <!-- 聚合组列表 -->
-          <el-table :data="aggGroups" v-loading="aggLoading">
+          <el-table :data="aggGroups" v-loading="aggLoading" :tooltip-options="tableTooltipOptions">
             <el-table-column prop="groupId" label="聚合组ID" width="200" />
             <el-table-column prop="representativeLog" label="代表性日志" min-width="180" show-overflow-tooltip />
             <el-table-column prop="eventCount" label="事件数" width="100" />
@@ -139,18 +139,21 @@
                 {{ formatTime(row.lastEventTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" fixed="right">
+            <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" type="primary" text @click="viewDetail(row)">详情</el-button>
-                <el-button 
-                  size="small" 
-                  type="success" 
-                  text 
-                  @click="triggerAnalysis(row)"
-                  :disabled="row.isAnalyzed"
-                >
-                  {{ row.isAnalyzed ? '已分析' : '分析' }}
-                </el-button>
+                <div class="agg-action-buttons">
+                  <el-button size="small" type="primary" link :icon="View" @click="viewDetail(row)">详情</el-button>
+                  <el-button 
+                    size="small" 
+                    type="success" 
+                    link 
+                    :icon="MagicStick"
+                    @click="triggerAnalysis(row)"
+                    :disabled="row.isAnalyzed"
+                  >
+                    {{ row.isAnalyzed ? '已分析' : '分析' }}
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -197,7 +200,7 @@
         <el-tag type="info" size="small" class="group-logs-count">共 {{ groupLogsTotal }} 条</el-tag>
       </el-divider>
       
-      <el-table :data="groupLogs" v-loading="logsLoading" max-height="400" size="small">
+      <el-table :data="groupLogs" v-loading="logsLoading" max-height="400" size="small" :tooltip-options="tableTooltipOptions">
         <el-table-column prop="logLevel" label="级别" width="100">
           <template #default="{ row }">
             <el-tag :type="getLogLevelTagType(row.logLevel)" size="small">
@@ -213,7 +216,7 @@
         <el-table-column prop="sourceName" label="日志源" width="120" show-overflow-tooltip />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="showParsedInfo(row)">查看</el-button>
+            <el-button type="primary" link :icon="View" @click="showParsedInfo(row)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -303,7 +306,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Refresh, MagicStick, Close, MagicStick as AiIcon, Link as TraceIcon, Loading } from '@element-plus/icons-vue'
+import { Refresh, MagicStick, Close, MagicStick as AiIcon, Link as TraceIcon, Loading, View } from '@element-plus/icons-vue'
 import { aggregationApi, analysisApi, projectApi, logSourceApi, rawLogApi } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
@@ -400,6 +403,11 @@ const logsQuery = reactive({
   page: 1,
   size: 10
 })
+
+const tableTooltipOptions = {
+  popperClass: 'limited-table-tooltip',
+  enterable: true
+}
 
 // 加载聚合组数据
 const loadAggregationGroups = async () => {
